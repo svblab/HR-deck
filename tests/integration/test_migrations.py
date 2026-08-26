@@ -30,6 +30,8 @@ REQUIRED_TABLES = {
     "user_action_log",
     "report_templates",
     "report_template_versions",
+    "app_settings",
+    "recovery_codes",
 }
 
 RESERVED_EMPLOYEE_COLUMNS = {
