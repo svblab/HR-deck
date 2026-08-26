@@ -12,6 +12,7 @@ license = { text = "Proprietary" }
 authors = [{ name = "HR Lab" }]
 dependencies = [
     "PySide6>=6.6,<7",
+    "sqlcipher3>=0.6,<1",
 ]
 
 [project.optional-dependencies]
