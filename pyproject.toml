@@ -13,6 +13,8 @@ authors = [{ name = "HR Lab" }]
 dependencies = [
     "PySide6>=6.6,<7",
     "sqlcipher3>=0.6,<1",
+    "argon2-cffi>=23.1,<26",
+    "cryptography>=42,<47",
 ]
 
 [project.optional-dependencies]
