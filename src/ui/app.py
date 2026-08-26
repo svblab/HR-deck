@@ -1,20 +1,41 @@
-"""Точка входа приложения."""
+"""Точка входа приложения: setup → login → главное окно."""
 
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
+from data.paths import default_db_path
+from services.bootstrap import BootstrapService
+from ui.auth_dialogs import LoginDialog, SetupDialog
 from ui.main_window import MainWindow
 
 
-def run() -> int:
-    """Создать QApplication и показать главное окно. Возвращает код выхода."""
+def run(db_path: Path | None = None) -> int:
+    """Создать QApplication, пройти auth-flow и показать главное окно."""
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Журнал доступности персонала")
     app.setOrganizationName("HR")
-    window = MainWindow()
+
+    path = db_path or default_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    conn = None
+    session = None
+    if BootstrapService().needs_setup(path):
+        dlg = SetupDialog(path)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return 1
+        conn, session = dlg.conn, dlg.session
+    else:
+        dlg = LoginDialog(path)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return 1
+        conn, session = dlg.conn, dlg.session
+
+    window = MainWindow(conn=conn, session=session, db_path=path)
     window.showFullScreen()
     return app.exec()
 
