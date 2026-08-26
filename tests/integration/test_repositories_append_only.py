@@ -11,10 +11,10 @@ from data.db import create_database, generate_master_key
 from data.migrations import apply_pending_migrations
 from data.repositories import (
     AppendOnlyViolation,
-    StatusHistoryRepository,
     TechnicalEventRepository,
     UserActionLogRepository,
 )
+from data.status_history import StatusHistoryRepository
 from tests.fixtures.synthetic import seed_synthetic_org
 
 

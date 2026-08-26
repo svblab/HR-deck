@@ -24,38 +24,6 @@ class _AppendOnlyGuard:
         raise AppendOnlyViolation(f"{self.table_name} is append-only: delete is not allowed")
 
 
-class StatusHistoryRepository(_AppendOnlyGuard):
-    table_name = "status_history"
-
-    def add(
-        self,
-        *,
-        employee_id: int,
-        status_id: int,
-        start_date: str,
-        created_at: str,
-        end_date: str | None = None,
-        note: str | None = None,
-        created_by_account_id: int | None = None,
-    ) -> int:
-        cur = self._conn.execute(
-            "INSERT INTO status_history ("
-            " employee_id, status_id, start_date, end_date, note,"
-            " created_at, created_by_account_id"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                employee_id,
-                status_id,
-                start_date,
-                end_date,
-                note,
-                created_at,
-                created_by_account_id,
-            ),
-        )
-        return int(cur.lastrowid)
-
-
 class UserActionLogRepository(_AppendOnlyGuard):
     table_name = "user_action_log"
 

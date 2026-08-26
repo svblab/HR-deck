@@ -17,7 +17,6 @@ from domain.org_structure import (
     validate_org_assignment,
 )
 from domain.status_periods import StatusPeriod, StatusPeriodError, validate_new_status_period
-from services.status_history import StatusHistoryService
 from tests.fixtures.synthetic import seed_synthetic_org
 
 _NOW = "2026-08-01T10:00:00Z"
@@ -111,7 +110,7 @@ def test_domain_rejects_reversed_and_overlapping_periods() -> None:
 
 
 @pytest.mark.acceptance
-def test_db_rejects_reversed_overlapping_and_duplicate_open(tmp_path: Path) -> None:
+def test_db_rejects_reversed_status_dates(tmp_path: Path) -> None:
     conn, ids = _db(tmp_path)
     emp = ids["employee_a_id"]
     created = "2026-08-01T12:00:00Z"
@@ -123,58 +122,35 @@ def test_db_rejects_reversed_overlapping_and_duplicate_open(tmp_path: Path) -> N
             ") VALUES (?, 1, '2026-08-10', '2026-08-01', ?)",
             (emp, created),
         )
-
-    conn.execute(
-        "INSERT INTO status_history ("
-        " employee_id, status_id, start_date, end_date, created_at"
-        ") VALUES (?, 1, '2026-08-01', '2026-08-10', ?)",
-        (emp, created),
-    )
-    conn.commit()
-
-    with pytest.raises(sqlcipher.DatabaseError):
-        conn.execute(
-            "INSERT INTO status_history ("
-            " employee_id, status_id, start_date, end_date, created_at"
-            ") VALUES (?, 2, '2026-08-05', '2026-08-12', ?)",
-            (emp, created),
-        )
-
-    conn.execute(
-        "INSERT INTO status_history ("
-        " employee_id, status_id, start_date, end_date, created_at"
-        ") VALUES (?, 2, '2026-08-11', NULL, ?)",
-        (emp, created),
-    )
-    conn.commit()
-
-    with pytest.raises(sqlcipher.DatabaseError):
-        conn.execute(
-            "INSERT INTO status_history ("
-            " employee_id, status_id, start_date, end_date, created_at"
-            ") VALUES (?, 3, '2026-09-01', NULL, ?)",
-            (emp, created),
-        )
     conn.close()
 
 
 @pytest.mark.acceptance
-def test_status_history_service_enforces_domain_before_insert(tmp_path: Path) -> None:
-    conn, ids = _db(tmp_path)
-    svc = StatusHistoryService(conn)
-    svc.add_period(
-        employee_id=ids["employee_a_id"],
+def test_status_history_service_rejects_unconfirmed_overlap(tmp_path: Path) -> None:
+    from services.bootstrap import BootstrapService
+    from services.status_history import ConfirmationRequiredError, StatusHistoryService
+
+    db = tmp_path / "app.db"
+    bootstrap = BootstrapService(clock=lambda: "2026-08-01T10:00:00Z")
+    conn, session, _ = bootstrap.initial_administrator_setup(
+        db_path=db,
+        login="admin",
+        password="AdminPass-1",
+    )
+    ids = seed_synthetic_org(conn)
+    svc = StatusHistoryService(conn, session, clock=lambda: "2026-08-01T12:00:00Z")
+    emp = ids["employee_a_id"]
+    svc.assign_status(
+        employee_id=emp,
         status_id=1,
         start_date="2026-08-01",
         end_date="2026-08-10",
-        created_at="2026-08-01T12:00:00Z",
     )
-    with pytest.raises(StatusPeriodError):
-        svc.add_period(
-            employee_id=ids["employee_a_id"],
+    with pytest.raises(ConfirmationRequiredError):
+        svc.assign_status(
+            employee_id=emp,
             status_id=2,
             start_date="2026-08-05",
             end_date="2026-08-12",
-            created_at="2026-08-01T12:00:00Z",
         )
     conn.close()

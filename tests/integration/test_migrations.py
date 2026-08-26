@@ -26,6 +26,7 @@ REQUIRED_TABLES = {
     "availability_statuses",
     "employees",
     "status_history",
+    "status_history_corrections",
     "technical_events",
     "user_action_log",
     "report_templates",

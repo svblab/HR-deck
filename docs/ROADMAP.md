@@ -18,6 +18,7 @@
 | EPIC-003 | Учётные записи, роли и вход | ✅ Завершён | [#3](https://github.com/svblab/HR-deck/pull/3) |
 | EPIC-004 | Справочники и оргструктура | ✅ Завершён | [#4](https://github.com/svblab/HR-deck/pull/4) |
 | EPIC-005 | Карточка сотрудника | ✅ Завершён | [#5](https://github.com/svblab/HR-deck/pull/5) |
+| EPIC-006 | Статусы доступности и история | ✅ Завершён | [#6](https://github.com/svblab/HR-deck/pull/6) |
 
 ---
 

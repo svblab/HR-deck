@@ -3,6 +3,7 @@
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
+from services.availability_statuses import AvailabilityStatusService
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
@@ -13,6 +14,7 @@ __all__ = [
     "AccountManagementService",
     "AuthenticationService",
     "AuthorizationService",
+    "AvailabilityStatusService",
     "BootstrapService",
     "DirectoryService",
     "EmployeeService",
