@@ -12,6 +12,8 @@ from data.migrations import (
     apply_pending_migrations,
     current_version,
     expected_migration_versions,
+    repair_missing_checksums,
+    validate_applied_migrations,
 )
 
 __all__ = [
@@ -23,5 +25,7 @@ __all__ = [
     "current_version",
     "expected_migration_versions",
     "generate_master_key",
+    "repair_missing_checksums",
+    "validate_applied_migrations",
     "verify_integrity",
 ]

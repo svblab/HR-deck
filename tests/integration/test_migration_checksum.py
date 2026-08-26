@@ -114,7 +114,10 @@ def test_verify_rejects_missing_checksum_without_repair(tmp_path: Path) -> None:
     migrations = discover_migrations(mig_dir)
     with pytest.raises(DatabaseError, match="no checksum stored"):
         verify_applied_checksums(conn, migrations)
+    with pytest.raises(DatabaseError, match="no checksum stored"):
+        apply_pending_migrations(conn, mig_dir)
     repaired = repair_missing_checksums(conn, migrations)
     assert 1 in repaired
     verify_applied_checksums(conn, migrations)
+    assert apply_pending_migrations(conn, mig_dir) == []
     conn.close()
