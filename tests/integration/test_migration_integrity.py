@@ -55,13 +55,13 @@ def test_apply_multiple_migrations_sequentially(tmp_path: Path) -> None:
 
     conn = create_database(db_path, key)
     applied = apply_pending_migrations(conn, mig_dir)
-    assert applied == [1, 2, 3]
-    assert current_version(conn) == 3
+    assert applied == [1, 2, 3, 4]
+    assert current_version(conn) == 4
     assert "checksum" in table_columns(conn, "schema_migrations")
     rows = conn.execute(
         "SELECT version, checksum FROM schema_migrations ORDER BY version"
     ).fetchall()
-    assert len(rows) == 3
+    assert len(rows) == 4
     assert all(r[1] for r in rows)
     conn.close()
 
@@ -73,7 +73,7 @@ def test_reapply_is_noop(tmp_path: Path) -> None:
     conn = create_database(db_path, key)
     first = apply_pending_migrations(conn)
     second = apply_pending_migrations(conn)
-    assert first == [1, 2, 3]
+    assert first == [1, 2, 3, 4]
     assert second == []
     conn.close()
 
