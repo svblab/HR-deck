@@ -16,7 +16,8 @@
 | EPIC-001 | Инициализация проекта | ✅ Завершён | [#1](https://github.com/svblab/HR-deck/pull/1) |
 | EPIC-002 | Модель данных и миграции | ✅ Завершён | [#2](https://github.com/svblab/HR-deck/pull/2) |
 | EPIC-003 | Учётные записи, роли и вход | ✅ Завершён | [#3](https://github.com/svblab/HR-deck/pull/3) |
-| EPIC-004 | Справочники и оргструктура | 🚧 В работе | — |
+| EPIC-004 | Справочники и оргструктура | ✅ Завершён | [#4](https://github.com/svblab/HR-deck/pull/4) |
+| EPIC-005 | Карточка сотрудника | ✅ Завершён | [#5](https://github.com/svblab/HR-deck/pull/5) |
 
 ---
 

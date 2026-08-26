@@ -21,3 +21,12 @@ class SensitiveEmployeeField(StrEnum):
 
 
 SENSITIVE_EMPLOYEE_COLUMNS: frozenset[str] = frozenset(f.value for f in SensitiveEmployeeField)
+
+SENSITIVE_MASK = "••••••"
+
+
+def mask_sensitive_value(value: str | None) -> str | None:
+    """Маскированное отображение по умолчанию (ТЗ §3.1 / ANCHOR_CORE §2)."""
+    if value is None or value == "":
+        return None
+    return SENSITIVE_MASK
