@@ -25,12 +25,13 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Local runtime data (not in repo)
+# Local runtime data (not in repo; keep src/data package tracked)
 *.db
 *.db-journal
-data/
-backups/
-logs/
+/var/data/
+/backups/
+/logs/
+.runtime/
 
 # Packaging artefacts
 packaging/*.deb
