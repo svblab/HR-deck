@@ -14,6 +14,7 @@ from data.migrations import (
     current_version,
     default_migrations_dir,
     discover_migrations,
+    expected_migration_versions,
 )
 
 
@@ -55,13 +56,14 @@ def test_apply_multiple_migrations_sequentially(tmp_path: Path) -> None:
 
     conn = create_database(db_path, key)
     applied = apply_pending_migrations(conn, mig_dir)
-    assert applied == [1, 2, 3, 4]
-    assert current_version(conn) == 4
+    expected = expected_migration_versions(mig_dir)
+    assert applied == expected
+    assert current_version(conn) == expected[-1]
     assert "checksum" in table_columns(conn, "schema_migrations")
     rows = conn.execute(
         "SELECT version, checksum FROM schema_migrations ORDER BY version"
     ).fetchall()
-    assert len(rows) == 4
+    assert [r[0] for r in rows] == expected
     assert all(r[1] for r in rows)
     conn.close()
 
@@ -71,9 +73,10 @@ def test_reapply_is_noop(tmp_path: Path) -> None:
     key = generate_master_key()
     db_path = tmp_path / "app.db"
     conn = create_database(db_path, key)
+    expected = expected_migration_versions()
     first = apply_pending_migrations(conn)
     second = apply_pending_migrations(conn)
-    assert first == [1, 2, 3, 4]
+    assert first == expected
     assert second == []
     conn.close()
 

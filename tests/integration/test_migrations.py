@@ -7,7 +7,11 @@ from pathlib import Path
 import pytest
 
 from data.db import connect, create_database, generate_master_key, table_columns
-from data.migrations import apply_pending_migrations, current_version
+from data.migrations import (
+    apply_pending_migrations,
+    current_version,
+    expected_migration_versions,
+)
 from tests.fixtures.synthetic import seed_synthetic_org
 
 REQUIRED_TABLES = {
@@ -39,12 +43,13 @@ RESERVED_EMPLOYEE_COLUMNS = {
 @pytest.mark.acceptance
 def test_initial_migration_creates_schema_and_seeds(tmp_path: Path) -> None:
     """ТЗ §3.1 / §5: схема с суррогатными ID и резервными полями; сиды справочников."""
+    expected = expected_migration_versions()
     key = generate_master_key()
     path = tmp_path / "app.db"
     conn = create_database(path, key)
     applied = apply_pending_migrations(conn)
-    assert applied[0] == 1
-    assert current_version(conn) >= 1
+    assert applied == expected
+    assert current_version(conn) == expected[-1]
 
     tables = {
         r[0]
@@ -65,16 +70,17 @@ def test_initial_migration_creates_schema_and_seeds(tmp_path: Path) -> None:
 @pytest.mark.acceptance
 def test_reapply_migrations_on_nonempty_preserves_data(tmp_path: Path) -> None:
     """Миграции на непустой БД: повторный прогон не теряет строки (TESTING §4)."""
+    expected = expected_migration_versions()
     key = generate_master_key()
     path = tmp_path / "app.db"
     conn = create_database(path, key)
-    apply_pending_migrations(conn)
+    assert apply_pending_migrations(conn) == expected
     ids = seed_synthetic_org(conn)
     conn.close()
 
     conn2 = connect(path, key)
     assert apply_pending_migrations(conn2) == []
-    assert current_version(conn2) >= 1
+    assert current_version(conn2) == expected[-1]
     row = conn2.execute(
         "SELECT full_name, social_insurance_number FROM employees WHERE id = ?",
         (ids["employee_a_id"],),
