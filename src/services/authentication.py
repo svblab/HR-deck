@@ -110,26 +110,66 @@ class AuthenticationService:
         except KeywrapError:
             self._fail(delay, conn)
 
-    def unlock(self, session: SessionState, conn: Connection, password: str) -> None:
+    def unlock(
+        self,
+        session: SessionState,
+        password: str,
+        *,
+        db_path: Path | str,
+        conn: Connection | None = None,
+    ) -> Connection:
+        """
+        Разблокировать сессию: повторный unwrap мастер-ключа и открытие БД.
+        """
         if not session.locked:
-            return
-        delay = self._delay_from_conn(conn)
-        accounts = AccountRepository(conn)
-        account = accounts.get_by_id(session.account_id)
-        if account is None or not account.is_active:
+            if conn is None:
+                raise AuthenticationError("invalid credentials")
+            return conn
+
+        path = Path(db_path)
+        delay = _DEFAULT_DELAY
+        if conn is not None:
+            delay = self._delay_from_conn(conn)
+            try:
+                conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+        try:
+            keywrap = load_keywrap(keywrap_path_for(path))
+            entry = find_account_wrap(keywrap, session.login)
+            if entry is None:
+                self._fail(delay)
+            try:
+                master_key = unwrap_secret(entry, password)
+            except KeywrapError:
+                self._fail(delay)
+
+            new_conn = connect(path, master_key)
+            delay = self._delay_from_conn(new_conn)
+            accounts = AccountRepository(new_conn)
+            account = accounts.get_by_id(session.account_id)
+            if account is None or not account.is_active:
+                self._fail(delay, new_conn)
+            if not verify_password(account.password_hash, password):
+                self._fail(delay, new_conn)
+
+            session.master_key = master_key
+            session.unlock()
+            UserActionLogRepository(new_conn).record(
+                account_id=session.account_id,
+                action_type="session.unlock",
+                result="success",
+                created_at=self._clock(),
+                entity_type="account",
+                entity_id=session.account_id,
+            )
+            new_conn.commit()
+            return new_conn
+        except AuthenticationError:
+            raise
+        except KeywrapError:
             self._fail(delay)
-        if not verify_password(account.password_hash, password):
-            self._fail(delay)
-        session.unlock()
-        UserActionLogRepository(conn).record(
-            account_id=session.account_id,
-            action_type="session.unlock",
-            result="success",
-            created_at=self._clock(),
-            entity_type="account",
-            entity_id=session.account_id,
-        )
-        conn.commit()
 
     def logout(self, session: SessionState, conn: Connection) -> None:
         UserActionLogRepository(conn).record(
@@ -141,8 +181,7 @@ class AuthenticationService:
             entity_id=session.account_id,
         )
         conn.commit()
-        session.lock()
-        session.master_key = b""
+        session.lock(clear_key=True)
 
     def require_active_session(self, session: SessionState | None) -> SessionState:
         if session is None:

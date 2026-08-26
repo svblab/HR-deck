@@ -245,12 +245,20 @@ class MainWindow(QMainWindow):
         self._clock_date.setText(date_text)
 
     def _check_idle(self) -> None:
-        if self._session is None:
+        if self._session is None or self._db_path is None:
             return
-        if self._session.check_inactivity() and self._conn is not None:
-            dlg = UnlockDialog(self._session, self._conn, self)
+        if self._session.check_inactivity():
+            if self._conn is not None:
+                try:
+                    self._conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+                self._conn = None
+            dlg = UnlockDialog(self._session, self._db_path, self, conn=self._conn)
             if dlg.exec() != UnlockDialog.DialogCode.Accepted:
                 self.close()
+                return
+            self._conn = dlg.conn
 
     def _open_accounts(self) -> None:
         if self._session is None or self._conn is None or self._db_path is None:

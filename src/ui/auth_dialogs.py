@@ -211,14 +211,18 @@ class UnlockDialog(QDialog):
     def __init__(
         self,
         session: SessionState,
-        conn: Connection,
+        db_path: Path,
         parent: QWidget | None = None,
+        *,
+        conn: Connection | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Сессия заблокирована")
         self.setModal(True)
         self._session = session
+        self._db_path = db_path
         self._conn = conn
+        self.conn: Connection | None = conn
         self._auth = AuthenticationService()
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel(f"Введите пароль для «{session.login}»"))
@@ -231,7 +235,12 @@ class UnlockDialog(QDialog):
 
     def _submit(self) -> None:
         try:
-            self._auth.unlock(self._session, self._conn, self._password.text())
+            self.conn = self._auth.unlock(
+                self._session,
+                self._password.text(),
+                db_path=self._db_path,
+                conn=self._conn,
+            )
         except AuthenticationError:
             QMessageBox.warning(self, "Разблокировка", "Неверный пароль.")
             return

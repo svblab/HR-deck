@@ -27,6 +27,7 @@ def test_default_timeout_locks_after_900s() -> None:
     assert not s.check_inactivity(1_000.0 + 899)
     assert s.check_inactivity(1_000.0 + 900)
     assert s.locked
+    assert s.master_key == b""
 
 
 def test_activity_resets_timeout() -> None:

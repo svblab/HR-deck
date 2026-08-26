@@ -90,14 +90,22 @@ def test_disabled_account_rejected(tmp_path: Path, sleepless_auth: Authenticatio
 @pytest.mark.acceptance
 def test_session_lock_and_unlock(tmp_path: Path, sleepless_auth: AuthenticationService) -> None:
     db, conn, session, _code = _setup(tmp_path)
-    session.lock()
+    original_key = session.master_key
+    session.lock(clear_key=True)
+    assert session.master_key == b""
     with pytest.raises(SessionLockedError):
         session.require_unlocked()
-    sleepless_auth.unlock(session, conn, "AdminPass-1")
+    conn.close()
+    conn = sleepless_auth.unlock(
+        session,
+        "AdminPass-1",
+        db_path=db,
+    )
+    assert session.master_key == original_key
     session.require_unlocked()
+    session.lock(clear_key=True)
     with pytest.raises(AuthenticationError):
-        session.lock()
-        sleepless_auth.unlock(session, conn, "bad")
+        sleepless_auth.unlock(session, "bad", db_path=db)
     conn.close()
 
 
@@ -118,13 +126,20 @@ def test_recovery_valid_invalid_reuse(
         db_path=db, recovery_code=code, new_password="NewAdmin-2"
     )
     assert new_code != code
+    wrap_after = load_keywrap(keywrap_path_for(db))
+    recovery_wraps = [w for w in wrap_after.wraps if w.kind == "recovery"]
+    assert len(recovery_wraps) == 1
 
     with pytest.raises(BootstrapError):
         BootstrapService().recover_administrator_password(
             db_path=db, recovery_code=code, new_password="Another-3"
         )
 
-    c2, s2 = sleepless_auth.login(db_path=db, login="admin", password="NewAdmin-2")
+    BootstrapService().recover_administrator_password(
+        db_path=db, recovery_code=new_code, new_password="NewAdmin-3"
+    )
+
+    c2, s2 = sleepless_auth.login(db_path=db, login="admin", password="NewAdmin-3")
     assert s2.login == "admin"
     c2.close()
 

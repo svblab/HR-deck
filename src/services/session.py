@@ -31,8 +31,10 @@ class SessionState:
         if not self.locked:
             self.last_activity_mono = monotonic() if now_mono is None else now_mono
 
-    def lock(self) -> None:
+    def lock(self, *, clear_key: bool = False) -> None:
         self.locked = True
+        if clear_key:
+            self.master_key = b""
 
     def unlock(self, now_mono: float | None = None) -> None:
         self.locked = False
@@ -48,7 +50,7 @@ class SessionState:
         now = monotonic() if now_mono is None else now_mono
         elapsed = now - self.last_activity_mono
         if elapsed >= self.inactivity_timeout_seconds:
-            self.lock()
+            self.lock(clear_key=True)
             return True
         return False
 
