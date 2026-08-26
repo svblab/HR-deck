@@ -26,7 +26,6 @@ class Migration:
         match = _MIGRATION_NAME.match(path.name)
         if not match:
             raise DatabaseError(f"invalid migration filename: {path.name}")
-        # Checksum = SHA-256 of exact file bytes (stable UTF-8 SQL on disk).
         raw = path.read_bytes()
         try:
             sql = raw.decode("utf-8")
@@ -73,16 +72,8 @@ def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:
 
 
 def current_version(conn: Connection) -> int:
-    """
-    Наибольшая применённая версия.
-
-    Не источник истины о целостности истории — перед использованием
-    вызывайте validate_applied_migrations().
-    """
-    row = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
-    ).fetchone()
-    if row is None:
+    """MAX(version) for compatibility; always pair with validate_applied_migrations()."""
+    if not _schema_migrations_exists(conn):
         return 0
     row = conn.execute("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").fetchone()
     return int(row[0]) if row else 0
@@ -106,11 +97,10 @@ def expected_migration_versions(migrations_dir: Path | None = None) -> list[int]
 
 def repair_missing_checksums(conn: Connection, migrations: list[Migration]) -> list[int]:
     """
-    Явный legacy-upgrade: заполнить NULL/пустой checksum из файлов на диске.
+    Явная административная/legacy операция заполнения NULL checksum из файлов.
 
-    Только для БД, созданных до колонки checksum (или сразу после ADD COLUMN).
-    Не вызывать из обычного startup/apply как «лечение» повреждённой истории —
-    после repair обычный путь требует полного coverage через validate.
+    НЕ вызывается из apply_pending_migrations. После вызова обязателен
+    validate_applied_migrations / verify_applied_checksums.
     """
     if not _schema_migrations_exists(conn) or not _has_checksum_column(conn):
         return []
@@ -141,10 +131,10 @@ def repair_missing_checksums(conn: Connection, migrations: list[Migration]) -> l
 
 def validate_applied_migrations(conn: Connection, migrations: list[Migration]) -> None:
     """
-    Проверить целостность уже записанной истории schema_migrations.
+    Целостность schema_migrations: не MAX-only.
 
-    Не опирается на один только MAX(version): требует уникальность, старт с 1,
-    непрерывность 1..N, отсутствие версий выше диска, наличие файла и checksum.
+    Уникальность, старт с 1, непрерывность 1..N, файл на диске,
+    version ≤ latest discovered, checksum (если колонка есть).
     """
     if not _schema_migrations_exists(conn):
         return
@@ -195,8 +185,8 @@ def validate_applied_migrations(conn: Connection, migrations: list[Migration]) -
             continue
         if not stored:
             raise DatabaseError(
-                f"applied migration {ver:04d} has no checksum stored "
-                "(call repair_missing_checksums for legacy upgrade, then re-validate)"
+                f"applied migration {ver:04d} has no checksum stored; "
+                "explicit legacy repair required (repair_missing_checksums)"
             )
         if stored != migration.checksum:
             raise DatabaseError(
@@ -206,8 +196,29 @@ def validate_applied_migrations(conn: Connection, migrations: list[Migration]) -
 
 
 def verify_applied_checksums(conn: Connection, migrations: list[Migration]) -> None:
-    """Сверка checksum (подмножество validate_applied_migrations)."""
+    """Сверка checksum через полный validate_applied_migrations."""
     validate_applied_migrations(conn, migrations)
+
+
+def _stamp_pre_column_rows_in_txn(conn: Connection, migrations: list[Migration]) -> None:
+    """Same-txn stamp of NULL checksums left by ADD COLUMN (not repair_missing_checksums)."""
+    by_version = {m.version: m for m in migrations}
+    rows = conn.execute(
+        "SELECT version, checksum FROM schema_migrations ORDER BY version"
+    ).fetchall()
+    for version, stored in rows:
+        if stored:
+            continue
+        ver = int(version)
+        migration = by_version.get(ver)
+        if migration is None:
+            raise DatabaseError(
+                f"applied migration {ver:04d} has no matching file on disk"
+            )
+        conn.execute(
+            "UPDATE schema_migrations SET checksum = ? WHERE version = ?",
+            (migration.checksum, ver),
+        )
 
 
 def apply_pending_migrations(
@@ -215,11 +226,10 @@ def apply_pending_migrations(
     migrations_dir: Path | None = None,
 ) -> list[int]:
     """
-    Применить все ещё не применённые миграции.
+    Применить ещё не применённые миграции.
 
-    Перед применением — validate_applied_migrations (без авто-repair).
-    repair_missing_checksums вызывается только в момент появления колонки checksum
-    (переход legacy → checksum era внутри той же сессии apply).
+    Всегда validate_applied_migrations до/после шага.
+    Никогда не вызывает repair_missing_checksums().
     """
     migrations = discover_migrations(migrations_dir)
     validate_applied_migrations(conn, migrations)
@@ -252,6 +262,10 @@ def apply_pending_migrations(
                     )
                 now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                 if _has_checksum_column(conn):
+                    # Если колонка только что появилась — дописать checksum
+                    # строкам, созданным до ALTER, в этой же транзакции.
+                    if not had_checksum_column:
+                        _stamp_pre_column_rows_in_txn(conn, migrations)
                     conn.execute(
                         "INSERT INTO schema_migrations (version, checksum, applied_at) "
                         "VALUES (?, ?, ?)",
@@ -271,12 +285,6 @@ def apply_pending_migrations(
 
             applied.append(migration.version)
             version = migration.version
-
-            # Колонка checksum только что появилась (0003): явный legacy backfill
-            # для строк, вставленных до ADD COLUMN. Не лечит произвольный NULL позже.
-            if not had_checksum_column and _has_checksum_column(conn):
-                repair_missing_checksums(conn, migrations)
-
             validate_applied_migrations(conn, migrations)
         except Exception:
             raise
