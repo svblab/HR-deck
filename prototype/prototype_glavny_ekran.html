@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Прототип — Учёт доступности персонала</title>
+<style>
+  :root{
+    --navy:#1B2A3D;
+    --navy-2:#25384F;
+    --accent:#2E6E62;
+    --accent-light:#E4F1EE;
+    --bg:#F3F4F1;
+    --card:#FFFFFF;
+    --border:#E1E1DC;
+    --text:#20241F;
+    --text-mut:#6B6F68;
+
+    --c-office-bg:#E8F3E6; --c-office-fg:#2E6B28; --c-office-br:#B7DDAF;
+    --c-remote-bg:#E5F1FA; --c-remote-fg:#1E5F8C; --c-remote-br:#B4D9F0;
+    --c-trip-bg:#FCEEE1;  --c-trip-fg:#9A5A12;   --c-trip-br:#F2CB9C;
+    --c-sick-bg:#FBEAEA;  --c-sick-fg:#A32D2D;   --c-sick-br:#F0B8B8;
+    --c-vac-bg:#F0EBFA;   --c-vac-fg:#5D3E9E;    --c-vac-br:#D2C2EF;
+    --c-off-bg:#FBF6E0;   --c-off-fg:#8A6D06;    --c-off-br:#EDDD9E;
+    --c-temp-bg:#EDEDEA;  --c-temp-fg:#5A5A55;   --c-temp-br:#CFCFC8;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    width:100vw;height:100vh;
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  }
+
+  /* ---- Верхняя панель окна приложения ---- */
+  .titlebar{
+    background:var(--navy);
+    color:#fff;
+    display:flex;align-items:center;
+    padding:0 18px;
+    height:56px;
+    flex-shrink:0;
+    border-bottom:1px solid #10192533;
+  }
+  .brand{display:flex;align-items:center;gap:12px;min-width:260px;}
+  .logo{
+    width:34px;height:34px;border-radius:7px;
+    background:linear-gradient(180deg,#3A5A78,#233A50);
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:13px;letter-spacing:.5px;color:#fff;
+    border:1px solid #ffffff22;
+  }
+  .brand-text{display:flex;flex-direction:column;line-height:1.15;}
+  .brand-text .company{font-size:13px;font-weight:600;color:#fff;}
+  .brand-text .app{font-size:11px;color:#B9C4D0;}
+
+  .titlebar-center{
+    flex:1;display:flex;justify-content:center;
+  }
+  .search-wrap{position:relative;width:340px;}
+  .search-wrap input{
+    width:100%;height:34px;border-radius:8px;border:1px solid #ffffff2a;
+    background:#ffffff14;color:#fff;padding:0 12px 0 34px;font-size:13px;
+    outline:none;
+  }
+  .search-wrap input::placeholder{color:#B9C4D0;}
+  .search-wrap svg{position:absolute;left:10px;top:9px;opacity:.75;}
+
+  .titlebar-right{display:flex;align-items:center;gap:18px;min-width:260px;justify-content:flex-end;}
+  .clock{text-align:right;line-height:1.15;}
+  .clock .time{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;}
+  .clock .date{font-size:11px;color:#B9C4D0;text-transform:capitalize;}
+
+  .icon-btn{
+    width:34px;height:34px;border-radius:8px;border:1px solid #ffffff26;
+    background:#ffffff10;color:#fff;display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+  }
+  .icon-btn:hover{background:#ffffff22;}
+
+  /* ---- Панель инструментов ---- */
+  .toolbar{
+    background:var(--card);
+    border-bottom:1px solid var(--border);
+    padding:10px 20px;
+    flex-shrink:0;
+  }
+  .toolbar-row{display:flex;align-items:center;justify-content:space-between;}
+  .toolbar-row + .toolbar-row{margin-top:10px;}
+  .toolbar-left{display:flex;align-items:center;gap:10px;}
+  .filters{display:flex;align-items:center;gap:8px;}
+  select.filter-select{
+    height:34px;border-radius:8px;border:1px solid var(--border);background:#fff;color:var(--text);
+    font-size:13px;padding:0 26px 0 10px;cursor:pointer;
+  }
+  .filter-reset{font-size:12px;color:var(--text-mut);background:none;border:none;cursor:pointer;text-decoration:underline;padding:0 2px;}
+  .btn{
+    height:34px;padding:0 14px;border-radius:8px;border:1px solid var(--border);
+    background:#fff;color:var(--text);font-size:13px;cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+  }
+  .btn:hover{background:#F4F4F1;}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .btn.primary:hover{background:#265A50;}
+
+  .view-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .view-toggle button{
+    border:none;background:#fff;height:34px;padding:0 14px;font-size:13px;cursor:pointer;color:var(--text-mut);
+  }
+  .view-toggle button.active{background:var(--navy);color:#fff;}
+
+  .summary-strip{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text-mut);}
+  .summary-strip b{color:var(--text);font-weight:600;}
+
+  /* ---- Контент ---- */
+  .content{flex:1;overflow:auto;padding:18px 20px;}
+
+  /* Доска */
+  .board{display:flex;gap:14px;align-items:flex-start;height:100%;overflow-x:auto;padding-bottom:6px;}
+  .column{
+    background:#EFEFEA;border-radius:12px;padding:10px;width:242px;flex-shrink:0;
+    display:flex;flex-direction:column;max-height:100%;
+  }
+  .column-head{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 10px;}
+  .column-title{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .dot{width:9px;height:9px;border-radius:50%;}
+  .count-badge{
+    font-size:11px;background:#fff;border:1px solid var(--border);border-radius:20px;
+    padding:1px 8px;color:var(--text-mut);
+  }
+  .cards{overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:6px;}
+
+  .emp-card{
+    background:var(--card);border:1px solid var(--border);border-radius:10px;
+    padding:10px 11px;cursor:pointer;
+  }
+  .emp-card:hover{border-color:#C9C9C2;}
+  .emp-name{font-size:13px;font-weight:600;margin-bottom:2px;}
+  .emp-role{font-size:12px;color:var(--text-mut);margin-bottom:4px;}
+  .emp-org{font-size:11px;color:var(--text-mut);margin-bottom:6px;}
+  .emp-tag{
+    display:inline-flex;align-items:center;gap:5px;font-size:11px;
+    padding:2px 8px;border-radius:20px;font-weight:500;
+  }
+  .emp-dates{font-size:11px;color:var(--text-mut);margin-top:6px;}
+  .emp-overdue{color:#A32D2D;font-weight:600;}
+
+  /* Таблица */
+  table.roster{width:100%;border-collapse:collapse;background:var(--card);border-radius:10px;overflow:hidden;}
+  table.roster th{
+    text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;
+    color:var(--text-mut);padding:10px 14px;border-bottom:1px solid var(--border);background:#F7F7F4;
+  }
+  table.roster td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border);}
+  table.roster tr:last-child td{border-bottom:none;}
+  table.roster tr.row:hover{background:#FAFAF8;cursor:pointer;}
+
+  /* ---- Модальная карточка сотрудника ---- */
+  .overlay{
+    position:absolute;inset:0;background:rgba(20,24,20,.4);
+    display:none;align-items:center;justify-content:center;z-index:50;
+  }
+  .overlay.open{display:flex;}
+  .modal{
+    width:360px;background:#fff;border-radius:14px;padding:20px;
+    box-shadow:0 10px 40px rgba(0,0,0,.25);
+  }
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;}
+  .modal-name{font-size:16px;font-weight:700;}
+  .modal-role{font-size:13px;color:var(--text-mut);margin-top:2px;}
+  .modal-close{border:none;background:none;cursor:pointer;color:var(--text-mut);font-size:18px;}
+  .modal-row{display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-bottom:1px solid var(--border);}
+  .modal-row:last-of-type{border-bottom:none;}
+  .modal-actions{margin-top:16px;display:flex;gap:8px;}
+  .modal-actions .btn{flex:1;justify-content:center;}
+
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#CFCFC8;border-radius:4px;}
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <div class="brand">
+    <div class="logo">ЛОГО</div>
+    <div class="brand-text">
+      <span class="company">Название компании</span>
+      <span class="app">Учёт доступности персонала</span>
+    </div>
+  </div>
+
+  <div class="titlebar-center">
+    <div class="search-wrap">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="searchInput" type="text" placeholder="Поиск сотрудника по ФИО...">
+    </div>
+  </div>
+
+  <div class="titlebar-right">
+    <div class="clock">
+      <div class="time" id="clockTime">--:--:--</div>
+      <div class="date" id="clockDate">-- ------- ----</div>
+    </div>
+    <button class="icon-btn" title="Настройки">⚙</button>
+    <button class="icon-btn" title="Выход">⏻</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="toolbar-row">
+    <div class="toolbar-left">
+      <button class="btn primary">+ Добавить сотрудника</button>
+      <button class="btn">Отчёты</button>
+      <div class="view-toggle">
+        <button id="btnBoard" class="active">Доска</button>
+        <button id="btnTable">Таблица</button>
+      </div>
+    </div>
+    <div class="summary-strip" id="summaryStrip"></div>
+  </div>
+  <div class="toolbar-row">
+    <div class="filters">
+      <select id="filterBranch" class="filter-select"><option value="">Все филиалы</option></select>
+      <select id="filterDept" class="filter-select"><option value="">Все департаменты</option></select>
+      <select id="filterDivision" class="filter-select"><option value="">Все отделы</option></select>
+      <button class="filter-reset" id="resetFilters">Показать всех</button>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+  <div id="boardView" class="board"></div>
+  <table id="tableView" class="roster" style="display:none;">
+    <thead>
+      <tr>
+        <th>ФИО</th><th>Должность</th><th>Филиал</th><th>Подразделение</th><th>Статус</th><th>С даты</th><th>По дату</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modalBody"></div>
+</div>
+
+<script>
+const STATUSES = [
+  {key:'office', label:'В офисе', dot:'#2E6B28', cls:'office'},
+  {key:'remote', label:'Удалённо', dot:'#1E5F8C', cls:'remote'},
+  {key:'trip', label:'Командировка', dot:'#9A5A12', cls:'trip'},
+  {key:'sick', label:'Больничный', dot:'#A32D2D', cls:'sick'},
+  {key:'vacation', label:'Отпуск', dot:'#5D3E9E', cls:'vac'},
+  {key:'off', label:'Отгул', dot:'#8A6D06', cls:'off'},
+  {key:'temp', label:'Временный найм', dot:'#5A5A55', cls:'temp'},
+];
+
+const EMPLOYEES = [
+  {name:'Иванова Мария Сергеевна', role:'Бухгалтер', status:'office', from:'13.08.2026', to:null, branch:'Москва', dept:'Финансы', division:'Бухгалтерия'},
+  {name:'Петров Алексей Викторович', role:'Инженер-технолог', status:'office', from:'13.08.2026', to:null, branch:'Москва', dept:'Производство', division:'Технологический отдел'},
+  {name:'Сидорова Ольга Игоревна', role:'Менеджер по продажам', status:'office', from:'13.08.2026', to:null, branch:'Москва', dept:'Продажи', division:'Отдел продаж B2B'},
+  {name:'Кузнецов Дмитрий Олегович', role:'Системный администратор', status:'remote', from:'11.08.2026', to:null, branch:'Москва', dept:'IT', division:'Отдел администрирования'},
+  {name:'Смирнова Анна Павловна', role:'HR-специалист', status:'remote', from:'12.08.2026', to:null, branch:'Москва', dept:'HR', division:''},
+  {name:'Новиков Игорь Андреевич', role:'Руководитель отдела логистики', status:'trip', from:'10.08.2026', to:'15.08.2026', branch:'Санкт-Петербург', dept:'Логистика', division:'Отдел логистики'},
+  {name:'Морозова Екатерина Витальевна', role:'Юрист', status:'trip', from:'05.08.2026', to:'12.08.2026', overdue:true, branch:'Москва', dept:'Юридический департамент', division:''},
+  {name:'Волков Сергей Николаевич', role:'Кладовщик', status:'sick', from:'08.08.2026', to:null, branch:'Санкт-Петербург', dept:'Логистика', division:'Складской отдел'},
+  {name:'Лебедева Наталья Романовна', role:'Оператор call-центра', status:'sick', from:'11.08.2026', to:'18.08.2026', branch:'Санкт-Петербург', dept:'Продажи', division:'Call-центр'},
+  {name:'Соколов Павел Юрьевич', role:'Механик', status:'vacation', from:'01.08.2026', to:'21.08.2026', branch:'Москва', dept:'Производство', division:'Ремонтная служба'},
+  {name:'Козлова Ирина Дмитриевна', role:'Специалист по закупкам', status:'vacation', from:'06.08.2026', to:'20.08.2026', branch:'Москва', dept:'Закупки', division:''},
+  {name:'Егоров Владимир Максимович', role:'Водитель', status:'off', from:'13.08.2026', to:'13.08.2026', branch:'Санкт-Петербург', dept:'Логистика', division:'Транспортный отдел'},
+  {name:'Николаева Светлана Артёмовна', role:'Секретарь', status:'off', from:'13.08.2026', to:'13.08.2026', branch:'Москва', dept:'Административный департамент', division:''},
+  {name:'Фёдоров Артём Русланович', role:'Курьер (подряд)', status:'temp', from:'01.08.2026', to:'31.08.2026', branch:'Москва', dept:'Логистика', division:'Курьерская служба'},
+  {name:'Григорьева Валентина Львовна', role:'Промоутер (подряд)', status:'temp', from:'10.08.2026', to:'17.08.2026', branch:'Санкт-Петербург', dept:'Маркетинг', division:''},
+];
+
+function subdivisionLabel(e){
+  return [e.dept, e.division].filter(Boolean).join(' / ');
+}
+
+let currentView = 'board';
+
+function statusInfo(key){ return STATUSES.find(s=>s.key===key); }
+
+function renderSummary(list){
+  const strip = document.getElementById('summaryStrip');
+  strip.innerHTML = `<b>${list.length}</b> сотрудников в базе &nbsp;·&nbsp; ` +
+    STATUSES.map(s=>{
+      const n = list.filter(e=>e.status===s.key).length;
+      return n ? `${s.label}: <b>${n}</b>` : null;
+    }).filter(Boolean).join(' &nbsp;·&nbsp; ');
+}
+
+function renderBoard(list){
+  const board = document.getElementById('boardView');
+  board.innerHTML = STATUSES.map(s=>{
+    const items = list.filter(e=>e.status===s.key);
+    return `
+    <div class="column">
+      <div class="column-head">
+        <div class="column-title"><span class="dot" style="background:${s.dot}"></span>${s.label}</div>
+        <span class="count-badge">${items.length}</span>
+      </div>
+      <div class="cards">
+        ${items.map(e=>employeeCard(e)).join('') || '<div style="font-size:12px;color:var(--text-mut);padding:8px 2px;">Нет сотрудников</div>'}
+      </div>
+    </div>`;
+  }).join('');
+  attachCardEvents();
+}
+
+function employeeCard(e){
+  const s = statusInfo(e.status);
+  const dates = e.to ? `${e.from} — ${e.to}` : (e.from ? `с ${e.from}` : '');
+  return `
+  <div class="emp-card" data-name="${e.name}">
+    <div class="emp-name">${e.name}</div>
+    <div class="emp-role">${e.role}</div>
+    <div class="emp-org">${e.branch} · ${subdivisionLabel(e)}</div>
+    <span class="emp-tag" style="background:var(--c-${s.cls}-bg);color:var(--c-${s.cls}-fg);">${s.label}</span>
+    ${dates ? `<div class="emp-dates ${e.overdue?'emp-overdue':''}">${e.overdue?'Просрочено · ':''}${dates}</div>` : ''}
+  </div>`;
+}
+
+function renderTable(list){
+  const body = document.getElementById('tableBody');
+  body.innerHTML = list.map(e=>{
+    const s = statusInfo(e.status);
+    return `
+    <tr class="row" data-name="${e.name}">
+      <td>${e.name}</td>
+      <td>${e.role}</td>
+      <td>${e.branch}</td>
+      <td>${subdivisionLabel(e)||'—'}</td>
+      <td><span class="emp-tag" style="background:var(--c-${s.cls}-bg);color:var(--c-${s.cls}-fg);">${s.label}</span></td>
+      <td>${e.from||'—'}</td>
+      <td class="${e.overdue?'emp-overdue':''}">${e.to||'—'}</td>
+    </tr>`;
+  }).join('');
+  attachCardEvents();
+}
+
+function attachCardEvents(){
+  document.querySelectorAll('[data-name]').forEach(el=>{
+    el.addEventListener('click',()=>openModal(el.getAttribute('data-name')));
+  });
+}
+
+function openModal(name){
+  const e = EMPLOYEES.find(x=>x.name===name);
+  const s = statusInfo(e.status);
+  const modal = document.getElementById('modalBody');
+  modal.innerHTML = `
+    <div class="modal-head">
+      <div>
+        <div class="modal-name">${e.name}</div>
+        <div class="modal-role">${e.role}</div>
+      </div>
+      <button class="modal-close" id="modalCloseBtn">✕</button>
+    </div>
+    <div class="modal-row"><span>Филиал</span><span>${e.branch}</span></div>
+    <div class="modal-row"><span>Подразделение</span><span>${subdivisionLabel(e)||'—'}</span></div>
+    <div class="modal-row"><span>Текущий статус</span><span class="emp-tag" style="background:var(--c-${s.cls}-bg);color:var(--c-${s.cls}-fg);">${s.label}</span></div>
+    <div class="modal-row"><span>Дата начала</span><span>${e.from||'—'}</span></div>
+    <div class="modal-row"><span>Дата окончания</span><span class="${e.overdue?'emp-overdue':''}">${e.to||'—'}</span></div>
+    <div class="modal-actions">
+      <button class="btn">Изменить статус</button>
+      <button class="btn primary">История</button>
+    </div>
+  `;
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+document.getElementById('overlay').addEventListener('click', (ev)=>{ if(ev.target.id==='overlay') closeModal(); });
+
+function populateSelect(sel, values, placeholder){
+  const current = sel.value;
+  sel.innerHTML = `<option value="">${placeholder}</option>` +
+    values.map(v=>`<option value="${v}">${v}</option>`).join('');
+  if(values.includes(current)) sel.value = current;
+}
+
+function refreshFilterOptions(){
+  const branchSel = document.getElementById('filterBranch');
+  const deptSel = document.getElementById('filterDept');
+  const divSel = document.getElementById('filterDivision');
+
+  const branch = branchSel.value;
+  const dept = deptSel.value;
+
+  const branches = [...new Set(EMPLOYEES.map(e=>e.branch))].sort();
+  populateSelect(branchSel, branches, 'Все филиалы');
+
+  const deptPool = EMPLOYEES.filter(e=> !branch || e.branch===branch);
+  const depts = [...new Set(deptPool.map(e=>e.dept))].sort();
+  populateSelect(deptSel, depts, 'Все департаменты');
+  if(!depts.includes(dept)) deptSel.value = '';
+
+  const divPool = deptPool.filter(e=> !deptSel.value || e.dept===deptSel.value);
+  const divisions = [...new Set(divPool.map(e=>e.division).filter(Boolean))].sort();
+  populateSelect(divSel, divisions, 'Все отделы');
+}
+
+function applyFilter(){
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const branch = document.getElementById('filterBranch').value;
+  const dept = document.getElementById('filterDept').value;
+  const division = document.getElementById('filterDivision').value;
+
+  let list = EMPLOYEES;
+  if(q) list = list.filter(e=>e.name.toLowerCase().includes(q));
+  if(branch) list = list.filter(e=>e.branch===branch);
+  if(dept) list = list.filter(e=>e.dept===dept);
+  if(division) list = list.filter(e=>e.division===division);
+
+  renderSummary(list);
+  if(currentView==='board') renderBoard(list); else renderTable(list);
+}
+
+document.getElementById('searchInput').addEventListener('input', applyFilter);
+document.getElementById('filterBranch').addEventListener('change', ()=>{ refreshFilterOptions(); applyFilter(); });
+document.getElementById('filterDept').addEventListener('change', ()=>{ refreshFilterOptions(); applyFilter(); });
+document.getElementById('filterDivision').addEventListener('change', applyFilter);
+document.getElementById('resetFilters').addEventListener('click', ()=>{
+  document.getElementById('searchInput').value='';
+  document.getElementById('filterBranch').value='';
+  document.getElementById('filterDept').value='';
+  document.getElementById('filterDivision').value='';
+  refreshFilterOptions();
+  applyFilter();
+});
+refreshFilterOptions();
+
+document.getElementById('btnBoard').addEventListener('click', ()=>{
+  currentView='board';
+  document.getElementById('btnBoard').classList.add('active');
+  document.getElementById('btnTable').classList.remove('active');
+  document.getElementById('boardView').style.display='flex';
+  document.getElementById('tableView').style.display='none';
+  applyFilter();
+});
+document.getElementById('btnTable').addEventListener('click', ()=>{
+  currentView='table';
+  document.getElementById('btnTable').classList.add('active');
+  document.getElementById('btnBoard').classList.remove('active');
+  document.getElementById('boardView').style.display='none';
+  document.getElementById('tableView').style.display='table';
+  applyFilter();
+});
+
+function tickClock(){
+  const now = new Date();
+  const time = now.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const date = now.toLocaleDateString('ru-RU',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+  document.getElementById('clockTime').textContent = time;
+  document.getElementById('clockDate').textContent = date;
+}
+tickClock();
+setInterval(tickClock,1000);
+
+applyFilter();
+</script>
+</body>
+</html>

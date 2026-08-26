@@ -1,0 +1,5 @@
+personnel-availability (0.1.0-1) UNRELEASED; urgency=low
+
+  * Initial packaging stub (EPIC-001). Full delivery in EPIC-015.
+
+ -- HR Lab <dev@localhost>  Wed, 26 Aug 2026 21:00:00 +0300
