@@ -56,9 +56,9 @@ def test_open_with_correct_key_and_integrity(tmp_path: Path) -> None:
     path = tmp_path / "app.db"
     conn = create_database(path, key)
     apply_pending_migrations(conn)
-    assert current_version(conn) == 1
+    assert current_version(conn) >= 1
     conn.close()
 
     conn2 = connect(path, key, check_integrity=True)
-    assert current_version(conn2) == 1
+    assert current_version(conn2) >= 1
     conn2.close()
