@@ -8,7 +8,11 @@ from data.db import (
     generate_master_key,
     verify_integrity,
 )
-from data.migrations import apply_pending_migrations, current_version
+from data.migrations import (
+    apply_pending_migrations,
+    current_version,
+    expected_migration_versions,
+)
 
 __all__ = [
     "DatabaseError",
@@ -17,6 +21,7 @@ __all__ = [
     "connect",
     "create_database",
     "current_version",
+    "expected_migration_versions",
     "generate_master_key",
     "verify_integrity",
 ]

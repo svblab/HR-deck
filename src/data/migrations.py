@@ -9,10 +9,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from data.db import Connection, DatabaseError, table_columns
+from data.sql_script import execute_script_transactional
 
 _MIGRATION_NAME = re.compile(r"^(\d{4})_.+\.sql$")
-_BEGIN = re.compile(r"\bBEGIN\b", re.IGNORECASE)
-_END = re.compile(r"\bEND\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -27,94 +26,19 @@ class Migration:
         match = _MIGRATION_NAME.match(path.name)
         if not match:
             raise DatabaseError(f"invalid migration filename: {path.name}")
-        sql = path.read_text(encoding="utf-8")
-        checksum = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+        # Checksum = SHA-256 of exact file bytes (stable UTF-8 SQL on disk).
+        raw = path.read_bytes()
+        try:
+            sql = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise DatabaseError(f"migration is not valid UTF-8: {path.name}") from exc
+        checksum = hashlib.sha256(raw).hexdigest()
         return cls(version=int(match.group(1)), path=path, sql=sql, checksum=checksum)
 
 
 def default_migrations_dir() -> Path:
     """Каталог /migrations в корне репозитория (рядом с pyproject.toml)."""
     return Path(__file__).resolve().parents[2] / "migrations"
-
-
-def split_sql_statements(script: str) -> list[str]:
-    """
-    Разбить SQL-скрипт на statements.
-
-    Учитывает блоки BEGIN…END у триггеров; не использует executescript
-    (он делает неявный COMMIT и ломает откат).
-    """
-    statements: list[str] = []
-    buf: list[str] = []
-    i = 0
-    n = len(script)
-    begin_depth = 0
-    in_single = False
-    in_double = False
-
-    while i < n:
-        ch = script[i]
-        nxt = script[i + 1] if i + 1 < n else ""
-
-        if not in_single and not in_double and ch == "-" and nxt == "-":
-            while i < n and script[i] != "\n":
-                buf.append(script[i])
-                i += 1
-            continue
-
-        if not in_double and ch == "'":
-            buf.append(ch)
-            if in_single and nxt == "'":
-                buf.append(nxt)
-                i += 2
-                continue
-            in_single = not in_single
-            i += 1
-            continue
-
-        if not in_single and ch == '"':
-            in_double = not in_double
-            buf.append(ch)
-            i += 1
-            continue
-
-        if not in_single and not in_double:
-            rest = script[i:]
-            begin_match = _BEGIN.match(rest)
-            end_match = _END.match(rest)
-            if begin_match:
-                token = begin_match.group(0)
-                buf.append(token)
-                begin_depth += 1
-                i += len(token)
-                continue
-            if end_match and begin_depth > 0:
-                token = end_match.group(0)
-                buf.append(token)
-                begin_depth -= 1
-                i += len(token)
-                continue
-            if ch == ";" and begin_depth == 0:
-                stmt = "".join(buf).strip()
-                if stmt:
-                    statements.append(stmt)
-                buf = []
-                i += 1
-                continue
-
-        buf.append(ch)
-        i += 1
-
-    tail = "".join(buf).strip()
-    if tail:
-        statements.append(tail)
-    return statements
-
-
-def execute_script_transactional(conn: Connection, sql: str) -> None:
-    """Выполнить скрипт statement-by-statement внутри текущей транзакции."""
-    for statement in split_sql_statements(sql):
-        conn.execute(statement)
 
 
 def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:
@@ -162,6 +86,45 @@ def _has_checksum_column(conn: Connection) -> bool:
     return "checksum" in table_columns(conn, "schema_migrations")
 
 
+def expected_migration_versions(migrations_dir: Path | None = None) -> list[int]:
+    """Ожидаемая непрерывная последовательность версий из каталога миграций."""
+    return [m.version for m in discover_migrations(migrations_dir)]
+
+
+def repair_missing_checksums(conn: Connection, migrations: list[Migration]) -> list[int]:
+    """
+    Явный one-time upgrade: заполнить NULL/пустой checksum из файлов на диске.
+
+    Вызывается только когда колонка checksum уже есть (после 0003).
+    Не маскирует mismatch — только отсутствие сохранённого значения.
+    """
+    if current_version(conn) == 0 or not _has_checksum_column(conn):
+        return []
+
+    by_version = {m.version: m for m in migrations}
+    repaired: list[int] = []
+    rows = conn.execute(
+        "SELECT version, checksum FROM schema_migrations ORDER BY version"
+    ).fetchall()
+    for version, stored in rows:
+        ver = int(version)
+        if stored:
+            continue
+        migration = by_version.get(ver)
+        if migration is None:
+            raise DatabaseError(
+                f"applied migration {ver:04d} has no matching file on disk"
+            )
+        conn.execute(
+            "UPDATE schema_migrations SET checksum = ? WHERE version = ?",
+            (migration.checksum, ver),
+        )
+        repaired.append(ver)
+    if repaired:
+        conn.commit()
+    return repaired
+
+
 def verify_applied_checksums(conn: Connection, migrations: list[Migration]) -> None:
     """Сверка checksum уже применённых миграций с файлами на диске."""
     if current_version(conn) == 0:
@@ -176,28 +139,23 @@ def verify_applied_checksums(conn: Connection, migrations: list[Migration]) -> N
     rows = conn.execute(
         "SELECT version, checksum FROM schema_migrations ORDER BY version"
     ).fetchall()
-    dirty = False
     for version, stored in rows:
-        migration = by_version.get(int(version))
+        ver = int(version)
+        migration = by_version.get(ver)
         if migration is None:
             raise DatabaseError(
-                f"applied migration {int(version):04d} has no matching file on disk"
+                f"applied migration {ver:04d} has no matching file on disk"
             )
-        if stored is None:
-            # Однократный backfill после 0003: NULL → текущий checksum файла.
-            conn.execute(
-                "UPDATE schema_migrations SET checksum = ? WHERE version = ? AND checksum IS NULL",
-                (migration.checksum, int(version)),
+        if not stored:
+            raise DatabaseError(
+                f"applied migration {ver:04d} has no checksum stored "
+                "(run repair_missing_checksums or re-apply from backup)"
             )
-            dirty = True
-            continue
         if stored != migration.checksum:
             raise DatabaseError(
-                f"checksum mismatch for migration {int(version):04d}: "
+                f"checksum mismatch for migration {ver:04d}: "
                 "historical SQL was changed after apply"
             )
-    if dirty:
-        conn.commit()
 
 
 def apply_pending_migrations(
@@ -211,7 +169,9 @@ def apply_pending_migrations(
     Нельзя применить N+1, если N отсутствует (гарантируется discover + current).
     """
     migrations = discover_migrations(migrations_dir)
-    verify_applied_checksums(conn, migrations)
+    if _has_checksum_column(conn):
+        repair_missing_checksums(conn, migrations)
+        verify_applied_checksums(conn, migrations)
 
     applied: list[int] = []
     version = current_version(conn)
@@ -225,7 +185,6 @@ def apply_pending_migrations(
                 f"expected next version {version + 1:04d}"
             )
         try:
-            # Явная транзакция: DDL у SQLCipher/sqlite иначе может «выпасть» из отката.
             previous_isolation = conn.isolation_level
             conn.isolation_level = None
             conn.execute("BEGIN")
@@ -260,7 +219,9 @@ def apply_pending_migrations(
 
             applied.append(migration.version)
             version = migration.version
-            verify_applied_checksums(conn, migrations)
+            if _has_checksum_column(conn):
+                repair_missing_checksums(conn, migrations)
+                verify_applied_checksums(conn, migrations)
         except Exception:
             raise
     return applied
