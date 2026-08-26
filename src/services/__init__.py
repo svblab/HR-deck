@@ -4,6 +4,7 @@ from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
 from services.bootstrap import BootstrapService
+from services.directories import DirectoryService
 from services.session import SessionState
 from services.status_history import StatusHistoryService
 
@@ -12,6 +13,7 @@ __all__ = [
     "AuthenticationService",
     "AuthorizationService",
     "BootstrapService",
+    "DirectoryService",
     "SessionState",
     "StatusHistoryService",
 ]
