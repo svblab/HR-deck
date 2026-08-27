@@ -22,7 +22,7 @@
 | EPIC-007 | «Требует уточнения статуса» | ✅ Завершён | [#7](https://github.com/svblab/HR-deck/pull/7), UI [#9](https://github.com/svblab/HR-deck/pull/9) |
 | EPIC-008 | Главный экран | ✅ Завершён | [#9](https://github.com/svblab/HR-deck/pull/9), [#10](https://github.com/svblab/HR-deck/pull/10) |
 | EPIC-009 | Импорт и экспорт | ✅ Завершён | [#11](https://github.com/svblab/HR-deck/pull/11) |
-| EPIC-010 | Стандартные отчёты | ✅ Завершён | этот PR |
+| EPIC-010 | Стандартные отчёты | ✅ Завершён | [#12](https://github.com/svblab/HR-deck/pull/12) |
 
 ---
 
