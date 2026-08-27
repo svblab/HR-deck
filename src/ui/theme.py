@@ -132,4 +132,30 @@ QLabel#contentPlaceholder {{
     color: {TEXT_MUTED};
     font-size: 14px;
 }}
+QFrame#boardColumn {{
+    background: #EFEFEA;
+    border-radius: 12px;
+}}
+QFrame#empCard {{
+    background: {CARD};
+    border: 1px solid {BORDER};
+    border-radius: 10px;
+}}
+QLabel#countBadge {{
+    font-size: 11px;
+    background: {CARD};
+    border: 1px solid {BORDER};
+    border-radius: 20px;
+    padding: 1px 8px;
+    color: {TEXT_MUTED};
+}}
+QPushButton#clarificationCounter {{
+    background: #FBEAEA;
+    color: #A32D2D;
+    border: 1px solid #F0B8B8;
+}}
+QLabel#summaryStrip {{
+    font-size: 12px;
+    color: {TEXT_MUTED};
+}}
 """
