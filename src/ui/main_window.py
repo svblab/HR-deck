@@ -24,6 +24,8 @@ from domain.permissions import Permission
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
+from services.directories import DirectoryService
+from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from ui.auth_dialogs import AccountsDialog, UnlockDialog
@@ -95,7 +97,12 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self._build_title_bar())
         if self._conn is not None and self._session is not None:
             roster_service = RosterService(self._conn, self._session)
-            self._roster = RosterPanel(roster_service)
+            self._roster = RosterPanel(
+                roster_service,
+                employees=EmployeeService(self._conn, self._session),
+                directories=DirectoryService(self._conn, self._session),
+                session=self._session,
+            )
             self._roster.filters_reset.connect(self._clear_search)
             self._search.setEnabled(True)
             self._search.textChanged.connect(self._roster.set_name_query)

@@ -27,6 +27,8 @@ class EmployeePopupDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(row.full_name)
         self.setModal(True)
+        self._row = row
+        self.open_card_id: int | None = None
         self.setMinimumWidth(360)
         layout = QVBoxLayout(self)
         name = QLabel(row.full_name)
@@ -70,9 +72,16 @@ class EmployeePopupDialog(QDialog):
             )
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        card_btn = buttons.addButton("Карточка", QDialogButtonBox.ButtonRole.ActionRole)
+        card_btn.setObjectName("openEmployeeCard")
+        card_btn.clicked.connect(self._open_card)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
+
+    def _open_card(self) -> None:
+        self.open_card_id = self._row.employee_id
+        self.accept()
 
 
 def _kv(label: str, value: str) -> QWidget:

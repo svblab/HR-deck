@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from domain.permissions import Permission, has_permission
 from domain.roster import (
     GroupBy,
     RosterFilters,
@@ -22,8 +24,12 @@ from domain.roster import (
     group_rows,
     summary_counts,
 )
+from services.directories import DirectoryService
+from services.employees import EmployeeService
 from services.roster import RosterService
+from services.session import SessionState
 from ui.board_widget import BoardWidget
+from ui.employee_card_form import EmployeeCardDialog
 from ui.employee_popup import EmployeePopupDialog
 from ui.table_widget import TableWidget
 
@@ -31,9 +37,20 @@ from ui.table_widget import TableWidget
 class RosterPanel(QWidget):
     filters_reset = Signal()
 
-    def __init__(self, service: RosterService, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        service: RosterService,
+        parent: QWidget | None = None,
+        *,
+        employees: EmployeeService | None = None,
+        directories: DirectoryService | None = None,
+        session: SessionState | None = None,
+    ) -> None:
         super().__init__(parent)
         self._service = service
+        self._employees = employees
+        self._directories = directories
+        self._session = session
         self._all_rows: list[RosterRow] = []
         self._group_by = GroupBy.STATUS
         self._name_query = ""
@@ -68,15 +85,20 @@ class RosterPanel(QWidget):
         outer.setSpacing(10)
 
         row1 = QHBoxLayout()
-        add_btn = QPushButton("+ Добавить сотрудника", objectName="primaryBtn")
-        add_btn.setEnabled(False)
-        reports_btn = QPushButton("Отчёты")
+        self._add_btn = QPushButton("+ Добавить сотрудника", objectName="addEmployeeBtn")
+        can_add = self._session is not None and has_permission(
+            self._session.role, Permission.MANAGE_EMPLOYEES
+        )
+        self._add_btn.setEnabled(bool(can_add and self._employees and self._directories))
+        self._add_btn.clicked.connect(self._open_create_form)
+        # EPIC-010 (стандартные отчёты) ещё не начат — кнопка-заглушка, не часть EPIC-008.
+        reports_btn = QPushButton("Отчёты", objectName="reportsBtn")
         reports_btn.setEnabled(False)
         self._board_btn = QPushButton("Доска", objectName="viewToggleActive")
         self._table_btn = QPushButton("Таблица", objectName="viewToggleInactive")
         self._board_btn.clicked.connect(lambda: self._set_view(0))
         self._table_btn.clicked.connect(lambda: self._set_view(1))
-        row1.addWidget(add_btn)
+        row1.addWidget(self._add_btn)
         row1.addWidget(reports_btn)
         row1.addWidget(self._board_btn)
         row1.addWidget(self._table_btn)
@@ -219,4 +241,23 @@ class RosterPanel(QWidget):
         if row is None:
             return
         history = self._service.history_preview(employee_id)
-        EmployeePopupDialog(row, history, self).exec()
+        popup = EmployeePopupDialog(row, history, self)
+        popup.exec()
+        if popup.open_card_id is not None:
+            self._open_card(popup.open_card_id)
+
+    def _open_create_form(self) -> None:
+        self._open_card(None)
+
+    def _open_card(self, employee_id: int | None) -> None:
+        if self._employees is None or self._directories is None or self._session is None:
+            return
+        dialog = EmployeeCardDialog(
+            self._employees,
+            self._directories,
+            self._session,
+            employee_id=employee_id,
+            parent=self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.reload()

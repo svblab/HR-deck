@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from domain.employee import (
+    EmployeeSearchHit,
     EmployeeValidationError,
     clean_full_name,
+    format_search_hit_label,
     validate_employee_org,
 )
 from domain.org_structure import DepartmentRef, DivisionRef
@@ -46,3 +48,20 @@ def test_mask_sensitive_value() -> None:
     masked = mask_sensitive_value("secret")
     assert masked is not None
     assert "secret" not in masked
+
+
+def test_format_search_hit_label_disambiguates_same_name() -> None:
+    hit = EmployeeSearchHit(
+        id=1,
+        full_name="Иванов Иван Иванович",
+        position_name="Инженер",
+        branch_name="Филиал Север (тест)",
+        department_name="Департамент разработки",
+        division_name="Отдел платформы",
+        hire_date="2024-01-15",
+    )
+    label = format_search_hit_label(hit)
+    assert "Иванов Иван Иванович" in label
+    assert "Инженер" in label
+    assert "Отдел платформы" in label
+    assert "2024-01-15" in label

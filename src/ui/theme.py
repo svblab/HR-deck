@@ -93,12 +93,12 @@ QPushButton {{
 QPushButton:hover {{
     background: #F4F4F1;
 }}
-QPushButton#primaryBtn {{
+QPushButton#primaryBtn, QPushButton#addEmployeeBtn {{
     background: {ACCENT};
     color: #ffffff;
     border-color: {ACCENT};
 }}
-QPushButton#primaryBtn:hover {{
+QPushButton#primaryBtn:hover, QPushButton#addEmployeeBtn:hover {{
     background: #265A50;
 }}
 QPushButton#viewToggleActive {{
