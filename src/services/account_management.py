@@ -12,7 +12,6 @@ from data.db import Connection
 from data.keywrap import (
     keywrap_path_for,
     load_keywrap,
-    remove_account_wrap,
     save_keywrap,
     upsert_account_wrap,
     wrap_secret,
@@ -87,6 +86,8 @@ class AccountManagementService:
             raise AccountManagementError("invalid role")
         if self._accounts.get_by_login(login) is not None:
             raise AccountManagementError("login already exists")
+        if role == RoleCode.ADMINISTRATOR:
+            self._reject_second_active_administrator()
 
         now = self._clock()
         password_hash = hash_password(password)
@@ -106,20 +107,30 @@ class AccountManagementService:
                 entity_id=account_id,
                 details=f"role={role.value}",
             )
+            self._rewrite_account_wrap(login, password)
             self._conn.commit()
         except Exception:
             self._conn.rollback()
             raise
 
-        self._rewrite_account_wrap(login, password)
         return account_id
 
     def set_role(self, account_id: int, role: RoleCode) -> None:
         self._guard(Permission.MANAGE_ACCOUNTS)
         target = self._require_account(account_id)
-        if target.role_code == RoleCode.ADMINISTRATOR.value and role != RoleCode.ADMINISTRATOR:
-            if self._accounts.count_administrators() <= 1:
-                raise AccountManagementError("cannot demote the last administrator")
+        if (
+            role == RoleCode.ADMINISTRATOR
+            and target.is_active
+            and target.role_code != RoleCode.ADMINISTRATOR.value
+        ):
+            self._reject_second_active_administrator()
+        if (
+            target.role_code == RoleCode.ADMINISTRATOR.value
+            and role != RoleCode.ADMINISTRATOR
+            and target.is_active
+            and self._accounts.count_active_administrators() <= 1
+        ):
+            raise AccountManagementError("cannot demote the last administrator")
         now = self._clock()
         try:
             self._accounts.set_role(account_id, role, now)
@@ -141,9 +152,16 @@ class AccountManagementService:
         self._guard(Permission.MANAGE_ACCOUNTS)
         target = self._require_account(account_id)
         if (
+            is_active
+            and target.role_code == RoleCode.ADMINISTRATOR.value
+            and not target.is_active
+        ):
+            self._reject_second_active_administrator()
+        if (
             not is_active
             and target.role_code == RoleCode.ADMINISTRATOR.value
-            and self._accounts.count_administrators() <= 1
+            and target.is_active
+            and self._accounts.count_active_administrators() <= 1
         ):
             raise AccountManagementError("cannot disable the last administrator")
         now = self._clock()
@@ -180,11 +198,11 @@ class AccountManagementService:
                 entity_type="account",
                 entity_id=account_id,
             )
+            self._rewrite_account_wrap(target.login, new_password)
             self._conn.commit()
         except Exception:
             self._conn.rollback()
             raise
-        self._rewrite_account_wrap(target.login, new_password)
 
     def update_security_settings(
         self,
@@ -253,19 +271,15 @@ class AccountManagementService:
             raise AccountManagementError("account not found")
         return account
 
+    def _reject_second_active_administrator(self) -> None:
+        if self._accounts.count_active_administrators() >= 1:
+            raise AccountManagementError("only one active administrator is allowed")
+
     def _rewrite_account_wrap(self, login: str, password: str) -> None:
         wrap_path = keywrap_path_for(self._db_path)
         keywrap = load_keywrap(wrap_path)
-        updated = upsert_account_wrap(
-            keywrap,
-            wrap_secret(self._session.master_key, password, kind="account", login=login),
-        )
-        save_keywrap(wrap_path, updated)
-
-    def _remove_wrap(self, login: str) -> None:
-        wrap_path = keywrap_path_for(self._db_path)
-        keywrap = load_keywrap(wrap_path)
-        save_keywrap(wrap_path, remove_account_wrap(keywrap, login))
+        entry = wrap_secret(self._session.master_key, password, kind="account", login=login)
+        save_keywrap(wrap_path, upsert_account_wrap(keywrap, entry))
 
 
 # Re-export for callers that probe authorization without UI.

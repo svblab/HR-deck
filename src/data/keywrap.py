@@ -166,12 +166,6 @@ def replace_recovery_wrap(keywrap: KeywrapFile, entry: WrapEntry) -> KeywrapFile
     return KeywrapFile(wraps=remaining)
 
 
-def remove_account_wrap(keywrap: KeywrapFile, login: str) -> KeywrapFile:
-    return KeywrapFile(
-        wraps=[w for w in keywrap.wraps if not (w.kind == "account" and w.login == login)]
-    )
-
-
 def _aad(kind: WrapKind, login: str | None) -> bytes:
     if kind == "account":
         return f"account:{login}".encode()
