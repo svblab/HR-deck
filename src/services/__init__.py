@@ -8,6 +8,11 @@ from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.session import SessionState
+from services.status_clarification import (
+    ClarificationCounterSnapshot,
+    ClarificationEmployeeHit,
+    StatusClarificationService,
+)
 from services.status_history import StatusHistoryService
 
 __all__ = [
@@ -16,8 +21,11 @@ __all__ = [
     "AuthorizationService",
     "AvailabilityStatusService",
     "BootstrapService",
+    "ClarificationCounterSnapshot",
+    "ClarificationEmployeeHit",
     "DirectoryService",
     "EmployeeService",
     "SessionState",
+    "StatusClarificationService",
     "StatusHistoryService",
 ]
