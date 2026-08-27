@@ -95,3 +95,47 @@ def test_shell_without_session_still_builds(qtbot) -> None:
     assert window.findChild(QLabel, "logoBadge") is not None
     assert window.findChild(BoardWidget) is None
     window.close()
+
+
+def test_add_button_enabled_reports_still_stub(qtbot, tmp_path: Path) -> None:
+    window, conn, _session, _ids = _window(tmp_path)
+    qtbot.addWidget(window)
+    add_btn = window.findChild(QPushButton, "addEmployeeBtn")
+    assert add_btn is not None
+    assert add_btn.isEnabled()
+    reports = window.findChild(QPushButton, "reportsBtn")
+    assert reports is not None
+    assert not reports.isEnabled()
+    window.close()
+    conn.close()
+
+
+def test_add_button_opens_form_save_reloads_roster(qtbot, tmp_path: Path) -> None:
+    window, conn, _session, _ids = _window(tmp_path)
+    qtbot.addWidget(window)
+    add_btn = window.findChild(QPushButton, "addEmployeeBtn")
+    assert add_btn is not None
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QApplication
+
+    from ui.employee_card_form import EmployeeCardDialog
+
+    def _fill_and_save() -> None:
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, EmployeeCardDialog) and widget.isVisible():
+                widget._name.setText("Сидорова Анна")
+                widget._position.setCurrentIndex(1)
+                widget._branch.setCurrentIndex(1)
+                widget._department.setCurrentIndex(1)
+                widget._division.setCurrentIndex(1)
+                widget._employment.setCurrentIndex(1)
+                widget._submit()
+                return
+
+    QTimer.singleShot(0, _fill_and_save)
+    add_btn.click()
+    panel = window.findChild(RosterPanel)
+    assert panel is not None
+    qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 3)
+    window.close()
+    conn.close()

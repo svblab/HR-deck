@@ -76,6 +76,19 @@ class EmployeeSearchHit:
     hire_date: str | None
 
 
+def format_search_hit_label(hit: EmployeeSearchHit) -> str:
+    """Подпись однофамильца: должность / подразделение / дата приёма (ТЗ §3.1)."""
+    parts = [hit.full_name, hit.position_name]
+    subdiv = " / ".join(p for p in (hit.department_name, hit.division_name) if p)
+    if subdiv:
+        parts.append(subdiv)
+    elif hit.branch_name:
+        parts.append(hit.branch_name)
+    if hit.hire_date:
+        parts.append(hit.hire_date)
+    return " · ".join(p for p in parts if p)
+
+
 def clean_full_name(full_name: str) -> str:
     clean = full_name.strip()
     if not clean:
