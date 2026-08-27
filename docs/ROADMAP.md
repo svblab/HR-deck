@@ -19,8 +19,8 @@
 | EPIC-004 | Справочники и оргструктура | ✅ Завершён | [#4](https://github.com/svblab/HR-deck/pull/4) |
 | EPIC-005 | Карточка сотрудника | ✅ Завершён | [#5](https://github.com/svblab/HR-deck/pull/5) |
 | EPIC-006 | Статусы доступности и история | ✅ Завершён | [#6](https://github.com/svblab/HR-deck/pull/6) |
-| EPIC-007 | «Требует уточнения статуса» | ✅ Завершён | [#7](https://github.com/svblab/HR-deck/pull/7) + UI в EPIC-008 |
-| EPIC-008 | Главный экран | 🚧 В работе | — |
+| EPIC-007 | «Требует уточнения статуса» | ✅ Завершён | [#7](https://github.com/svblab/HR-deck/pull/7), UI [#9](https://github.com/svblab/HR-deck/pull/9) |
+| EPIC-008 | Главный экран | 🚧 В работе | [#9](https://github.com/svblab/HR-deck/pull/9) |
 
 ---
 
