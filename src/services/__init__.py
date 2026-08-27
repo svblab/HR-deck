@@ -6,6 +6,8 @@ from services.authorization import AuthorizationService
 from services.availability_statuses import AvailabilityStatusService
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
+from services.employee_export import EmployeeExportService
+from services.employee_import import EmployeeImportService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
@@ -25,6 +27,8 @@ __all__ = [
     "ClarificationCounterSnapshot",
     "ClarificationEmployeeHit",
     "DirectoryService",
+    "EmployeeExportService",
+    "EmployeeImportService",
     "EmployeeService",
     "RosterService",
     "SessionState",

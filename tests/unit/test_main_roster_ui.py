@@ -106,6 +106,8 @@ def test_add_button_enabled_reports_still_stub(qtbot, tmp_path: Path) -> None:
     reports = window.findChild(QPushButton, "reportsBtn")
     assert reports is not None
     assert not reports.isEnabled()
+    assert window.findChild(QPushButton, "importEmployeesBtn").isEnabled()
+    assert window.findChild(QPushButton, "exportEmployeesBtn").isEnabled()
     window.close()
     conn.close()
 
