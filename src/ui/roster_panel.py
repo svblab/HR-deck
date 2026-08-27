@@ -31,6 +31,7 @@ from services.session import SessionState
 from ui.board_widget import BoardWidget
 from ui.employee_card_form import EmployeeCardDialog
 from ui.employee_popup import EmployeePopupDialog
+from ui.import_export_dialog import run_export_flow, run_import_flow
 from ui.table_widget import TableWidget
 
 
@@ -91,7 +92,17 @@ class RosterPanel(QWidget):
         )
         self._add_btn.setEnabled(bool(can_add and self._employees and self._directories))
         self._add_btn.clicked.connect(self._open_create_form)
-        # EPIC-010 (стандартные отчёты) ещё не начат — кнопка-заглушка, не часть EPIC-008.
+        can_io = self._session is not None and has_permission(
+            self._session.role, Permission.IMPORT_EXPORT
+        )
+        self._import_btn = QPushButton("Импорт", objectName="importEmployeesBtn")
+        self._export_btn = QPushButton("Экспорт", objectName="exportEmployeesBtn")
+        io_enabled = bool(can_io and self._employees and self._directories)
+        self._import_btn.setEnabled(io_enabled)
+        self._export_btn.setEnabled(io_enabled)
+        self._import_btn.clicked.connect(self._open_import)
+        self._export_btn.clicked.connect(self._open_export)
+        # EPIC-010 (стандартные отчёты) ещё не начат — кнопка-заглушка, не часть EPIC-008/009.
         reports_btn = QPushButton("Отчёты", objectName="reportsBtn")
         reports_btn.setEnabled(False)
         self._board_btn = QPushButton("Доска", objectName="viewToggleActive")
@@ -99,6 +110,8 @@ class RosterPanel(QWidget):
         self._board_btn.clicked.connect(lambda: self._set_view(0))
         self._table_btn.clicked.connect(lambda: self._set_view(1))
         row1.addWidget(self._add_btn)
+        row1.addWidget(self._import_btn)
+        row1.addWidget(self._export_btn)
         row1.addWidget(reports_btn)
         row1.addWidget(self._board_btn)
         row1.addWidget(self._table_btn)
@@ -261,3 +274,14 @@ class RosterPanel(QWidget):
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.reload()
+
+    def _open_import(self) -> None:
+        if self._employees is None or self._directories is None or self._session is None:
+            return
+        if run_import_flow(self, self._employees, self._directories, self._session):
+            self.reload()
+
+    def _open_export(self) -> None:
+        if self._employees is None or self._directories is None or self._session is None:
+            return
+        run_export_flow(self, self._employees, self._directories, self._session)
