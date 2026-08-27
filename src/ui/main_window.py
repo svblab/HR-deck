@@ -1,4 +1,4 @@
-"""Главное окно: оболочка + сессия EPIC-003 (без бизнес-экранов сотрудников)."""
+"""Главное окно: оболочка, сессия и главный экран (доска/таблица)."""
 
 from __future__ import annotations
 
@@ -8,14 +8,12 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -26,8 +24,10 @@ from domain.permissions import Permission
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
+from services.roster import RosterService
 from services.session import SessionState
 from ui.auth_dialogs import AccountsDialog, UnlockDialog
+from ui.roster_panel import RosterPanel
 from ui.theme import APP_STYLESHEET
 
 _MONTHS_RU = (
@@ -85,6 +85,7 @@ class MainWindow(QMainWindow):
         self._db_path = db_path
         self._authz = AuthorizationService()
         self._auth = AuthenticationService()
+        self._roster: RosterPanel | None = None
 
         root = QWidget(objectName="centralRoot")
         root_layout = QVBoxLayout(root)
@@ -92,8 +93,16 @@ class MainWindow(QMainWindow):
         root_layout.setSpacing(0)
 
         root_layout.addWidget(self._build_title_bar())
-        root_layout.addWidget(self._build_toolbar())
-        root_layout.addWidget(self._build_content_placeholder(), stretch=1)
+        if self._conn is not None and self._session is not None:
+            roster_service = RosterService(self._conn, self._session)
+            self._roster = RosterPanel(roster_service)
+            self._roster.filters_reset.connect(self._clear_search)
+            self._search.setEnabled(True)
+            self._search.textChanged.connect(self._roster.set_name_query)
+            root_layout.addWidget(self._roster, stretch=1)
+        else:
+            root_layout.addWidget(self._build_toolbar())
+            root_layout.addWidget(self._build_content_placeholder(), stretch=1)
 
         self.setCentralWidget(root)
 
@@ -130,13 +139,13 @@ class MainWindow(QMainWindow):
         layout.addLayout(brand)
 
         layout.addStretch(1)
-        search = QLineEdit(objectName="searchInput")
-        search.setPlaceholderText("Поиск сотрудника по ФИО...")
-        search.setEnabled(False)
-        search.setClearButtonEnabled(False)
-        search.setMinimumWidth(280)
-        search.setMaximumWidth(340)
-        layout.addWidget(search)
+        self._search = QLineEdit(objectName="searchInput")
+        self._search.setPlaceholderText("Поиск сотрудника по ФИО...")
+        self._search.setEnabled(False)
+        self._search.setClearButtonEnabled(True)
+        self._search.setMinimumWidth(280)
+        self._search.setMaximumWidth(340)
+        layout.addWidget(self._search)
         layout.addStretch(1)
 
         right = QHBoxLayout()
@@ -187,57 +196,25 @@ class MainWindow(QMainWindow):
 
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget(objectName="toolbar")
-        outer = QVBoxLayout(toolbar)
-        outer.setContentsMargins(20, 10, 20, 10)
-        outer.setSpacing(10)
-
-        row1 = QHBoxLayout()
-        row1.setSpacing(10)
+        row = QHBoxLayout(toolbar)
         add_btn = QPushButton("+ Добавить сотрудника", objectName="primaryBtn")
         add_btn.setEnabled(False)
-        reports_btn = QPushButton("Отчёты")
-        reports_btn.setEnabled(False)
-        board_btn = QPushButton("Доска", objectName="viewToggleActive")
-        board_btn.setEnabled(False)
-        table_btn = QPushButton("Таблица", objectName="viewToggleInactive")
-        table_btn.setEnabled(False)
-        row1.addWidget(add_btn)
-        row1.addWidget(reports_btn)
-        row1.addWidget(board_btn)
-        row1.addWidget(table_btn)
-        row1.addStretch(1)
-        summary = QLabel("Счётчики статусов — после EPIC-008")
-        summary.setObjectName("contentPlaceholder")
-        row1.addWidget(summary)
-        outer.addLayout(row1)
-
-        row2 = QHBoxLayout()
-        row2.setSpacing(8)
-        for placeholder in ("Все филиалы", "Все департаменты", "Все отделы"):
-            combo = QComboBox()
-            combo.addItem(placeholder)
-            combo.setEnabled(False)
-            row2.addWidget(combo)
-        reset = QPushButton("Показать всех", objectName="filterReset")
-        reset.setEnabled(False)
-        row2.addWidget(reset)
-        row2.addStretch(1)
-        outer.addLayout(row2)
+        row.addWidget(add_btn)
         return toolbar
 
     def _build_content_placeholder(self) -> QWidget:
         area = QWidget()
         layout = QVBoxLayout(area)
-        layout.setContentsMargins(20, 18, 20, 18)
-        label = QLabel(
-            "Область доски/таблицы — заглушка EPIC-001.\n"
-            "Данные и режимы появятся в EPIC-008."
-        )
+        label = QLabel("Войдите, чтобы открыть доску и таблицу.")
         label.setObjectName("contentPlaceholder")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         layout.addWidget(label)
         return area
+
+    def _clear_search(self) -> None:
+        self._search.blockSignals(True)
+        self._search.clear()
+        self._search.blockSignals(False)
 
     def _tick_clock(self) -> None:
         time_text, date_text = format_clock()

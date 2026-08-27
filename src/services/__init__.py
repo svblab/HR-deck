@@ -7,6 +7,7 @@ from services.availability_statuses import AvailabilityStatusService
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
+from services.roster import RosterService
 from services.session import SessionState
 from services.status_clarification import (
     ClarificationCounterSnapshot,
@@ -25,6 +26,7 @@ __all__ = [
     "ClarificationEmployeeHit",
     "DirectoryService",
     "EmployeeService",
+    "RosterService",
     "SessionState",
     "StatusClarificationService",
     "StatusHistoryService",
