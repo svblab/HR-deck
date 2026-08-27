@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from data.accounts import AccountRepository
+from data.db import connect
 from data.keywrap import keywrap_path_for, load_keywrap
+from domain.password_kdf import hash_password
 from domain.permissions import RoleCode
 from services.account_management import AccountManagementError, AccountManagementService
 from services.authentication import AuthenticationError, AuthenticationService
@@ -217,6 +219,113 @@ def test_keywrap_has_no_plaintext_master_key(tmp_path: Path) -> None:
     text = keywrap_path_for(db).read_text(encoding="utf-8")
     assert session.master_key.hex() not in text
     assert any(w.kind == "recovery" for w in wrap.wraps)
+    conn.close()
+
+
+def test_cannot_create_or_promote_second_active_administrator(tmp_path: Path) -> None:
+    db, conn, session, _code = _setup(tmp_path)
+    mgr = AccountManagementService(
+        conn, session, db_path=db, clock=lambda: "2026-08-26T15:00:00Z"
+    )
+    hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+
+    with pytest.raises(AccountManagementError, match="only one active administrator"):
+        mgr.create_account(login="admin2", password="AdminPass-2", role=RoleCode.ADMINISTRATOR)
+
+    with pytest.raises(AccountManagementError, match="only one active administrator"):
+        mgr.set_role(hr_id, RoleCode.ADMINISTRATOR)
+
+    with pytest.raises(AccountManagementError, match="cannot disable the last administrator"):
+        mgr.set_active(session.account_id, False)
+
+    assert AccountRepository(conn).count_active_administrators() == 1
+    conn.close()
+
+
+def test_cannot_reactivate_second_administrator(tmp_path: Path) -> None:
+    db, conn, session, _code = _setup(tmp_path)
+    mgr = AccountManagementService(
+        conn, session, db_path=db, clock=lambda: "2026-08-26T15:10:00Z"
+    )
+    hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+    accounts = AccountRepository(conn)
+    accounts.set_role(hr_id, RoleCode.ADMINISTRATOR, "2026-08-26T15:11:00Z")
+    accounts.set_active(hr_id, False, "2026-08-26T15:12:00Z")
+    conn.commit()
+
+    with pytest.raises(AccountManagementError, match="only one active administrator"):
+        mgr.set_active(hr_id, True)
+
+    assert accounts.count_active_administrators() == 1
+    conn.close()
+
+
+def test_recovery_fails_with_two_active_administrators_without_changing_passwords(
+    tmp_path: Path,
+    sleepless_auth: AuthenticationService,
+) -> None:
+    db, conn, session, code = _setup(tmp_path)
+    accounts = AccountRepository(conn)
+    accounts.create(
+        login="aaa",
+        password_hash=hash_password("AaaPass-1"),
+        role=RoleCode.ADMINISTRATOR,
+        created_at="2026-08-26T12:00:00Z",
+    )
+    conn.commit()
+    admin_hash = accounts.get_by_login("admin")
+    aaa_hash = accounts.get_by_login("aaa")
+    assert admin_hash is not None and aaa_hash is not None
+    admin_hash_before = admin_hash.password_hash
+    aaa_hash_before = aaa_hash.password_hash
+    master_key = session.master_key
+    conn.close()
+
+    with pytest.raises(BootstrapError, match="multiple active administrators"):
+        BootstrapService().recover_administrator_password(
+            db_path=db, recovery_code=code, new_password="Hacked-99"
+        )
+
+    conn = connect(db, master_key)
+    after_admin = AccountRepository(conn).get_by_login("admin")
+    after_aaa = AccountRepository(conn).get_by_login("aaa")
+    assert after_admin is not None and after_aaa is not None
+    assert after_admin.password_hash == admin_hash_before
+    assert after_aaa.password_hash == aaa_hash_before
+    conn.close()
+
+    c2, _s2 = sleepless_auth.login(db_path=db, login="admin", password="AdminPass-1")
+    c2.close()
+
+
+def test_recovery_fails_when_administrator_is_inactive_without_changing_password(
+    tmp_path: Path,
+) -> None:
+    db, conn, session, code = _setup(tmp_path)
+    accounts = AccountRepository(conn)
+    admin = accounts.get_by_login("admin")
+    assert admin is not None
+    hash_before = admin.password_hash
+    accounts.set_active(admin.id, False, "2026-08-26T16:00:00Z")
+    conn.commit()
+    master_key = session.master_key
+    conn.close()
+
+    with pytest.raises(BootstrapError, match="no active administrator"):
+        BootstrapService().recover_administrator_password(
+            db_path=db, recovery_code=code, new_password="Hacked-99"
+        )
+
+    conn = connect(db, master_key)
+    after = AccountRepository(conn).get_by_id(admin.id)
+    assert after is not None
+    assert after.password_hash == hash_before
+    assert not after.is_active
+    consumed = conn.execute(
+        "SELECT COUNT(*) FROM recovery_codes WHERE is_consumed = 1"
+    ).fetchone()
+    assert consumed is not None
+    assert int(consumed[0]) == 0
     conn.close()
 
 

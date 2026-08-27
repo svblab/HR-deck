@@ -184,6 +184,8 @@ class BootstrapService:
         ]
         if not admins:
             raise BootstrapError("no active administrator")
+        if len(admins) > 1:
+            raise BootstrapError("multiple active administrators")
         admin = admins[0]
 
         new_hash = hash_password(new_password)

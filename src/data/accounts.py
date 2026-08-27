@@ -32,6 +32,15 @@ class AccountRepository:
         ).fetchone()
         return int(row[0])
 
+    def count_active_administrators(self) -> int:
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM accounts a "
+            "JOIN roles r ON r.id = a.role_id "
+            "WHERE r.code = ? AND a.is_active = 1",
+            (RoleCode.ADMINISTRATOR.value,),
+        ).fetchone()
+        return int(row[0])
+
     def count_accounts(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) FROM accounts").fetchone()
         return int(row[0])

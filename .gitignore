@@ -28,6 +28,7 @@ Thumbs.db
 # Local runtime data (not in repo; keep src/data package tracked)
 *.db
 *.db-journal
+*.keywrap
 /var/data/
 /backups/
 /logs/
