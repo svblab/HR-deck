@@ -17,10 +17,10 @@
 | EPIC-002 | Модель данных и миграции | ✅ Завершён | [#2](https://github.com/svblab/HR-deck/pull/2) |
 | EPIC-003 | Учётные записи, роли и вход | ✅ Завершён | [#3](https://github.com/svblab/HR-deck/pull/3) |
 | EPIC-004 | Справочники и оргструктура | ✅ Завершён | [#4](https://github.com/svblab/HR-deck/pull/4) |
-| EPIC-005 | Карточка сотрудника | ✅ Завершён (сервис #5; форма UI — этот PR) | [#5](https://github.com/svblab/HR-deck/pull/5) |
+| EPIC-005 | Карточка сотрудника | ✅ Завершён (сервис #5; форма UI #10) | [#5](https://github.com/svblab/HR-deck/pull/5), [#10](https://github.com/svblab/HR-deck/pull/10) |
 | EPIC-006 | Статусы доступности и история | ✅ Завершён | [#6](https://github.com/svblab/HR-deck/pull/6) |
 | EPIC-007 | «Требует уточнения статуса» | ✅ Завершён | [#7](https://github.com/svblab/HR-deck/pull/7), UI [#9](https://github.com/svblab/HR-deck/pull/9) |
-| EPIC-008 | Главный экран | ✅ Завершён | [#9](https://github.com/svblab/HR-deck/pull/9), форма/+кнопка — этот PR |
+| EPIC-008 | Главный экран | ✅ Завершён | [#9](https://github.com/svblab/HR-deck/pull/9), [#10](https://github.com/svblab/HR-deck/pull/10) |
 
 ---
 
