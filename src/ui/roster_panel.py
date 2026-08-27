@@ -28,10 +28,12 @@ from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
+from services.standard_reports import StandardReportService
 from ui.board_widget import BoardWidget
 from ui.employee_card_form import EmployeeCardDialog
 from ui.employee_popup import EmployeePopupDialog
 from ui.import_export_dialog import run_export_flow, run_import_flow
+from ui.reports_dialog import ReportsDialog
 from ui.table_widget import TableWidget
 
 
@@ -46,12 +48,14 @@ class RosterPanel(QWidget):
         employees: EmployeeService | None = None,
         directories: DirectoryService | None = None,
         session: SessionState | None = None,
+        reports: StandardReportService | None = None,
     ) -> None:
         super().__init__(parent)
         self._service = service
         self._employees = employees
         self._directories = directories
         self._session = session
+        self._reports = reports
         self._all_rows: list[RosterRow] = []
         self._group_by = GroupBy.STATUS
         self._name_query = ""
@@ -102,9 +106,12 @@ class RosterPanel(QWidget):
         self._export_btn.setEnabled(io_enabled)
         self._import_btn.clicked.connect(self._open_import)
         self._export_btn.clicked.connect(self._open_export)
-        # EPIC-010 (стандартные отчёты) ещё не начат — кнопка-заглушка, не часть EPIC-008/009.
-        reports_btn = QPushButton("Отчёты", objectName="reportsBtn")
-        reports_btn.setEnabled(False)
+        self._reports_btn = QPushButton("Отчёты", objectName="reportsBtn")
+        can_reports = self._session is not None and has_permission(
+            self._session.role, Permission.VIEW_STANDARD_REPORTS
+        )
+        self._reports_btn.setEnabled(bool(can_reports and self._reports and self._directories))
+        self._reports_btn.clicked.connect(self._open_reports)
         self._board_btn = QPushButton("Доска", objectName="viewToggleActive")
         self._table_btn = QPushButton("Таблица", objectName="viewToggleInactive")
         self._board_btn.clicked.connect(lambda: self._set_view(0))
@@ -112,7 +119,7 @@ class RosterPanel(QWidget):
         row1.addWidget(self._add_btn)
         row1.addWidget(self._import_btn)
         row1.addWidget(self._export_btn)
-        row1.addWidget(reports_btn)
+        row1.addWidget(self._reports_btn)
         row1.addWidget(self._board_btn)
         row1.addWidget(self._table_btn)
         row1.addStretch(1)
@@ -285,3 +292,8 @@ class RosterPanel(QWidget):
         if self._employees is None or self._directories is None or self._session is None:
             return
         run_export_flow(self, self._employees, self._directories, self._session)
+
+    def _open_reports(self) -> None:
+        if self._reports is None or self._directories is None or self._employees is None:
+            return
+        ReportsDialog(self._reports, self._directories, self._employees, self).exec()
