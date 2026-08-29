@@ -29,6 +29,8 @@ from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from services.standard_reports import StandardReportService
+from services.user_action_log import UserActionLogService
+from ui.action_log_dialog import ActionLogDialog
 from ui.auth_dialogs import AccountsDialog, UnlockDialog
 from ui.roster_panel import RosterPanel
 from ui.theme import APP_STYLESHEET
@@ -181,13 +183,20 @@ class MainWindow(QMainWindow):
         self._accounts_btn = QToolButton(objectName="titleIconBtn")
         self._accounts_btn.setText("👤")
         self._accounts_btn.setToolTip("Учётные записи")
-        can_manage = (
-            self._session is not None
-            and self._authz.check(self._session.role, Permission.MANAGE_ACCOUNTS)
-        )
-        self._accounts_btn.setVisible(can_manage)
-        self._accounts_btn.setEnabled(can_manage)
         self._accounts_btn.clicked.connect(self._open_accounts)
+        self._log_btn = QToolButton(objectName="actionLogBtn")
+        self._log_btn.setText("📋")
+        self._log_btn.setToolTip("Журнал действий")
+        self._log_btn.clicked.connect(self._open_action_log)
+        for btn, perm in (
+            (self._accounts_btn, Permission.MANAGE_ACCOUNTS),
+            (self._log_btn, Permission.VIEW_USER_ACTION_LOG),
+        ):
+            allowed = bool(
+                self._session is not None and self._authz.check(self._session.role, perm)
+            )
+            btn.setVisible(allowed)
+            btn.setEnabled(allowed)
 
         settings_btn = QToolButton(objectName="titleIconBtn")
         settings_btn.setText("⚙")
@@ -198,6 +207,7 @@ class MainWindow(QMainWindow):
         exit_btn.setToolTip("Выход")
         exit_btn.clicked.connect(self._logout_and_close)
         right.addWidget(self._accounts_btn)
+        right.addWidget(self._log_btn)
         right.addWidget(settings_btn)
         right.addWidget(exit_btn)
         layout.addLayout(right)
@@ -246,20 +256,26 @@ class MainWindow(QMainWindow):
                 return
             self._conn = dlg.conn
 
-    def _open_accounts(self) -> None:
-        if self._session is None or self._conn is None or self._db_path is None:
-            return
+    def _require_unlocked(self) -> bool:
+        if self._session is None or self._conn is None:
+            return False
         try:
             self._session.require_unlocked()
         except Exception:
             self._check_idle()
+            return False
+        return True
+
+    def _open_accounts(self) -> None:
+        if not self._require_unlocked() or self._db_path is None:
             return
-        service = AccountManagementService(
-            self._conn,
-            self._session,
-            db_path=self._db_path,
-        )
+        service = AccountManagementService(self._conn, self._session, db_path=self._db_path)
         AccountsDialog(service, self).exec()
+
+    def _open_action_log(self) -> None:
+        if not self._require_unlocked():
+            return
+        ActionLogDialog(UserActionLogService(self._conn, self._session), self).exec()
 
     def _logout_and_close(self) -> None:
         if self._session is not None and self._conn is not None:

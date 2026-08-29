@@ -18,6 +18,7 @@ from services.status_clarification import (
     StatusClarificationService,
 )
 from services.status_history import StatusHistoryService
+from services.user_action_log import UserActionLogService
 
 __all__ = [
     "AccountManagementService",
@@ -36,4 +37,5 @@ __all__ = [
     "StandardReportService",
     "StatusClarificationService",
     "StatusHistoryService",
+    "UserActionLogService",
 ]
