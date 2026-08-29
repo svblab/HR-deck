@@ -11,6 +11,7 @@ from services.employee_import import EmployeeImportService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
+from services.standard_reports import StandardReportService
 from services.status_clarification import (
     ClarificationCounterSnapshot,
     ClarificationEmployeeHit,
@@ -32,6 +33,7 @@ __all__ = [
     "EmployeeService",
     "RosterService",
     "SessionState",
+    "StandardReportService",
     "StatusClarificationService",
     "StatusHistoryService",
 ]

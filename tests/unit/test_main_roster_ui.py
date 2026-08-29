@@ -97,7 +97,7 @@ def test_shell_without_session_still_builds(qtbot) -> None:
     window.close()
 
 
-def test_add_button_enabled_reports_still_stub(qtbot, tmp_path: Path) -> None:
+def test_add_button_enabled_reports_open(qtbot, tmp_path: Path) -> None:
     window, conn, _session, _ids = _window(tmp_path)
     qtbot.addWidget(window)
     add_btn = window.findChild(QPushButton, "addEmployeeBtn")
@@ -105,7 +105,7 @@ def test_add_button_enabled_reports_still_stub(qtbot, tmp_path: Path) -> None:
     assert add_btn.isEnabled()
     reports = window.findChild(QPushButton, "reportsBtn")
     assert reports is not None
-    assert not reports.isEnabled()
+    assert reports.isEnabled()
     assert window.findChild(QPushButton, "importEmployeesBtn").isEnabled()
     assert window.findChild(QPushButton, "exportEmployeesBtn").isEnabled()
     window.close()

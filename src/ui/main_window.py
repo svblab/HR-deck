@@ -28,6 +28,7 @@ from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
+from services.standard_reports import StandardReportService
 from ui.auth_dialogs import AccountsDialog, UnlockDialog
 from ui.roster_panel import RosterPanel
 from ui.theme import APP_STYLESHEET
@@ -102,6 +103,7 @@ class MainWindow(QMainWindow):
                 employees=EmployeeService(self._conn, self._session),
                 directories=DirectoryService(self._conn, self._session),
                 session=self._session,
+                reports=StandardReportService(self._conn, self._session),
             )
             self._roster.filters_reset.connect(self._clear_search)
             self._search.setEnabled(True)
