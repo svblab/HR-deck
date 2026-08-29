@@ -64,7 +64,7 @@ QLabel#clockDate {{
     color: {TITLEBAR_MUTED};
     font-size: 11px;
 }}
-QToolButton#titleIconBtn {{
+QToolButton#titleIconBtn, QToolButton#actionLogBtn {{
     background: rgba(255, 255, 255, 0.06);
     color: #ffffff;
     border: 1px solid rgba(255, 255, 255, 0.15);
@@ -74,7 +74,7 @@ QToolButton#titleIconBtn {{
     min-height: 34px;
     max-height: 34px;
 }}
-QToolButton#titleIconBtn:hover {{
+QToolButton#titleIconBtn:hover, QToolButton#actionLogBtn:hover {{
     background: rgba(255, 255, 255, 0.13);
 }}
 QWidget#toolbar {{

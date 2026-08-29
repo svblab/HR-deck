@@ -23,6 +23,7 @@
 | EPIC-008 | Главный экран | ✅ Завершён | [#9](https://github.com/svblab/HR-deck/pull/9), [#10](https://github.com/svblab/HR-deck/pull/10) |
 | EPIC-009 | Импорт и экспорт | ✅ Завершён | [#11](https://github.com/svblab/HR-deck/pull/11) |
 | EPIC-010 | Стандартные отчёты | ✅ Завершён | [#12](https://github.com/svblab/HR-deck/pull/12) |
+| EPIC-013 | Журнал действий пользователей | ✅ Завершён | [#13](https://github.com/svblab/HR-deck/pull/13) |
 
 ---
 

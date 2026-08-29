@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QTableWidget
+from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QTableWidget, QToolButton
 
 from data.db import Connection
+from domain.permissions import RoleCode
+from services.account_management import AccountManagementService
 from services.bootstrap import BootstrapService
 from services.session import SessionState
 from services.status_history import StatusHistoryService
@@ -140,4 +142,38 @@ def test_add_button_opens_form_save_reloads_roster(qtbot, tmp_path: Path) -> Non
     assert panel is not None
     qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 3)
     window.close()
+    conn.close()
+
+
+def test_action_log_button_visible_for_admin(qtbot, tmp_path: Path) -> None:
+    window, conn, _session, _ids = _window(tmp_path)
+    qtbot.addWidget(window)
+    btn = window.findChild(QToolButton, "actionLogBtn")
+    assert btn is not None
+    assert not btn.isHidden()
+    assert btn.isEnabled()
+    window.close()
+    conn.close()
+
+
+def test_action_log_button_hidden_for_hr(qtbot, tmp_path: Path) -> None:
+    window, conn, session, _ids = _window(tmp_path)
+    db = tmp_path / "app.db"
+    mgr = AccountManagementService(
+        conn, session, db_path=db, clock=lambda: "2026-08-15T12:01:00Z"
+    )
+    hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+    hr = SessionState(
+        account_id=hr_id,
+        login="hr1",
+        role=RoleCode.HR_EMPLOYEE,
+        master_key=session.master_key,
+    )
+    window.close()
+    hr_window = MainWindow(conn=conn, session=hr, db_path=db)
+    qtbot.addWidget(hr_window)
+    btn = hr_window.findChild(QToolButton, "actionLogBtn")
+    assert btn is not None
+    assert btn.isHidden()
+    hr_window.close()
     conn.close()
