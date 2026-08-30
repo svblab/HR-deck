@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -56,6 +57,7 @@ class EmployeeCardDialog(QDialog):
         self._authz = authz or AuthorizationService()
         self._employee_id = employee_id
         self.saved_employee_id: int | None = None
+        self._is_archived = False
         self._loading = False
         self._original_sensitive: tuple[str | None, str | None] = (None, None)
         self._sensitive_masked = False
@@ -106,11 +108,20 @@ class EmployeeCardDialog(QDialog):
         self._similar.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
         self._similar.hide()
         layout.addWidget(self._similar)
+        self._archived_label = QLabel("Сотрудник в архиве")
+        self._archived_label.setObjectName("archivedEmployeeLabel")
+        self._archived_label.setStyleSheet(f"color: {TEXT_MUTED}; font-weight: 600;")
+        self._archived_label.hide()
+        layout.addWidget(self._archived_label)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel)
         if can_manage:
             save = buttons.addButton("Сохранить", QDialogButtonBox.ButtonRole.AcceptRole)
             save.setObjectName("saveEmployeeBtn")
             buttons.accepted.connect(self._submit)
+            self._archive_btn = QPushButton("В архив")
+            self._archive_btn.setObjectName("archiveEmployeeBtn")
+            self._archive_btn.clicked.connect(self._toggle_archive)
+            layout.addWidget(self._archive_btn)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._branch.currentIndexChanged.connect(self._on_branch_changed)
@@ -129,6 +140,31 @@ class EmployeeCardDialog(QDialog):
                 self._note,
             ):
                 widget.setEnabled(False)
+        elif employee_id is not None:
+            self._apply_archived_state()
+
+    def _apply_archived_state(self) -> None:
+        archived = self._is_archived
+        self._archived_label.setVisible(archived)
+        for widget in (
+            self._name,
+            self._position,
+            self._branch,
+            self._department,
+            self._division,
+            self._employment,
+            self._note,
+        ):
+            widget.setEnabled(not archived)
+        if self._can_edit_sensitive:
+            self._home.setEnabled(not archived)
+            self._insurance.setEnabled(not archived)
+        save = self.findChild(QPushButton, "saveEmployeeBtn")
+        if save is not None:
+            save.setEnabled(not archived)
+        if hasattr(self, "_archive_btn"):
+            self._archive_btn.setText("Восстановить" if archived else "В архив")
+            self._archive_btn.setEnabled(True)
 
     def _fill_static_combos(self) -> None:
         self._loading = True
@@ -174,6 +210,7 @@ class EmployeeCardDialog(QDialog):
 
     def _load(self, employee_id: int) -> None:
         card = self._employees.get_employee(employee_id)
+        self._is_archived = card.is_archived
         self._loading = True
         self._name.setText(card.full_name)
         _select(self._position, card.position_id)
@@ -192,6 +229,35 @@ class EmployeeCardDialog(QDialog):
             self._insurance.setText(card.social_insurance_number or "")
         self._loading = False
         self._refresh_similar()
+        self._apply_archived_state()
+
+    def _toggle_archive(self) -> None:
+        if self._employee_id is None:
+            return
+        if self._is_archived:
+            text = "Восстановить сотрудника из архива?"
+            title = "Восстановление"
+        else:
+            text = (
+                "Перевести сотрудника в архив? Он будет скрыт из списков "
+                "по умолчанию; история статусов сохранится."
+            )
+            title = "Архивирование"
+        if (
+            QMessageBox.question(self, title, text)
+            != QMessageBox.StandardButton.Yes
+        ):
+            return
+        try:
+            if self._is_archived:
+                self._employees.restore_employee(self._employee_id)
+            else:
+                self._employees.archive_employee(self._employee_id)
+        except (EmployeeError, AuthorizationError) as exc:
+            QMessageBox.warning(self, "Ошибка", str(exc))
+            return
+        self.saved_employee_id = self._employee_id
+        self.accept()
 
     def _refresh_similar(self) -> None:
         prefix = self._name.text().strip()
