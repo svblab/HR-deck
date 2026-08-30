@@ -101,13 +101,13 @@ class AvailabilityStatusRepository:
 
 def _row(row: tuple[object, ...]) -> AvailabilityStatusRecord:
     return AvailabilityStatusRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
+        id=int(row[0]),
         code=str(row[1]),
         name=str(row[2]),
-        end_date_policy=int(row[3]),  # type: ignore[arg-type]
+        end_date_policy=int(row[3]),
         color_hex=str(row[4]) if row[4] is not None else None,
-        sort_order=int(row[5]),  # type: ignore[arg-type]
-        is_archived=bool(int(row[6])),  # type: ignore[arg-type]
+        sort_order=int(row[5]),
+        is_archived=bool(int(row[6])),
         created_at=str(row[7]),
         updated_at=str(row[8]),
     )

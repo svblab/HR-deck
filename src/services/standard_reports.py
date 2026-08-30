@@ -171,7 +171,7 @@ class StandardReportService:
                 if params.status_id is not None and entry.status_id != params.status_id:
                     continue
                 name = row.status_name if entry.status_id == row.status_id else code
-                status = self._status_name(entry.status_id) or name
+                status = self._status_name(entry.status_id) or name or ""
                 body.append(
                     ReportRow(
                         cells=(

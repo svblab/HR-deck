@@ -121,12 +121,12 @@ class TechnicalEventRepository(_AppendOnlyGuard):
 
 def _entry_row(row: tuple[object, ...]) -> ActionLogEntry:
     return ActionLogEntry(
-        id=int(row[0]),  # type: ignore[arg-type]
-        account_id=None if row[1] is None else int(row[1]),  # type: ignore[arg-type]
+        id=int(row[0]),
+        account_id=None if row[1] is None else int(row[1]),
         account_login=None if row[2] is None else str(row[2]),
         action_type=str(row[3]),
         entity_type=None if row[4] is None else str(row[4]),
-        entity_id=None if row[5] is None else int(row[5]),  # type: ignore[arg-type]
+        entity_id=None if row[5] is None else int(row[5]),
         result=str(row[6]),
         details=None if row[7] is None else str(row[7]),
         created_at=str(row[8]),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 from dataclasses import dataclass
 
 from data.db import Connection
@@ -41,14 +42,14 @@ class EmployeeRepository:
         row = self._conn.execute(f"{self._SELECT} WHERE id = ?", (employee_id,)).fetchone()
         return _row(row) if row else None
 
-    def list(self, *, active_only: bool = True) -> list[EmployeeRecord]:
+    def list(self, *, active_only: bool = True) -> builtins.list[EmployeeRecord]:
         sql = self._SELECT
         if active_only:
             sql += " WHERE is_archived = 0"
         sql += " ORDER BY full_name, id"
         return [_row(r) for r in self._conn.execute(sql).fetchall()]
 
-    def search_by_name(self, prefix: str, *, limit: int = 50) -> list[EmployeeRecord]:
+    def search_by_name(self, prefix: str, *, limit: int = 50) -> builtins.list[EmployeeRecord]:
         pattern = f"{prefix}%"
         rows = self._conn.execute(
             f"{self._SELECT} WHERE is_archived = 0 AND full_name LIKE ? "
@@ -143,19 +144,19 @@ class EmployeeRepository:
 
 def _row(row: tuple[object, ...]) -> EmployeeRecord:
     return EmployeeRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
+        id=int(row[0]),
         full_name=str(row[1]),
-        position_id=int(row[2]),  # type: ignore[arg-type]
-        branch_id=int(row[3]),  # type: ignore[arg-type]
-        department_id=int(row[4]),  # type: ignore[arg-type]
-        division_id=int(row[5]) if row[5] is not None else None,  # type: ignore[arg-type]
-        employment_type_id=int(row[6]),  # type: ignore[arg-type]
+        position_id=int(row[2]),
+        branch_id=int(row[3]),
+        department_id=int(row[4]),
+        division_id=int(row[5]) if row[5] is not None else None,
+        employment_type_id=int(row[6]),
         note=str(row[7]) if row[7] is not None else None,
         hire_date=str(row[8]) if row[8] is not None else None,
         contacts=str(row[9]) if row[9] is not None else None,
         home_address=str(row[10]) if row[10] is not None else None,
         social_insurance_number=str(row[11]) if row[11] is not None else None,
-        is_archived=bool(int(row[12])),  # type: ignore[arg-type]
+        is_archived=bool(int(row[12])),
         created_at=str(row[13]),
         updated_at=str(row[14]),
     )

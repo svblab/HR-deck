@@ -175,12 +175,12 @@ class RecoveryCodeRepository:
 
 def _row_to_account(row: tuple[object, ...]) -> AccountRecord:
     return AccountRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
+        id=int(row[0]),
         login=str(row[1]),
         password_hash=str(row[2]),
-        role_id=int(row[3]),  # type: ignore[arg-type]
+        role_id=int(row[3]),
         role_code=str(row[4]),
-        is_active=bool(int(row[5])),  # type: ignore[arg-type]
+        is_active=bool(int(row[5])),
         created_at=str(row[6]),
         updated_at=str(row[7]),
     )

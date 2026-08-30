@@ -6,6 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 from data.db import Connection
 from data.paths import templates_storage_dir
@@ -19,7 +20,12 @@ from data.repositories import UserActionLogRepository
 from domain.action_log import ENTITY_TEMPLATE
 from domain.permissions import Permission
 from reports.excel_template import ArchivedTemplate, archive_upload, generate_excel_report
-from reports.pdf_template import ArchivedPdfTemplate, archive_pdf_upload, generate_pdf_report
+from reports.pdf_template import (
+    ArchivedPdfTemplate,
+    BindingMode,
+    archive_pdf_upload,
+    generate_pdf_report,
+)
 from services.authorization import AuthorizationError, AuthorizationService
 from services.session import SessionState
 
@@ -108,21 +114,23 @@ class TemplateLibraryService:
             stored = version_dir / _stored_name(fmt)
 
             if fmt == "excel":
-                archived = archive_upload(source, stored)
+                excel_archived = archive_upload(source, stored)
                 binding = "excel"
                 manifest_path: str | None = None
-                contract = archived.contract_version
+                contract = excel_archived.contract_version
             else:
-                archived = archive_pdf_upload(
+                pdf_archived = archive_pdf_upload(
                     source,
                     stored,
                     manifest_source=manifest_source,
                 )
                 manifest_path = (
-                    str(archived.manifest_path) if archived.manifest_path is not None else None
+                    str(pdf_archived.manifest_path)
+                    if pdf_archived.manifest_path is not None
+                    else None
                 )
-                binding = archived.binding
-                contract = archived.contract_version
+                binding = pdf_archived.binding
+                contract = pdf_archived.contract_version
 
             version_id = self._repo.add_version(
                 template_id=template_id,
@@ -210,7 +218,7 @@ class TemplateLibraryService:
                 generate_pdf_report(
                     ArchivedPdfTemplate(
                         archive_path=Path(version.stored_path),
-                        binding=version.binding_mode,  # type: ignore[arg-type]
+                        binding=cast(BindingMode, version.binding_mode),
                         manifest_path=manifest,
                         contract_version=version.contract_version,
                     ),

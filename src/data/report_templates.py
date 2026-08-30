@@ -82,7 +82,7 @@ class ReportTemplateRepository:
             "WHERE template_id = ?",
             (template_id,),
         ).fetchone()
-        return int(row[0]) + 1  # type: ignore[index]
+        return int(row[0]) + 1
 
     def add_version(
         self,
@@ -159,10 +159,10 @@ class ReportTemplateRepository:
 
 def _template_row(row: tuple[object, ...]) -> TemplateRecord:
     return TemplateRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
+        id=int(row[0]),
         name=str(row[1]),
         format=str(row[2]),
-        is_archived=bool(int(row[3])),  # type: ignore[arg-type]
+        is_archived=bool(int(row[3])),
         created_at=str(row[4]),
         updated_at=str(row[5]),
     )
@@ -170,23 +170,23 @@ def _template_row(row: tuple[object, ...]) -> TemplateRecord:
 
 def _version_row(row: tuple[object, ...]) -> TemplateVersionRecord:
     return TemplateVersionRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
-        template_id=int(row[1]),  # type: ignore[arg-type]
-        version_number=int(row[2]),  # type: ignore[arg-type]
+        id=int(row[0]),
+        template_id=int(row[1]),
+        version_number=int(row[2]),
         stored_path=str(row[3]),
         contract_version=str(row[4]),
         binding_mode=str(row[5]),
         manifest_path=None if row[6] is None else str(row[6]),
         created_at=str(row[7]),
-        created_by_account_id=None if row[8] is None else int(row[8]),  # type: ignore[arg-type]
+        created_by_account_id=None if row[8] is None else int(row[8]),
     )
 
 
 def _generated_row(row: tuple[object, ...]) -> GeneratedReportRecord:
     return GeneratedReportRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
-        template_version_id=int(row[1]),  # type: ignore[arg-type]
+        id=int(row[0]),
+        template_version_id=int(row[1]),
         output_path=str(row[2]),
         generated_at=str(row[3]),
-        generated_by_account_id=None if row[4] is None else int(row[4]),  # type: ignore[arg-type]
+        generated_by_account_id=None if row[4] is None else int(row[4]),
     )
