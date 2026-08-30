@@ -241,3 +241,62 @@ Step 0 — без кода. Последующие PR:
 | 5 | `test_adr0005_template_audit_and_list_templates_filter` |
 
 См. также `TESTING.md` §2.4–2.5.
+
+---
+
+## Дополнение: хранение версий и связь сгенерированных отчётов (Step 3)
+
+Статус: Принято (дополнение к ADR-0005, не отменяет контракт маркеров)
+Дата: 2026-08-30
+Затронутый EPIC: EPIC-011 Step 3
+
+### Контекст
+
+Steps 1–2 реализуют validate/archive/generate на `Path`. Библиотека шаблонов
+(ТЗ §3.8.2, версии, архив/восстановление) требует персистентности метаданных
+валидации и неизменяемой ссылки «сгенерированный файл → версия шаблона».
+
+Таблицы `report_templates` / `report_template_versions` из migration `0001`
+недостаточны: нет `contract_version`, `binding_mode`, пути manifest; нет
+таблицы сгенерированных отчётов.
+
+### Решение
+
+**`report_template_versions` — новые колонки (migration `0008`):**
+
+| Колонка | Тип | Назначение |
+|---------|-----|------------|
+| `contract_version` | TEXT NOT NULL | Закреплённый контракт (напр. `'1.0'`) |
+| `binding_mode` | TEXT NOT NULL | `'excel'` \| `'acroform'` \| `'regions'` |
+| `manifest_path` | TEXT NULL | Путь к `.regions.json` (только `regions`) |
+
+- `stored_path` **по-прежнему** — byte-for-byte архив исходника (`.xlsx` /
+  `.pdf`). Отдельный путь для manifest: **`manifest_path`**, не второй
+  `stored_path`.
+- Файлы на диске: `{data_dir}/templates/{template_id}/v{version_number}/`
+  (`original.xlsx` / `original.pdf`, manifest рядом при необходимости).
+
+**Новая таблица `template_generated_reports`:**
+
+| Колонка | Назначение |
+|---------|------------|
+| `id` | Суррогатный PK |
+| `template_version_id` | FK → `report_template_versions.id` (не template!) |
+| `output_path` | Путь к сгенерированному файлу |
+| `generated_at` | ISO-8601 UTC |
+| `generated_by_account_id` | FK → `accounts.id`, nullable |
+
+Архивирование шаблона (`report_templates.is_archived = 1`) **не удаляет**
+версии и **не разрывает** существующие строки `template_generated_reports`.
+
+### Последствия
+
+- Migration `0008` — отдельный коммит в PR Step 3; тест на непустую БД.
+- Step 5 (аудит) и Step 4 (права) — без изменений матрицы; `entity_type =
+  report_template` уже в журнале (EPIC-013).
+
+### Как проверяется
+
+- `test_adr0005_generated_report_pinned_to_template_version` (integration).
+- Migration test: `0008` на БД с данными в `report_templates` / версиях.
+
