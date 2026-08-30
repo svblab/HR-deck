@@ -21,5 +21,9 @@ def default_db_path(data_dir: Path | None = None) -> Path:
     return root / "personnel.db"
 
 
+def default_backups_dir(data_dir: Path | None = None) -> Path:
+    return (data_dir or default_data_dir()) / "backups"
+
+
 def templates_storage_dir(data_dir: Path | None = None) -> Path:
     return (data_dir or default_data_dir()) / "templates"

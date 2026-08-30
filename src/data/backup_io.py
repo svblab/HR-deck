@@ -19,10 +19,9 @@ class DatabaseCorruptionError(DatabaseError):
 
 
 def default_backups_dir(data_dir: Path | None = None) -> Path:
-    from data.paths import default_data_dir
+    from data.paths import default_backups_dir as _default_backups_dir
 
-    root = data_dir if data_dir is not None else default_data_dir()
-    return root / "backups"
+    return _default_backups_dir(data_dir)
 
 
 def backup_filename(clock_iso: str) -> str:

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+import sysconfig
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -36,8 +38,22 @@ class Migration:
 
 
 def default_migrations_dir() -> Path:
-    """Каталог /migrations в корне репозитория (рядом с pyproject.toml)."""
-    return Path(__file__).resolve().parents[2] / "migrations"
+    """
+    Каталог SQL-миграций: override → установленный пакет → dev-дерево репозитория.
+    """
+    override = os.environ.get("PERSONNEL_AVAILABILITY_MIGRATIONS_DIR")
+    if override:
+        return Path(override)
+
+    candidates = (
+        Path("/usr/share/personnel-availability/migrations"),
+        Path(sysconfig.get_path("data")) / "share/personnel-availability/migrations",
+        Path(__file__).resolve().parents[2] / "migrations",
+    )
+    for path in candidates:
+        if path.is_dir() and any(path.glob("*.sql")):
+            return path
+    return candidates[-1]
 
 
 def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:

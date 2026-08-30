@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ] && command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+fi
+
+# Обновление пакета не затрагивает ~/.local/share/personnel-availability/ —
+# dpkg управляет только файлами в /usr.
+
+exit 0

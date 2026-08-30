@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 from data.backup_io import DatabaseCorruptionError, prepare_database_startup
 from data.paths import default_db_path
 from services.bootstrap import BootstrapService
+from services.upgrade import UpgradeError, UpgradeService
 from ui.auth_dialogs import LoginDialog, SetupDialog
 from ui.main_window import MainWindow
 
@@ -45,6 +46,17 @@ def run(db_path: Path | None = None) -> int:
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return 1
         conn, session = dlg.conn, dlg.session
+
+    try:
+        UpgradeService(conn, session, db_path=path).apply_pending()
+    except UpgradeError as exc:
+        QMessageBox.critical(
+            None,
+            "Обновление базы данных",
+            f"{exc}\n\nПриложение будет закрыто.",
+        )
+        conn.close()
+        return 1
 
     window = MainWindow(conn=conn, session=session, db_path=path)
     window.showFullScreen()

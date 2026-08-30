@@ -44,6 +44,9 @@ markers = [
     "acceptance: traces to TZ section 11 acceptance criteria",
 ]
 
+[tool.setuptools.data-files]
+"share/personnel-availability/migrations" = ["migrations/*.sql"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
