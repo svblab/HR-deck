@@ -96,12 +96,14 @@ class UserActionLogRepository(_AppendOnlyGuard):
 
     def list_template_refs(self) -> list[tuple[int, str]]:
         rows = self._conn.execute(
-            "SELECT DISTINCT entity_id FROM user_action_log"
-            " WHERE entity_type = ? AND entity_id IS NOT NULL"
-            " ORDER BY entity_id",
+            "SELECT DISTINCT l.entity_id, COALESCE(t.name, CAST(l.entity_id AS TEXT))"
+            " FROM user_action_log l"
+            " LEFT JOIN report_templates t ON t.id = l.entity_id"
+            " WHERE l.entity_type = ? AND l.entity_id IS NOT NULL"
+            " ORDER BY l.entity_id",
             (ENTITY_TEMPLATE,),
         ).fetchall()
-        return [(int(r[0]), str(r[0])) for r in rows]
+        return [(int(r[0]), str(r[1])) for r in rows]
 
 
 class TechnicalEventRepository(_AppendOnlyGuard):
