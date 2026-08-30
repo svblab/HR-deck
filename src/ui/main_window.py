@@ -24,6 +24,7 @@ from domain.permissions import Permission
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
+from services.backup import BackupService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
@@ -33,6 +34,7 @@ from services.template_library import TemplateLibraryService
 from services.user_action_log import UserActionLogService
 from ui.action_log_dialog import ActionLogDialog
 from ui.auth_dialogs import AccountsDialog, UnlockDialog
+from ui.backup_dialog import BackupDialog
 from ui.roster_panel import RosterPanel
 from ui.theme import APP_STYLESHEET
 
@@ -205,8 +207,17 @@ class MainWindow(QMainWindow):
 
         settings_btn = QToolButton(objectName="titleIconBtn")
         settings_btn.setText("⚙")
-        settings_btn.setToolTip("Настройки")
-        settings_btn.setEnabled(False)
+        settings_btn.setToolTip("Резервное копирование")
+        can_backup = bool(
+            self._session is not None
+            and (
+                self._authz.check(self._session.role, Permission.CREATE_BACKUP)
+                or self._authz.check(self._session.role, Permission.RESTORE_BACKUP)
+            )
+        )
+        settings_btn.setEnabled(can_backup)
+        settings_btn.clicked.connect(self._open_backup)
+        self._settings_btn = settings_btn
         exit_btn = QToolButton(objectName="titleIconBtn")
         exit_btn.setText("⏻")
         exit_btn.setToolTip("Выход")
@@ -281,6 +292,37 @@ class MainWindow(QMainWindow):
         if not self._require_unlocked():
             return
         ActionLogDialog(UserActionLogService(self._conn, self._session), self).exec()
+
+    def _open_backup(self) -> None:
+        if not self._require_unlocked() or self._db_path is None:
+            return
+        service = BackupService(self._conn, self._session, db_path=self._db_path)
+        BackupDialog(
+            service,
+            self._session,
+            on_restored=self._replace_connection,
+            parent=self,
+        ).exec()
+
+    def _replace_connection(self, conn: Connection) -> None:
+        self._conn = conn
+        if self._roster is not None:
+            from services.directories import DirectoryService
+            from services.employees import EmployeeService
+            from services.roster import RosterService
+            from services.standard_reports import StandardReportService
+            from services.template_library import TemplateLibraryService
+
+            data_dir = self._db_path.parent if self._db_path is not None else None
+            roster_service = RosterService(self._conn, self._session)
+            self._roster._service = roster_service
+            self._roster._employees = EmployeeService(self._conn, self._session)
+            self._roster._directories = DirectoryService(self._conn, self._session)
+            self._roster._reports = StandardReportService(self._conn, self._session)
+            self._roster._templates = TemplateLibraryService(
+                self._conn, self._session, data_dir=data_dir
+            )
+            self._roster.reload()
 
     def _logout_and_close(self) -> None:
         if self._session is not None and self._conn is not None:
