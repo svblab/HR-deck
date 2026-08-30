@@ -36,15 +36,15 @@ def run(db_path: Path | None = None) -> int:
     conn = None
     session = None
     if BootstrapService().needs_setup(path):
-        dlg = SetupDialog(path)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
+        setup = SetupDialog(path)
+        if setup.exec() != QDialog.DialogCode.Accepted:
             return 1
-        conn, session = dlg.conn, dlg.session
+        conn, session = setup.conn, setup.session
     else:
-        dlg = LoginDialog(path)
-        if dlg.exec() != QDialog.DialogCode.Accepted:
+        login = LoginDialog(path)
+        if login.exec() != QDialog.DialogCode.Accepted:
             return 1
-        conn, session = dlg.conn, dlg.session
+        conn, session = login.conn, login.session
 
     window = MainWindow(conn=conn, session=session, db_path=path)
     window.showFullScreen()
