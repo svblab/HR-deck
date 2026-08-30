@@ -36,6 +36,23 @@ for _key, _names in _ALIASES.items():
         _TOKEN_TO_CANONICAL[_alias] = _key
 
 
+def marker_catalog_entries() -> list[tuple[str, tuple[str, ...]]]:
+    """Канонический ключ и русские алиасы — для документации и тестов синхронизации."""
+    return sorted(_ALIASES.items())
+
+
+def marker_catalog_markdown() -> str:
+    """Markdown-таблица каталога маркеров (генерируется из _ALIASES, не копируется вручную)."""
+    lines = [
+        "| Канонический ключ | Русский алиас (в шаблоне) |",
+        "|---|---|",
+    ]
+    for key, aliases in marker_catalog_entries():
+        alias_cells = ", ".join(f"`{alias}`" for alias in aliases)
+        lines.append(f"| `{key}` | {alias_cells} |")
+    return "\n".join(lines)
+
+
 class MarkerSyntaxError(ValueError):
     """Некорректный синтаксис маркера (пробелы, вложенность)."""
 

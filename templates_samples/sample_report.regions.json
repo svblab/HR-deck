@@ -1,0 +1,24 @@
+{
+  "contract_version": "1.0",
+  "binding_mode": "regions",
+  "regions": [
+    {
+      "field": "report.date",
+      "page": 1,
+      "x_pt": 200.0,
+      "y_pt": 740.0,
+      "width_pt": 120.0,
+      "height_pt": 14.0,
+      "font_size_pt": 11.0
+    },
+    {
+      "field": "employee.full_name",
+      "page": 1,
+      "x_pt": 200.0,
+      "y_pt": 710.0,
+      "width_pt": 260.0,
+      "height_pt": 14.0,
+      "font_size_pt": 11.0
+    }
+  ]
+}
