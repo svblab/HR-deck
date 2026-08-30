@@ -131,6 +131,29 @@ def test_accounts_fk_to_roles(conn) -> None:
 
 
 @pytest.mark.acceptance
+def test_template_generated_reports_fk(conn) -> None:
+    now = "2026-08-01T10:00:00Z"
+    conn.execute(
+        "INSERT INTO report_templates (name, format, is_archived, created_at, updated_at)"
+        " VALUES ('t', 'excel', 0, ?, ?)",
+        (now, now),
+    )
+    conn.execute(
+        "INSERT INTO report_template_versions ("
+        " template_id, version_number, stored_path, created_at"
+        ") VALUES (1, 1, '/tmp/x', ?)",
+        (now,),
+    )
+    with pytest.raises(sqlcipher.IntegrityError):
+        conn.execute(
+            "INSERT INTO template_generated_reports ("
+            " template_version_id, output_path, generated_at"
+            ") VALUES (999, '/out', ?)",
+            (now,),
+        )
+
+
+@pytest.mark.acceptance
 def test_report_template_versions_fk(conn) -> None:
     with pytest.raises(sqlcipher.IntegrityError):
         conn.execute(

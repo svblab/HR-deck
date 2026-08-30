@@ -29,6 +29,7 @@ from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from services.standard_reports import StandardReportService
+from services.template_library import TemplateLibraryService
 from services.user_action_log import UserActionLogService
 from ui.action_log_dialog import ActionLogDialog
 from ui.auth_dialogs import AccountsDialog, UnlockDialog
@@ -100,12 +101,16 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(self._build_title_bar())
         if self._conn is not None and self._session is not None:
             roster_service = RosterService(self._conn, self._session)
+            data_dir = self._db_path.parent if self._db_path is not None else None
             self._roster = RosterPanel(
                 roster_service,
                 employees=EmployeeService(self._conn, self._session),
                 directories=DirectoryService(self._conn, self._session),
                 session=self._session,
                 reports=StandardReportService(self._conn, self._session),
+                templates=TemplateLibraryService(
+                    self._conn, self._session, data_dir=data_dir
+                ),
             )
             self._roster.filters_reset.connect(self._clear_search)
             self._search.setEnabled(True)
