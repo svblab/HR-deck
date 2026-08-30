@@ -4,6 +4,7 @@ from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
 from services.availability_statuses import AvailabilityStatusService
+from services.backup import BackupService
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.employee_export import EmployeeExportService
@@ -25,6 +26,7 @@ __all__ = [
     "AuthenticationService",
     "AuthorizationService",
     "AvailabilityStatusService",
+    "BackupService",
     "BootstrapService",
     "ClarificationCounterSnapshot",
     "ClarificationEmployeeHit",

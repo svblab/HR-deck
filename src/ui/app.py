@@ -5,8 +5,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
+from data.backup_io import DatabaseCorruptionError, prepare_database_startup
 from data.paths import default_db_path
 from services.bootstrap import BootstrapService
 from ui.auth_dialogs import LoginDialog, SetupDialog
@@ -21,6 +22,16 @@ def run(db_path: Path | None = None) -> int:
 
     path = db_path or default_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        prepare_database_startup(path)
+    except DatabaseCorruptionError as exc:
+        QMessageBox.critical(
+            None,
+            "Повреждение базы данных",
+            str(exc),
+        )
+        return 1
 
     conn = None
     session = None
