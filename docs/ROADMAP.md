@@ -24,7 +24,7 @@
 | EPIC-009 | Импорт и экспорт | ✅ Завершён | [#11](https://github.com/svblab/HR-deck/pull/11) |
 | EPIC-010 | Стандартные отчёты | ✅ Завершён | [#12](https://github.com/svblab/HR-deck/pull/12) |
 | EPIC-013 | Журнал действий пользователей | ✅ Завершён | [#13](https://github.com/svblab/HR-deck/pull/13) |
-| EPIC-011 | Пользовательские Excel/PDF-шаблоны | 🔄 В работе (Step 2 PDF) | [#15](https://github.com/svblab/HR-deck/pull/15), [#17](https://github.com/svblab/HR-deck/pull/17) |
+| EPIC-011 | Пользовательские Excel/PDF-шаблоны | 🔄 В работе (Step 3 библиотека) | [#15](https://github.com/svblab/HR-deck/pull/15), [#17](https://github.com/svblab/HR-deck/pull/17), [#18](https://github.com/svblab/HR-deck/pull/18) |
 
 ---
 

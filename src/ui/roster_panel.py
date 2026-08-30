@@ -29,6 +29,7 @@ from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from services.standard_reports import StandardReportService
+from services.template_library import TemplateLibraryService
 from ui.board_widget import BoardWidget
 from ui.employee_card_form import EmployeeCardDialog
 from ui.employee_popup import EmployeePopupDialog
@@ -49,6 +50,7 @@ class RosterPanel(QWidget):
         directories: DirectoryService | None = None,
         session: SessionState | None = None,
         reports: StandardReportService | None = None,
+        templates: TemplateLibraryService | None = None,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -56,6 +58,7 @@ class RosterPanel(QWidget):
         self._directories = directories
         self._session = session
         self._reports = reports
+        self._templates = templates
         self._all_rows: list[RosterRow] = []
         self._group_by = GroupBy.STATUS
         self._name_query = ""
@@ -112,6 +115,13 @@ class RosterPanel(QWidget):
         )
         self._reports_btn.setEnabled(bool(can_reports and self._reports and self._directories))
         self._reports_btn.clicked.connect(self._open_reports)
+        self._templates_btn = QPushButton("Шаблоны", objectName="templatesBtn")
+        can_templates = self._session is not None and (
+            has_permission(self._session.role, Permission.MANAGE_REPORT_TEMPLATES)
+            or has_permission(self._session.role, Permission.USE_ACTIVE_REPORT_TEMPLATES)
+        )
+        self._templates_btn.setEnabled(bool(can_templates and self._templates and self._session))
+        self._templates_btn.clicked.connect(self._open_templates)
         self._board_btn = QPushButton("Доска", objectName="viewToggleActive")
         self._table_btn = QPushButton("Таблица", objectName="viewToggleInactive")
         self._board_btn.clicked.connect(lambda: self._set_view(0))
@@ -120,6 +130,7 @@ class RosterPanel(QWidget):
         row1.addWidget(self._import_btn)
         row1.addWidget(self._export_btn)
         row1.addWidget(self._reports_btn)
+        row1.addWidget(self._templates_btn)
         row1.addWidget(self._board_btn)
         row1.addWidget(self._table_btn)
         row1.addStretch(1)
@@ -297,3 +308,10 @@ class RosterPanel(QWidget):
         if self._reports is None or self._directories is None or self._employees is None:
             return
         ReportsDialog(self._reports, self._directories, self._employees, self).exec()
+
+    def _open_templates(self) -> None:
+        if self._templates is None or self._session is None:
+            return
+        from ui.template_library_dialog import TemplateLibraryDialog
+
+        TemplateLibraryDialog(self._templates, self._session, self).exec()
