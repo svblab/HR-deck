@@ -66,7 +66,7 @@ class UserActionLogService:
         return [(e.id, e.full_name) for e in self._employees.list(active_only=False)]
 
     def list_templates(self) -> list[tuple[int, str]]:
-        """Размерность «шаблон»: entity_type уже в схеме; записи появятся в EPIC-011."""
+        """Размерность «шаблон»: entity_id = report_templates.id из журнала."""
         self._require()
         return self._log.list_template_refs()
 

@@ -43,7 +43,6 @@ class ActionLogDialog(QDialog):
         self._action = QComboBox(objectName="logFilterAction")
         self._employee = QComboBox(objectName="logFilterEmployee")
         self._template = QComboBox(objectName="logFilterTemplate")
-        self._template.setToolTip("Фильтр по шаблону станет активным после EPIC-011")
         form.addRow("Пользователь", self._account)
         form.addRow("Тип действия", self._action)
         form.addRow("Сотрудник", self._employee)
