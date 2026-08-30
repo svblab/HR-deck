@@ -134,6 +134,12 @@ class EmployeeRepository:
             (home_address, social_insurance_number, updated_at, employee_id),
         )
 
+    def set_archived(self, employee_id: int, *, archived: bool, updated_at: str) -> None:
+        self._conn.execute(
+            "UPDATE employees SET is_archived = ?, updated_at = ? WHERE id = ?",
+            (1 if archived else 0, updated_at, employee_id),
+        )
+
 
 def _row(row: tuple[object, ...]) -> EmployeeRecord:
     return EmployeeRecord(

@@ -65,10 +65,14 @@ class RosterService:
         *,
         as_of: str | None = None,
         filters: RosterFilters | None = None,
+        include_archived: bool = False,
     ) -> list[RosterRow]:
         self._require_view()
         as_of_date = as_of or self._clock()[:10]
-        rows = [self._to_row(emp, as_of_date) for emp in self._employees.list(active_only=True)]
+        rows = [
+            self._to_row(emp, as_of_date)
+            for emp in self._employees.list(active_only=not include_archived)
+        ]
         if filters is None:
             return rows
         return apply_filters(rows, filters)

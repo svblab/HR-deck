@@ -95,7 +95,7 @@ class EmployeeService:
 
     def update_employee(self, employee_id: int, data: EmployeeUpdateInput) -> None:
         self._require(Permission.MANAGE_EMPLOYEES)
-        self._require_employee(employee_id)
+        self._require_active_employee(employee_id)
         payload = self._validate_input(data)
         now = self._clock()
         self._mutate(
@@ -120,7 +120,7 @@ class EmployeeService:
         self, employee_id: int, data: SensitiveEmployeeInput
     ) -> None:
         self._require(Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS)
-        self._require_employee(employee_id)
+        self._require_active_employee(employee_id)
         now = self._clock()
         self._mutate(
             action="employee.update_sensitive",
@@ -152,6 +152,28 @@ class EmployeeService:
             self._to_card(r, mask_sensitive=not can_view_sensitive)
             for r in self._employees.list(active_only=active_only)
         ]
+
+    def archive_employee(self, employee_id: int) -> None:
+        self._set_archived(employee_id, archived=True)
+
+    def restore_employee(self, employee_id: int) -> None:
+        self._set_archived(employee_id, archived=False)
+
+    def _set_archived(self, employee_id: int, *, archived: bool) -> None:
+        self._require(Permission.MANAGE_EMPLOYEES)
+        record = self._require_employee(employee_id)
+        if record.is_archived == archived:
+            return
+        now = self._clock()
+        verb = "archive" if archived else "restore"
+        self._mutate(
+            action=f"employee.{verb}",
+            entity_type="employee",
+            entity_id=employee_id,
+            mutate=lambda: self._employees.set_archived(
+                employee_id, archived=archived, updated_at=now
+            ),
+        )
 
     def _validate_input(
         self, data: EmployeeCreateInput | EmployeeUpdateInput
@@ -267,6 +289,12 @@ class EmployeeService:
         record = self._employees.get(employee_id)
         if record is None:
             raise EmployeeError("employee not found")
+        return record
+
+    def _require_active_employee(self, employee_id: int) -> EmployeeRecord:
+        record = self._require_employee(employee_id)
+        if record.is_archived:
+            raise EmployeeError("archived employee cannot be modified")
         return record
 
     def _mutate(

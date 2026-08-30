@@ -180,3 +180,30 @@ def test_action_log_button_hidden_for_hr(qtbot, tmp_path: Path) -> None:
     assert btn.isHidden()
     hr_window.close()
     conn.close()
+
+
+def test_show_archived_toggle_reveals_archived_employee(qtbot, tmp_path: Path) -> None:
+    from PySide6.QtWidgets import QCheckBox
+
+    from services.employees import EmployeeService
+
+    window, conn, session, ids = _window(tmp_path)
+    qtbot.addWidget(window)
+    EmployeeService(conn, session, clock=lambda: "2026-08-15T12:05:00Z").archive_employee(
+        ids["employee_a_id"]
+    )
+    panel = window.findChild(RosterPanel)
+    assert panel is not None
+    panel.reload()
+    qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 1)
+
+    before = conn.execute("SELECT COUNT(*) FROM user_action_log").fetchone()[0]
+    toggle = panel.findChild(QCheckBox, "showArchivedFilter")
+    assert toggle is not None
+    toggle.setChecked(True)
+    qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 2)
+    after = conn.execute("SELECT COUNT(*) FROM user_action_log").fetchone()[0]
+    assert after == before
+
+    window.close()
+    conn.close()

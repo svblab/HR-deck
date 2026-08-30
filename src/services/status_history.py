@@ -27,6 +27,8 @@ from services.session import SessionState
 
 Clock = Callable[[], str]
 
+INACTIVE_STATUS_CODE = "inactive"
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -93,7 +95,7 @@ class StatusHistoryService:
         note: str | None = None,
     ) -> StatusAssignmentPlan:
         self._require(Permission.MANAGE_STATUSES)
-        self._require_employee(employee_id)
+        self._require_active_employee(employee_id)
         status = self._require_active_status(status_id)
         self._validate_end_date_policy(status.end_date_policy, end_date)
         return plan_status_assignment(
@@ -137,7 +139,7 @@ class StatusHistoryService:
         confirmed: bool = False,
     ) -> int:
         self._require(Permission.MANAGE_STATUSES)
-        self._require_employee(employee_id)
+        self._require_active_employee(employee_id)
         if plan.requires_confirmation and not confirmed:
             raise ConfirmationRequiredError(plan)
         return self._apply_plan(employee_id, plan)
@@ -170,6 +172,15 @@ class StatusHistoryService:
                     first_id = row_id
             if first_id is None:
                 raise StatusHistoryError("plan has no inserts")
+            inactive_id = self._inactive_status_id()
+            if inactive_id is not None and any(
+                insert.status_id == inactive_id for insert in plan.inserts
+            ):
+                emp = self._employees.get(employee_id)
+                if emp is not None and not emp.is_archived:
+                    self._employees.set_archived(
+                        employee_id, archived=True, updated_at=now
+                    )
             details = (
                 f"inserts={len(plan.inserts)};corrections={len(plan.corrections)};"
                 f"confirmed={int(plan.requires_confirmation)}"
@@ -231,6 +242,17 @@ class StatusHistoryService:
     def _require_employee(self, employee_id: int) -> None:
         if self._employees.get(employee_id) is None:
             raise StatusHistoryError("employee not found")
+
+    def _require_active_employee(self, employee_id: int) -> None:
+        record = self._employees.get(employee_id)
+        if record is None:
+            raise StatusHistoryError("employee not found")
+        if record.is_archived:
+            raise StatusHistoryError("archived employee")
+
+    def _inactive_status_id(self) -> int | None:
+        row = self._statuses.get_by_code(INACTIVE_STATUS_CODE)
+        return row.id if row is not None else None
 
     def _require_active_status(self, status_id: int):
         row = self._statuses.get(status_id)
