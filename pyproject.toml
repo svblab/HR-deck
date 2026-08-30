@@ -25,6 +25,7 @@ dev = [
     "pytest>=8.0",
     "pytest-qt>=4.4",
     "ruff>=0.6",
+    "mypy>=1.11",
 ]
 
 [project.scripts]
@@ -51,3 +52,13 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+warn_unused_ignores = true
+disable_error_code = ["call-arg", "call-overload"]
+
+[[tool.mypy.overrides]]
+module = ["openpyxl.*", "reportlab.*", "sqlcipher3.*"]
+ignore_missing_imports = true
