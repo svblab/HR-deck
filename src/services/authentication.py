@@ -6,6 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from time import sleep
+from typing import NoReturn
 
 from data.accounts import AccountRepository, SettingsRepository
 from data.db import Connection, connect
@@ -195,7 +196,7 @@ class AuthenticationService:
         seconds = float(settings.get_int("login_failure_delay_seconds", 2))
         return enabled, seconds
 
-    def _fail(self, delay: tuple[bool, float], conn: Connection | None = None) -> None:
+    def _fail(self, delay: tuple[bool, float], conn: Connection | None = None) -> NoReturn:
         if conn is not None:
             try:
                 conn.close()
