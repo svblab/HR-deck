@@ -25,7 +25,7 @@
 | EPIC-010 | Стандартные отчёты | ✅ Завершён | [#12](https://github.com/svblab/HR-deck/pull/12) |
 | EPIC-013 | Журнал действий пользователей | ✅ Завершён | [#13](https://github.com/svblab/HR-deck/pull/13) |
 | EPIC-011 | Пользовательские Excel/PDF-шаблоны | ✅ Завершён | [#14](https://github.com/svblab/HR-deck/pull/14), [#15](https://github.com/svblab/HR-deck/pull/15), [#16](https://github.com/svblab/HR-deck/pull/16), [#17](https://github.com/svblab/HR-deck/pull/17), [#18](https://github.com/svblab/HR-deck/pull/18), [#19](https://github.com/svblab/HR-deck/pull/19), [#20](https://github.com/svblab/HR-deck/pull/20), [#21](https://github.com/svblab/HR-deck/pull/21) |
-| EPIC-012 | Шифрование, резервное копирование и восстановление | ✅ Завершён | (this PR) |
+| EPIC-012 | Шифрование, резервное копирование и восстановление | ✅ Завершён | [#22](https://github.com/svblab/HR-deck/pull/22) |
 
 ---
 
