@@ -31,6 +31,7 @@ REQUIRED_TABLES = {
     "user_action_log",
     "report_templates",
     "report_template_versions",
+    "template_generated_reports",
     "app_settings",
     "recovery_codes",
 }
