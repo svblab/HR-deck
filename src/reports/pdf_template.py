@@ -7,7 +7,7 @@ import shutil
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal
 
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
@@ -180,12 +180,8 @@ def _fill_acroform(source: Path, output_path: Path, values: dict[str, str]) -> N
         for name in _acroform_field_names(reader)
         if canonical_key(name) is not None
     }
-    # pypdf's signature is invariant and accepts richer value types (lists,
-    # tuples) for other field kinds; every value we build here is a plain
-    # str, so the cast is safe and doesn't change runtime behavior.
-    typed_fill = cast("dict[str, str | list[str] | tuple[str, str, float]]", fill)
     for page in writer.pages:
-        writer.update_page_form_field_values(page, typed_fill, auto_regenerate=False)
+        writer.update_page_form_field_values(page, fill, auto_regenerate=False)
     with output_path.open("wb") as handle:
         writer.write(handle)
 
