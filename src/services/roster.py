@@ -127,9 +127,9 @@ class RosterService:
         current = current_status_at(rows, corrections, as_of_date)
         needs = needs_status_clarification(rows, corrections, as_of=as_of_date)
         if current is not None:
-            status_id = current.status_id
-            start_date = current.start_date
-            end_date = current.end_date
+            status_id: int | None = current.status_id
+            start_date: str | None = current.start_date
+            end_date: str | None = current.end_date
         else:
             period = last_status_period(rows, corrections)
             status_id = period.status_id if period else None

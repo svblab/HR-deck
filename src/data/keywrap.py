@@ -7,7 +7,7 @@ import json
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -54,7 +54,7 @@ class WrapEntry:
         if kind == "account" and not login:
             raise KeywrapError("account wrap requires login")
         return cls(
-            kind=kind,  # type: ignore[arg-type]
+            kind=cast(WrapKind, kind),
             salt=_unb64(data["salt_b64"]),
             nonce=_unb64(data["nonce_b64"]),
             ciphertext=_unb64(data["ciphertext_b64"]),

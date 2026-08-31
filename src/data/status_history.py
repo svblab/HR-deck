@@ -125,27 +125,27 @@ class StatusHistoryCorrectionRepository(_AppendOnlyGuard):
 
 def _history_row(row: tuple[object, ...]) -> StatusHistoryRecord:
     return StatusHistoryRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
-        employee_id=int(row[1]),  # type: ignore[arg-type]
-        status_id=int(row[2]),  # type: ignore[arg-type]
+        id=int(row[0]),
+        employee_id=int(row[1]),
+        status_id=int(row[2]),
         start_date=str(row[3]),
         end_date=str(row[4]) if row[4] is not None else None,
         note=str(row[5]) if row[5] is not None else None,
         created_at=str(row[6]),
-        created_by_account_id=int(row[7]) if row[7] is not None else None,  # type: ignore[arg-type]
+        created_by_account_id=int(row[7]) if row[7] is not None else None,
     )
 
 
 def _correction_row(row: tuple[object, ...]) -> StatusCorrectionRecord:
     return StatusCorrectionRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
-        status_history_id=int(row[1]),  # type: ignore[arg-type]
+        id=int(row[0]),
+        status_history_id=int(row[1]),
         field_name=str(row[2]),
         old_value=str(row[3]) if row[3] is not None else None,
         new_value=str(row[4]) if row[4] is not None else None,
         reason=str(row[5]),
         created_at=str(row[6]),
-        created_by_account_id=int(row[7]) if row[7] is not None else None,  # type: ignore[arg-type]
+        created_by_account_id=int(row[7]) if row[7] is not None else None,
     )
 
 

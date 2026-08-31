@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -80,7 +81,7 @@ class EmployeeCardWidget(QFrame):
             )
             layout.addWidget(date_lbl)
 
-    def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         self.clicked.emit(self._employee_id)
         super().mousePressEvent(event)
 
@@ -102,6 +103,8 @@ class BoardWidget(QScrollArea):
     def set_columns(self, columns: list[RosterColumn]) -> None:
         while self._layout.count() > 1:
             item = self._layout.takeAt(0)
+            if item is None:
+                break
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()

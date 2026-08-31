@@ -289,9 +289,9 @@ class EmploymentTypeRepository:
 
 def _branch_row(row: tuple[object, ...]) -> BranchRecord:
     return BranchRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
+        id=int(row[0]),
         name=str(row[1]),
-        is_archived=bool(int(row[2])),  # type: ignore[arg-type]
+        is_archived=bool(int(row[2])),
         created_at=str(row[3]),
         updated_at=str(row[4]),
     )
@@ -299,10 +299,10 @@ def _branch_row(row: tuple[object, ...]) -> BranchRecord:
 
 def _department_row(row: tuple[object, ...]) -> DepartmentRecord:
     return DepartmentRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
-        branch_id=int(row[1]),  # type: ignore[arg-type]
+        id=int(row[0]),
+        branch_id=int(row[1]),
         name=str(row[2]),
-        is_archived=bool(int(row[3])),  # type: ignore[arg-type]
+        is_archived=bool(int(row[3])),
         created_at=str(row[4]),
         updated_at=str(row[5]),
     )
@@ -310,10 +310,10 @@ def _department_row(row: tuple[object, ...]) -> DepartmentRecord:
 
 def _division_row(row: tuple[object, ...]) -> DivisionRecord:
     return DivisionRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
-        department_id=int(row[1]),  # type: ignore[arg-type]
+        id=int(row[0]),
+        department_id=int(row[1]),
         name=str(row[2]),
-        is_archived=bool(int(row[3])),  # type: ignore[arg-type]
+        is_archived=bool(int(row[3])),
         created_at=str(row[4]),
         updated_at=str(row[5]),
     )
@@ -321,9 +321,9 @@ def _division_row(row: tuple[object, ...]) -> DivisionRecord:
 
 def _position_row(row: tuple[object, ...]) -> PositionRecord:
     return PositionRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
+        id=int(row[0]),
         name=str(row[1]),
-        is_archived=bool(int(row[2])),  # type: ignore[arg-type]
+        is_archived=bool(int(row[2])),
         created_at=str(row[3]),
         updated_at=str(row[4]),
     )
@@ -331,10 +331,10 @@ def _position_row(row: tuple[object, ...]) -> PositionRecord:
 
 def _employment_type_row(row: tuple[object, ...]) -> EmploymentTypeRecord:
     return EmploymentTypeRecord(
-        id=int(row[0]),  # type: ignore[arg-type]
+        id=int(row[0]),
         code=str(row[1]),
         name=str(row[2]),
-        is_archived=bool(int(row[3])),  # type: ignore[arg-type]
+        is_archived=bool(int(row[3])),
         created_at=str(row[4]),
         updated_at=str(row[5]),
     )

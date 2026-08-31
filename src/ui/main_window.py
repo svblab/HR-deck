@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -285,17 +285,23 @@ class MainWindow(QMainWindow):
     def _open_accounts(self) -> None:
         if not self._require_unlocked() or self._db_path is None:
             return
+        assert self._conn is not None
+        assert self._session is not None
         service = AccountManagementService(self._conn, self._session, db_path=self._db_path)
         AccountsDialog(service, self).exec()
 
     def _open_action_log(self) -> None:
         if not self._require_unlocked():
             return
+        assert self._conn is not None
+        assert self._session is not None
         ActionLogDialog(UserActionLogService(self._conn, self._session), self).exec()
 
     def _open_backup(self) -> None:
         if not self._require_unlocked() or self._db_path is None:
             return
+        assert self._conn is not None
+        assert self._session is not None
         service = BackupService(self._conn, self._session, db_path=self._db_path)
         BackupDialog(
             service,
@@ -313,6 +319,7 @@ class MainWindow(QMainWindow):
             from services.standard_reports import StandardReportService
             from services.template_library import TemplateLibraryService
 
+            assert self._session is not None
             data_dir = self._db_path.parent if self._db_path is not None else None
             roster_service = RosterService(self._conn, self._session)
             self._roster._service = roster_service
@@ -336,12 +343,12 @@ class MainWindow(QMainWindow):
                 pass
         self.close()
 
-    def mousePressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._session is not None and not self._session.locked:
             self._session.touch()
         super().mousePressEvent(event)
 
-    def keyPressEvent(self, event) -> None:  # type: ignore[no-untyped-def]
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if self._session is not None and not self._session.locked:
             self._session.touch()
         super().keyPressEvent(event)

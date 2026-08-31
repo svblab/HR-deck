@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget, QTableWidgetItem
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QHeaderView,
+    QTableWidget,
+    QTableWidgetItem,
+    QWidget,
+)
 
 from domain.roster import RosterRow, format_display_date
 from ui.board_widget import subdivision_label
@@ -12,7 +18,7 @@ from ui.board_widget import subdivision_label
 class TableWidget(QTableWidget):
     employee_activated = Signal(int)
 
-    def __init__(self, parent=None) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(0, 7, parent)
         self.setObjectName("rosterTable")
         self.setHorizontalHeaderLabels(
