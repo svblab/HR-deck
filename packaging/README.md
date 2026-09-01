@@ -9,22 +9,30 @@
 ## Сборка (Linux)
 
 ```bash
-chmod +x scripts/build-deb.sh
+chmod +x scripts/build-deb.sh packaging/debian/*.sh
 ./scripts/build-deb.sh
 ```
 
-## Зависимости Python
+## Зависимости Python (vendored venv)
 
-`sqlcipher3` и `argon2-cffi` **не** поставляются как системные apt-пакеты на
-Ubuntu 24.04 — они подтягиваются через `${python3:Depends}` / pybuild из
-`pyproject.toml` при сборке `.deb`. PySide6 — системный `python3-pyside6.*`.
+Ubuntu 24.04 **не** поставляет `python3-pyside6*` и `sqlcipher3` в apt. Пакет
+собирает приватный virtualenv в `/opt/personnel-availability/venv` на этапе
+`dpkg-buildpackage` (`pip install` wheel + зависимости из `pyproject.toml`) и
+включает его в `.deb`. При установке пользователю **не** нужен `pip install`.
+
+`dh_python3` `${python3:Depends}` **не** используется для runtime — он только
+сопоставляет имена PyPI с уже существующими deb-пакетами и не умеет vendoring.
+
+Системные runtime-зависимости (Qt/EGL для offscreen/GUI): `libegl1`,
+`libxkbcommon0`, `libgl1`, `libdbus-1-3`, `fonts-dejavu-core` и др. — см.
+`packaging/debian/control`.
 
 ## Каталоги (ТЗ §8)
 
 | Назначение | Путь |
 |---|---|
-| Программа | `/usr/lib/python3/dist-packages/` (pybuild) + `/usr/bin/personnel-availability` |
-| SQL-миграции | `site-packages/data/migrations/` (package data) |
+| Программа | `/opt/personnel-availability/venv/` + `/usr/bin/personnel-availability` |
+| SQL-миграции | `venv/.../site-packages/data/migrations/` (package data) |
 | Данные пользователя | `~/.local/share/personnel-availability/` (`personnel.db`, keywrap) |
 | Резервные копии | `~/.local/share/personnel-availability/backups/` |
 | Файловые логи | `~/.local/share/personnel-availability/logs/` |
@@ -32,22 +40,18 @@ Ubuntu 24.04 — они подтягиваются через `${python3:Depends
 
 Переопределение каталога данных: `$PERSONNEL_AVAILABILITY_DATA`.
 
-Журнал действий пользователей и технические события по-прежнему хранятся в
-зашифрованной БД; файловый лог — для диагностики запуска и необработанных
-исключений (без секретов).
-
 ## Обновление
 
-- `dpkg` обновляет только файлы в `/usr`; пользовательские данные не затрагиваются.
+- `dpkg` обновляет только файлы в `/usr` и `/opt`; пользовательские данные не затрагиваются.
 - При первом входе после обновления приложение создаёт `pre-upgrade-*` бэкап и
   применяет миграции; при сбое — откат (см. `services/upgrade.py`).
 
 ## Удаление
 
 `postinst`/`postrm` **не удаляют** `~/.local/share/personnel-availability/` при
-`remove`/`upgrade` — только файлы в `/usr`. Данные пользователя сохраняются.
+`remove`/`upgrade`.
 
 ## CI
 
-Job `deb-build` в GitHub Actions выполняет `dpkg-buildpackage` на Ubuntu 24.04
-и публикует `.deb` как artifact.
+Job `deb-build`: `dpkg-buildpackage` + `scripts/verify-deb-install.sh` (чистый
+`ubuntu:24.04` контейнер, `apt-get install` собранного `.deb`, smoke-import).
