@@ -1,14 +1,23 @@
 Source: personnel-availability
-Section: misc
+Section: office
 Priority: optional
 Maintainer: HR Lab <dev@localhost>
-Build-Depends: debhelper-compat (= 13), python3, pybuild-plugin-pyproject
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               pybuild-plugin-pyproject,
+               python3-all,
+               python3-setuptools
 Standards-Version: 4.6.2
-Homepage: https://localhost/personnel-availability
+Homepage: https://github.com/svblab/HR-deck
+Rules-Requires-Root: no
 
 Package: personnel-availability
 Architecture: all
-Depends: ${misc:Depends}, ${python3:Depends}, python3-pyside6.qtwidgets
+Depends: ${python3:Depends}, ${misc:Depends},
+         python3-pyside6.qtcore,
+         python3-pyside6.qtgui,
+         python3-pyside6.qtwidgets
 Description: Журнал доступности персонала
  Локальное офлайн-приложение учёта доступности сотрудников для отдела HR.
- Целевая платформа — Debian/Ubuntu (см. ADR-0001).
+ Установка: программа в /usr, данные пользователя в ~/.local/share/.
+ Целевая платформа — Ubuntu 24.04 LTS (Debian/Ubuntu, ADR-0001, ТЗ §8).

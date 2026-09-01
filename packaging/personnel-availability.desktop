@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Журнал доступности персонала
+Comment=Локальное офлайн-приложение учёта доступности сотрудников
+Exec=personnel-availability
+Icon=application-office
+Terminal=false
+Categories=Office;Utility;
+Keywords=HR;personnel;availability;

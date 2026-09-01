@@ -1,23 +1,53 @@
-# Packaging (заготовка EPIC-001)
+# Packaging (EPIC-015)
 
-Полная сборка `.deb`, ярлык в меню и раздельные каталоги данных —
-в **EPIC-015**. Здесь только каркас `debian/` для будущей сборки.
+Сборка `.deb`, ярлык в меню и раздельные каталоги данных.
 
 Ожидаемый пакет: `personnel-availability`.
 
-Сборка (позже, на Linux):
+**Целевой релиз для проверки:** Ubuntu 24.04 LTS.
+
+## Сборка (Linux)
 
 ```bash
-# после заполнения EPIC-015
-dpkg-buildpackage -us -uc -b
+chmod +x scripts/build-deb.sh
+./scripts/build-deb.sh
 ```
 
-Каталоги установки (по ТЗ §8 / ANCHOR_CORE):
+## Зависимости Python
 
-| Назначение | Путь (ориентир) |
+`sqlcipher3` и `argon2-cffi` **не** поставляются как системные apt-пакеты на
+Ubuntu 24.04 — они подтягиваются через `${python3:Depends}` / pybuild из
+`pyproject.toml` при сборке `.deb`. PySide6 — системный `python3-pyside6.*`.
+
+## Каталоги (ТЗ §8)
+
+| Назначение | Путь |
 |---|---|
-| Программа | `/usr/share/personnel-availability/` + `/usr/bin/personnel-availability` |
-| Данные пользователя | `~/.local/share/personnel-availability/` |
+| Программа | `/usr/lib/python3/dist-packages/` (pybuild) + `/usr/bin/personnel-availability` |
+| SQL-миграции | `site-packages/data/migrations/` (package data) |
+| Данные пользователя | `~/.local/share/personnel-availability/` (`personnel.db`, keywrap) |
 | Резервные копии | `~/.local/share/personnel-availability/backups/` |
-| Логи | `~/.local/share/personnel-availability/logs/` |
+| Файловые логи | `~/.local/share/personnel-availability/logs/` |
 | Шаблоны отчётов | `~/.local/share/personnel-availability/templates/` |
+
+Переопределение каталога данных: `$PERSONNEL_AVAILABILITY_DATA`.
+
+Журнал действий пользователей и технические события по-прежнему хранятся в
+зашифрованной БД; файловый лог — для диагностики запуска и необработанных
+исключений (без секретов).
+
+## Обновление
+
+- `dpkg` обновляет только файлы в `/usr`; пользовательские данные не затрагиваются.
+- При первом входе после обновления приложение создаёт `pre-upgrade-*` бэкап и
+  применяет миграции; при сбое — откат (см. `services/upgrade.py`).
+
+## Удаление
+
+`postinst`/`postrm` **не удаляют** `~/.local/share/personnel-availability/` при
+`remove`/`upgrade` — только файлы в `/usr`. Данные пользователя сохраняются.
+
+## CI
+
+Job `deb-build` в GitHub Actions выполняет `dpkg-buildpackage` на Ubuntu 24.04
+и публикует `.deb` как artifact.

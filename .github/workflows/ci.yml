@@ -47,3 +47,27 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: pytest -m acceptance -q
+
+  deb-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper dh-python pybuild-plugin-pyproject python3-all python3-pip \
+            python3-setuptools python3-pyside6.qtcore python3-pyside6.qtgui \
+            python3-pyside6.qtwidgets build-essential
+
+      - name: Build .deb package
+        run: |
+          chmod +x scripts/build-deb.sh
+          ./scripts/build-deb.sh
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: personnel-availability-deb
+          path: ../*.deb

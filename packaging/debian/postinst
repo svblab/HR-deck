@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ] && command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications 2>/dev/null || true
+fi
+
+# Обновление/удаление пакета не затрагивает ~/.local/share/personnel-availability/.
+# Каталоги данных, бэкапов, логов и шаблонов создаёт приложение при первом запуске.
+
+exit 0

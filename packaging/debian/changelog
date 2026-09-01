@@ -1,5 +1,5 @@
-personnel-availability (0.1.0-1) UNRELEASED; urgency=low
+personnel-availability (0.1.0-1) unstable; urgency=medium
 
-  * Initial packaging stub (EPIC-001). Full delivery in EPIC-015.
+  * EPIC-015: поставка под Linux, безопасное обновление схемы, логирование.
 
- -- HR Lab <dev@localhost>  Wed, 26 Aug 2026 21:00:00 +0300
+ -- HR Lab <dev@localhost>  Sun, 31 Aug 2026 12:00:00 +0000
