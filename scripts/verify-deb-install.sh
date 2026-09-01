@@ -11,17 +11,26 @@ fi
 
 DEB_NAME="$(basename "$DEB")"
 DEB_DIR="$(dirname "$DEB")"
+SMOKE="$ROOT/scripts/verify-deb-smoke.sh"
 
-docker run --rm \
-  -v "$DEB_DIR:/pkgs:ro" \
-  ubuntu:24.04 bash -cex "
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y /pkgs/$DEB_NAME
-    QT_QPA_PLATFORM=offscreen /opt/personnel-availability/venv/bin/python -c \"
-import sqlcipher3
-from PySide6.QtWidgets import QApplication
-from data.migrations import discover_migrations
-print('install smoke ok', len(discover_migrations()))
-\"
-  "
+run_in_container() {
+  local engine="$1"
+  "$engine" run --rm \
+    -v "$DEB_DIR:/pkgs:ro" \
+    -v "$SMOKE:/verify-deb-smoke.sh:ro" \
+    ubuntu:24.04 bash -cex "
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y /pkgs/$DEB_NAME
+      bash /verify-deb-smoke.sh
+    "
+}
+
+if command -v docker >/dev/null 2>&1; then
+  run_in_container docker
+elif command -v podman >/dev/null 2>&1; then
+  run_in_container podman
+else
+  echo "docker or podman required for local verify-deb-install.sh" >&2
+  exit 1
+fi

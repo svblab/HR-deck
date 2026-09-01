@@ -16,7 +16,7 @@ python3 -m venv build/venv
 build/venv/bin/pip install --upgrade pip
 build/venv/bin/pip install --no-cache-dir build/wheels/*.whl
 
-build/venv/bin/python -c "
+QT_QPA_PLATFORM=offscreen build/venv/bin/python -c "
 import sqlcipher3
 from PySide6.QtWidgets import QApplication
 from data.migrations import discover_migrations

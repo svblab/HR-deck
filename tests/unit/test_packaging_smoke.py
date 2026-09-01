@@ -26,6 +26,7 @@ def test_packaging_scaffold_files_exist() -> None:
         "packaging/debian/personnel-availability-launcher",
         "packaging/personnel-availability.desktop",
         "scripts/build-deb.sh",
+        "scripts/verify-deb-smoke.sh",
         "scripts/verify-deb-install.sh",
     ]
     for rel in required:
