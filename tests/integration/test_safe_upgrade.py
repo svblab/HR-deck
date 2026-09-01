@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from data.backup_io import default_backups_dir
 from data.db import connect, create_database, generate_master_key
 from data.keywrap import KeywrapFile, keywrap_path_for, save_keywrap, wrap_secret
 from data.migrations import (
@@ -14,8 +15,6 @@ from data.migrations import (
     current_version,
     default_migrations_dir,
 )
-from data.backup_io import default_backups_dir
-from data.paths import logs_dir
 from domain.permissions import RoleCode
 from services.session import SessionState
 from services.upgrade import UpgradeError, UpgradeService
