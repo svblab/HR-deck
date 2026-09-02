@@ -10,12 +10,18 @@ INSTALL_VENV="/opt/personnel-availability/venv"
 install -d "$TARGET"
 cp -a "$ROOT/build/venv" "$TARGET/venv"
 
-PY_SRC="$(readlink -f "$ROOT/build/venv/bin/python")"
-PY_IMPL="$(basename "$PY_SRC")"
-if [ -z "$PY_IMPL" ] || [ ! -f "$PY_SRC" ]; then
-    echo "could not resolve build venv interpreter" >&2
+PY_IMPL=""
+for candidate in "$ROOT/build/venv/bin"/python3.*; do
+    if [ -f "$candidate" ] && [ ! -L "$candidate" ]; then
+        PY_IMPL="$(basename "$candidate")"
+        break
+    fi
+done
+if [ -z "$PY_IMPL" ]; then
+    echo "expected materialized python3.* in build venv" >&2
     exit 1
 fi
+PY_SRC="$ROOT/build/venv/bin/$PY_IMPL"
 
 cp -a "$PY_SRC" "$TARGET/venv/bin/$PY_IMPL"
 chmod 755 "$TARGET/venv/bin/$PY_IMPL"
