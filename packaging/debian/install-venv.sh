@@ -8,43 +8,24 @@ TARGET="$DESTDIR/opt/personnel-availability"
 INSTALL_VENV="/opt/personnel-availability/venv"
 
 install -d "$TARGET"
-cp -a "$ROOT/build/venv" "$TARGET/venv"
+# Fresh venv in DESTDIR so bin/python* correctly point at system python3
+# (package Depends: python3). Do not use --copies: a copied interpreter
+# loses its stdlib prefix after relocation.
+python3 -m venv "$TARGET/venv"
+"$TARGET/venv/bin/pip" install --upgrade pip
+"$TARGET/venv/bin/pip" install --no-cache-dir "$ROOT/build/wheels"/*.whl
 
-PY_IMPL=""
-for candidate in "$ROOT/build/venv/bin"/python3.*; do
-    if [ -f "$candidate" ] && [ ! -L "$candidate" ]; then
-        PY_IMPL="$(basename "$candidate")"
-        break
-    fi
-done
-if [ -z "$PY_IMPL" ]; then
-    echo "expected materialized python3.* in build venv" >&2
-    exit 1
-fi
-PY_SRC="$ROOT/build/venv/bin/$PY_IMPL"
-
-cp -a "$PY_SRC" "$TARGET/venv/bin/$PY_IMPL"
-chmod 755 "$TARGET/venv/bin/$PY_IMPL"
-
+# Rewrite pip/entry-point shebangs from the DESTDIR path to the install path.
 for script in "$TARGET/venv/bin"/*; do
-    [ -e "$script" ] || continue
-    if [ -L "$script" ]; then
-        script="$(readlink -f "$script")"
-    fi
     [ -f "$script" ] || continue
+    [ -L "$script" ] && continue
     if head -1 "$script" 2>/dev/null | grep -q '^#!'; then
         sed -i "1s|^#!.*|#!${INSTALL_VENV}/bin/python|" "$script"
     fi
 done
 
-rm -f "$TARGET/venv/bin/python" "$TARGET/venv/bin/python3"
-ln -sf "$PY_IMPL" "$TARGET/venv/bin/python3"
-ln -sf "$PY_IMPL" "$TARGET/venv/bin/python"
-
 if [ -f "$TARGET/venv/pyvenv.cfg" ]; then
     sed -i "s|^home = .*|home = /usr/bin|" "$TARGET/venv/pyvenv.cfg"
-    sed -i "s|^command = .*|command = /usr/bin/python3 -m venv ${INSTALL_VENV}|" \
-        "$TARGET/venv/pyvenv.cfg"
 fi
 
 install -d "$DESTDIR/usr/bin"

@@ -12,7 +12,7 @@ build/bootstrap-venv/bin/pip install --upgrade pip build
 
 build/bootstrap-venv/bin/python -m build --wheel --outdir build/wheels
 
-python3 -m venv --copies build/venv
+python3 -m venv build/venv
 build/venv/bin/pip install --upgrade pip
 build/venv/bin/pip install --no-cache-dir build/wheels/*.whl
 

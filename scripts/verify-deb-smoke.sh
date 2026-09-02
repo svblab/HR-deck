@@ -17,15 +17,7 @@ for path in "$LAUNCHER" "$ENTRY" "$PY"; do
   fi
 done
 
-script_shebang() {
-  local file="$1"
-  if [ -L "$file" ]; then
-    file="$(readlink -f "$file")"
-  fi
-  head -1 "$file"
-}
-
-actual_entry="$(script_shebang "$ENTRY")"
+actual_entry="$(head -1 "$ENTRY")"
 if [ "$actual_entry" != "$EXPECTED_SHEBANG" ]; then
   echo "bad shebang on $ENTRY: $actual_entry (expected $EXPECTED_SHEBANG)" >&2
   exit 1

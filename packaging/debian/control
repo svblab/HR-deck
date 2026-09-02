@@ -21,6 +21,7 @@ Rules-Requires-Root: no
 Package: personnel-availability
 Architecture: amd64
 Depends: ${misc:Depends},
+         python3,
          libegl1,
          libxkbcommon0,
          libgl1,
