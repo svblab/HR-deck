@@ -75,8 +75,6 @@ jobs:
   deb-verify:
     runs-on: ubuntu-24.04
     needs: deb-build
-    container:
-      image: ubuntu:24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -84,18 +82,28 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: personnel-availability-deb
-          path: /pkgs
+          path: pkgs
 
       - name: Install and smoke-verify on clean Ubuntu 24.04
         run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update
-          apt-get install -y /pkgs/*.deb
           chmod +x scripts/verify-deb-smoke.sh
-          ./scripts/verify-deb-smoke.sh
+          docker run --name pa-verify \
+            -v "$PWD/pkgs:/pkgs:ro" \
+            -v "$PWD/scripts/verify-deb-smoke.sh:/verify-deb-smoke.sh:ro" \
+            ubuntu:24.04 bash -cex "
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y /pkgs/*.deb
+              bash /verify-deb-smoke.sh
+            "
 
-      - name: Offline smoke (no network namespace)
+      - name: Offline smoke (--network none)
         run: |
           # Prove runtime imports/Qt init do not require network (ТЗ §2.2 / A4).
-          unshare --net ./scripts/verify-deb-smoke.sh
+          # Use preinstalled runner Docker (do not apt-get install docker.io).
+          docker commit pa-verify pa-installed
+          docker rm pa-verify
+          docker run --rm --network none \
+            -v "$PWD/scripts/verify-deb-smoke.sh:/verify-deb-smoke.sh:ro" \
+            pa-installed bash /verify-deb-smoke.sh
           echo "offline smoke ok"

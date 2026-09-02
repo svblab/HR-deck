@@ -18,7 +18,9 @@ SMOKE="$ROOT/scripts/verify-deb-smoke.sh"
 
 run_in_container() {
   local engine="$1"
-  "$engine" run --rm \
+  local cname="pa-verify-$$"
+  "$engine" rm -f "$cname" >/dev/null 2>&1 || true
+  "$engine" run --name "$cname" \
     -v "$DEB_DIR:/pkgs:ro" \
     -v "$SMOKE:/verify-deb-smoke.sh:ro" \
     ubuntu:24.04 bash -cex "
@@ -26,9 +28,14 @@ run_in_container() {
       apt-get update
       apt-get install -y /pkgs/$DEB_NAME
       bash /verify-deb-smoke.sh
-      unshare --net bash /verify-deb-smoke.sh
-      echo offline smoke ok
     "
+  "$engine" commit "$cname" "pa-installed-$$"
+  "$engine" rm -f "$cname"
+  "$engine" run --rm --network none \
+    -v "$SMOKE:/verify-deb-smoke.sh:ro" \
+    "pa-installed-$$" bash /verify-deb-smoke.sh
+  "$engine" rmi "pa-installed-$$" >/dev/null 2>&1 || true
+  echo "offline smoke ok"
 }
 
 if command -v docker >/dev/null 2>&1; then

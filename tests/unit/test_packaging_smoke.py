@@ -33,9 +33,9 @@ def test_packaging_scaffold_files_exist() -> None:
         assert (ROOT / rel).is_file(), rel
 
 
-def test_ci_offline_smoke_uses_unshare() -> None:
+def test_ci_offline_smoke_uses_network_none() -> None:
     text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    assert "unshare --net" in text
+    assert "--network none" in text
     assert "verify-deb-smoke.sh" in text
 
 
