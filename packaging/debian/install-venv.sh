@@ -10,11 +10,15 @@ INSTALL_VENV="/opt/personnel-availability/venv"
 install -d "$TARGET"
 cp -a "$ROOT/build/venv" "$TARGET/venv"
 
-PY_IMPL="$(basename "$(readlink -f "$TARGET/venv/bin/python")")"
-if [ -z "$PY_IMPL" ] || [ ! -f "$TARGET/venv/bin/$PY_IMPL" ]; then
-    echo "could not resolve venv interpreter in $TARGET/venv/bin" >&2
+PY_SRC="$(readlink -f "$ROOT/build/venv/bin/python")"
+PY_IMPL="$(basename "$PY_SRC")"
+if [ -z "$PY_IMPL" ] || [ ! -f "$PY_SRC" ]; then
+    echo "could not resolve build venv interpreter" >&2
     exit 1
 fi
+
+cp -a "$PY_SRC" "$TARGET/venv/bin/$PY_IMPL"
+chmod 755 "$TARGET/venv/bin/$PY_IMPL"
 
 for script in "$TARGET/venv/bin"/*; do
     [ -e "$script" ] || continue
