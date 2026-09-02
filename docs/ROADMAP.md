@@ -28,6 +28,7 @@
 | EPIC-012 | Шифрование, резервное копирование и восстановление | ✅ Завершён | [#22](https://github.com/svblab/HR-deck/pull/22) |
 | EPIC-014 | Архивирование сотрудников | ✅ Завершён | [#23](https://github.com/svblab/HR-deck/pull/23) |
 | EPIC-015 | Поставка под Linux | ✅ Завершён | [#28](https://github.com/svblab/HR-deck/pull/28) |
+| EPIC-017 | Комплект документации | ✅ Завершён | [#31](https://github.com/svblab/HR-deck/pull/31) |
 
 ---
 
