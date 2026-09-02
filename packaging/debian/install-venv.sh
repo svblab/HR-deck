@@ -9,6 +9,9 @@ INSTALL_VENV="/opt/personnel-availability/venv"
 
 install -d "$TARGET"
 python3 -m venv "$TARGET/venv"
+if [ ! -e "$TARGET/venv/bin/python" ]; then
+    ln -s python3 "$TARGET/venv/bin/python"
+fi
 "$TARGET/venv/bin/pip" install --upgrade pip
 "$TARGET/venv/bin/pip" install --no-cache-dir "$ROOT/build/wheels"/*.whl
 
