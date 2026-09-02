@@ -13,7 +13,10 @@
 5. **`TESTING.md`** — что и как тестируется, что блокирует мерж.
 6. **`report-templates-guide.md`** — подготовка пользовательских Excel/PDF-шаблонов
    (EPIC-011); образцы в `templates_samples/`.
-7. **`adr/`** — принятые архитектурные решения. `ADR-TEMPLATE.md` — шаблон
+7. **`manual/`** — комплект пользовательской и эксплуатационной документации
+   (EPIC-017): руководства, установка, runbook, шпаргалка.
+8. **`promo/`** — рекламный буклет продукта (EPIC-017).
+9. **`adr/`** — принятые архитектурные решения. `ADR-TEMPLATE.md` — шаблон
    для новых.
 
 ## Быстрые ссылки
@@ -23,6 +26,16 @@
   разделе 2.
 - Правило «когда нужна ADR»: `ANCHOR_PROTOCOL.md`, п.4.
 - Правило diff-first для крупных изменений: `ANCHOR_PROTOCOL.md`, п.5.
+
+## EPIC-017 — быстрые ссылки
+
+- [Руководство пользователя](manual/user-guide.md)
+- [Шпаргалка HR](manual/quick-reference.md)
+- [Руководство администратора](manual/administrator-guide.md)
+- [Установка и обновление (кратко)](manual/install-update-quick.md)
+- [Развёртывание (полное)](manual/deployment-guide.md)
+- [Runbook обслуживания](manual/maintenance-runbook.md)
+- [Рекламный буклет](promo/product-booklet.md)
 
 ## Статус документов
 
