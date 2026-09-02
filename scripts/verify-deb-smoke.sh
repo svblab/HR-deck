@@ -9,19 +9,25 @@ ENTRY=/opt/personnel-availability/venv/bin/personnel-availability
 LAUNCHER=/usr/bin/personnel-availability
 EXPECTED_SHEBANG='#!/opt/personnel-availability/venv/bin/python'
 
-test -x "$LAUNCHER"
-test -x "$ENTRY"
-test -x "$PY"
+for path in "$LAUNCHER" "$ENTRY" "$PY"; do
+  if [ ! -e "$path" ]; then
+    echo "missing required path: $path" >&2
+    exit 1
+  fi
+done
 
-actual_entry="$(head -1 "$ENTRY")"
-actual_py="$(head -1 "$PY")"
+script_shebang() {
+  local file="$1"
+  if [ -L "$file" ]; then
+    file="$(readlink -f "$file")"
+  fi
+  head -1 "$file"
+}
+
+actual_entry="$(script_shebang "$ENTRY")"
 if [ "$actual_entry" != "$EXPECTED_SHEBANG" ]; then
-    echo "bad shebang on $ENTRY: $actual_entry (expected $EXPECTED_SHEBANG)" >&2
-    exit 1
-fi
-if [ "$actual_py" != "$EXPECTED_SHEBANG" ]; then
-    echo "bad shebang on $PY: $actual_py (expected $EXPECTED_SHEBANG)" >&2
-    exit 1
+  echo "bad shebang on $ENTRY: $actual_entry (expected $EXPECTED_SHEBANG)" >&2
+  exit 1
 fi
 
 grep -q '/opt/personnel-availability/venv/bin/personnel-availability' "$LAUNCHER"
