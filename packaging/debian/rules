@@ -1,10 +1,14 @@
 #!/usr/bin/make -f
 
 export DH_VERBOSE = 1
-export DEB_BUILD_OPTIONS = nodwz
+export DEB_BUILD_OPTIONS = nodwz nostrip
 
 %:
 	dh $@
+
+override_dh_dwz:
+
+override_dh_strip:
 
 override_dh_auto_clean:
 	rm -rf build
