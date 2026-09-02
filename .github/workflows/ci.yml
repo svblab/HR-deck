@@ -47,3 +47,63 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: pytest -m acceptance -q
+
+  deb-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debhelper python3 python3-pip python3-venv build-essential \
+            libegl1 libxkbcommon0 libgl1 libdbus-1-3 libxcb-xinerama0 \
+            libxcb-cursor0 fonts-dejavu-core
+
+      - name: Build .deb package
+        run: |
+          chmod +x scripts/build-deb.sh packaging/debian/*.sh
+          ./scripts/build-deb.sh
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: personnel-availability-deb
+          path: dist/*.deb
+
+  deb-verify:
+    runs-on: ubuntu-24.04
+    needs: deb-build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download deb artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: personnel-availability-deb
+          path: pkgs
+
+      - name: Install and smoke-verify on clean Ubuntu 24.04
+        run: |
+          chmod +x scripts/verify-deb-smoke.sh
+          docker run --name pa-verify \
+            -v "$PWD/pkgs:/pkgs:ro" \
+            -v "$PWD/scripts/verify-deb-smoke.sh:/verify-deb-smoke.sh:ro" \
+            ubuntu:24.04 bash -cex "
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y /pkgs/*.deb
+              bash /verify-deb-smoke.sh
+            "
+
+      - name: Offline smoke (--network none)
+        run: |
+          # Prove runtime imports/Qt init do not require network (ТЗ §2.2 / A4).
+          # Use preinstalled runner Docker (do not apt-get install docker.io).
+          docker commit pa-verify pa-installed
+          docker rm pa-verify
+          docker run --rm --network none \
+            -v "$PWD/scripts/verify-deb-smoke.sh:/verify-deb-smoke.sh:ro" \
+            pa-installed bash /verify-deb-smoke.sh
+          echo "offline smoke ok"

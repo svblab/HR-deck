@@ -36,8 +36,15 @@ class Migration:
 
 
 def default_migrations_dir() -> Path:
-    """Каталог /migrations в корне репозитория (рядом с pyproject.toml)."""
-    return Path(__file__).resolve().parents[2] / "migrations"
+    """Каталог SQL-миграций внутри пакета data (pip/wheel и dev-checkout)."""
+    from importlib.resources import files as pkg_files
+
+    if not pkg_files("data").joinpath("migrations").is_dir():
+        raise DatabaseError("migrations directory not found: data/migrations")
+    root = Path(__file__).resolve().parent / "migrations"
+    if not root.is_dir():
+        raise DatabaseError(f"migrations directory not found: {root}")
+    return root
 
 
 def discover_migrations(migrations_dir: Path | None = None) -> list[Migration]:

@@ -86,7 +86,7 @@
   /services          — статусы, роли, шаблоны отчётов, импорт/экспорт, бэкап
   /ui                — экраны PySide6
   /reports           — стандартные отчёты и движок пользовательских шаблонов
-/migrations          — версии схемы БД
+    /migrations        — версии схемы БД (package data пакета data)
 /tests
   /unit
   /integration

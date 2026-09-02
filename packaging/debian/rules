@@ -1,8 +1,31 @@
 #!/usr/bin/make -f
 
-# Заготовка EPIC-001: реальная политика сборки — EPIC-015.
 export DH_VERBOSE = 1
-export PYBUILD_NAME = personnel-availability
+export DEB_BUILD_OPTIONS = nodwz nostrip
 
 %:
-	dh $@ --with python3 --buildsystem=pybuild
+	dh $@
+
+override_dh_dwz:
+
+override_dh_strip:
+
+override_dh_shlibdeps:
+
+override_dh_makeshlibs:
+
+override_dh_auto_clean:
+	rm -rf build
+	dh_auto_clean
+
+override_dh_auto_build:
+	packaging/debian/build-venv.sh
+
+override_dh_auto_install:
+	packaging/debian/install-venv.sh debian/personnel-availability
+
+override_dh_auto_test:
+	# Тесты выполняются в CI; сборка пакета не запускает pytest.
+
+override_dh_installdesktop:
+	dh_installdesktop debian/personnel-availability.desktop
