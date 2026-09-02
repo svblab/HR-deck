@@ -10,19 +10,9 @@ INSTALL_VENV="/opt/personnel-availability/venv"
 install -d "$TARGET"
 cp -a "$ROOT/build/venv" "$TARGET/venv"
 
-PY_IMPL=""
-for candidate in "$TARGET/venv/bin"/python3.*; do
-    [ -e "$candidate" ] || continue
-    if [ -L "$candidate" ]; then
-        candidate="$(readlink -f "$candidate")"
-    fi
-    if [ -f "$candidate" ] && head -1 "$candidate" | grep -q '^#!'; then
-        PY_IMPL="$(basename "$candidate")"
-        break
-    fi
-done
-if [ -z "$PY_IMPL" ]; then
-    echo "could not find python3.* interpreter script in venv/bin" >&2
+PY_IMPL="$(basename "$(readlink -f "$TARGET/venv/bin/python")")"
+if [ -z "$PY_IMPL" ] || [ ! -f "$TARGET/venv/bin/$PY_IMPL" ]; then
+    echo "could not resolve venv interpreter in $TARGET/venv/bin" >&2
     exit 1
 fi
 
