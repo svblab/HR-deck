@@ -3,9 +3,12 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-DEB="$(ls -1 "$ROOT"/../*.deb 2>/dev/null | head -1)"
+DEB="$(ls -1 "$ROOT"/dist/*.deb 2>/dev/null | head -1)"
 if [ -z "$DEB" ]; then
-  echo "No .deb found in $(dirname "$ROOT")" >&2
+  DEB="$(ls -1 "$ROOT"/../*.deb 2>/dev/null | head -1)"
+fi
+if [ -z "$DEB" ]; then
+  echo "No .deb found in $ROOT/dist or $(dirname "$ROOT")" >&2
   exit 1
 fi
 

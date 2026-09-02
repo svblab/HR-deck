@@ -5,10 +5,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-rm -rf debian
+rm -rf debian dist
 cp -a packaging/debian debian
 cp packaging/personnel-availability.desktop debian/
 chmod +x packaging/debian/*.sh packaging/debian/rules
 
 dpkg-buildpackage -us -uc -b
-echo "Built: ${ROOT}/../personnel-availability_*.deb"
+mkdir -p dist
+mv -f "${ROOT}"/../personnel-availability_*.deb dist/
+echo "Built: ${ROOT}/dist/$(basename dist/*.deb)"

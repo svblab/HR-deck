@@ -11,6 +11,7 @@
 ```bash
 chmod +x scripts/build-deb.sh packaging/debian/*.sh
 ./scripts/build-deb.sh
+# Артефакт: dist/personnel-availability_*.deb
 ```
 
 ## Зависимости Python (vendored venv)
