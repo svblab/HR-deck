@@ -33,6 +33,12 @@ def test_packaging_scaffold_files_exist() -> None:
         assert (ROOT / rel).is_file(), rel
 
 
+def test_ci_offline_smoke_uses_unshare() -> None:
+    text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "unshare --net" in text
+    assert "verify-deb-smoke.sh" in text
+
+
 def test_desktop_entry_has_exec_and_name() -> None:
     text = (ROOT / "packaging/personnel-availability.desktop").read_text(encoding="utf-8")
     assert "Exec=personnel-availability" in text

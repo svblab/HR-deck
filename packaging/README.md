@@ -56,7 +56,8 @@ Ubuntu 24.04 **не** поставляет `python3-pyside6*` и `sqlcipher3` в
 
 - Job `deb-build`: `dpkg-buildpackage` (артефакт `.deb`).
 - Job `deb-verify`: чистый `ubuntu:24.04` контейнер, `apt-get install` артефакта,
-  `scripts/verify-deb-smoke.sh` (shebang, импорты, Qt offscreen).
+  `scripts/verify-deb-smoke.sh` (shebang, импорты, Qt offscreen), затем тот же
+  smoke под `unshare --net` (офлайн-старт без сети).
 
 Локально: `./scripts/build-deb.sh` затем `./scripts/verify-deb-install.sh`
-(docker/podman + `verify-deb-smoke.sh`).
+(docker/podman + `verify-deb-smoke.sh` + offline `unshare --net`).

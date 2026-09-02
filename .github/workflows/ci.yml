@@ -93,3 +93,9 @@ jobs:
           apt-get install -y /pkgs/*.deb
           chmod +x scripts/verify-deb-smoke.sh
           ./scripts/verify-deb-smoke.sh
+
+      - name: Offline smoke (no network namespace)
+        run: |
+          # Prove runtime imports/Qt init do not require network (ТЗ §2.2 / A4).
+          unshare --net ./scripts/verify-deb-smoke.sh
+          echo "offline smoke ok"

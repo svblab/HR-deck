@@ -26,6 +26,8 @@ run_in_container() {
       apt-get update
       apt-get install -y /pkgs/$DEB_NAME
       bash /verify-deb-smoke.sh
+      unshare --net bash /verify-deb-smoke.sh
+      echo offline smoke ok
     "
 }
 
