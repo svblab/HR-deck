@@ -12,6 +12,7 @@ EXPECTED_SHEBANG='#!/opt/personnel-availability/venv/bin/python'
 for path in "$LAUNCHER" "$ENTRY" "$PY"; do
   if [ ! -e "$path" ]; then
     echo "missing required path: $path" >&2
+    ls -la /opt/personnel-availability/venv/bin >&2 || true
     exit 1
   fi
 done

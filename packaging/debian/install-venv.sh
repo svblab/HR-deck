@@ -29,6 +29,10 @@ if [ -f "$TARGET/venv/pyvenv.cfg" ]; then
         "$TARGET/venv/pyvenv.cfg"
 fi
 
+PY_IMPL="$(basename "$(ls -1 "$TARGET/venv/bin"/python3.* | head -1)")"
+rm -f "$TARGET/venv/bin/python"
+ln -sf "${INSTALL_VENV}/bin/${PY_IMPL}" "$TARGET/venv/bin/python"
+
 install -d "$DESTDIR/usr/bin"
 install -m 755 "$ROOT/packaging/debian/personnel-availability-launcher" \
     "$DESTDIR/usr/bin/personnel-availability"
