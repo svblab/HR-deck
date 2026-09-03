@@ -72,11 +72,16 @@ def format_display_date(iso_date: str | None) -> str:
     return f"{day}.{month}.{year}"
 
 
+def _normalize_name_for_search(value: str) -> str:
+    """Подстрочный поиск без учёта регистра; «ё» и «е» считаются одним символом."""
+    return value.strip().casefold().replace("ё", "е")
+
+
 def apply_filters(rows: list[RosterRow], filters: RosterFilters) -> list[RosterRow]:
-    query = filters.name_query.strip().casefold()
+    query = _normalize_name_for_search(filters.name_query)
     out: list[RosterRow] = []
     for row in rows:
-        if query and query not in row.full_name.casefold():
+        if query and query not in _normalize_name_for_search(row.full_name):
             continue
         if filters.branch_id is not None and row.branch_id != filters.branch_id:
             continue
