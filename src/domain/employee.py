@@ -96,6 +96,11 @@ def clean_full_name(full_name: str) -> str:
     return clean
 
 
+def normalize_name_for_match(value: str) -> str:
+    """Сравнение/поиск ФИО: без регистра; «ё» и «е» — один символ (ТЗ §3.4 / §3.7)."""
+    return value.strip().casefold().replace("ё", "е")
+
+
 def validate_employee_org(
     *,
     branch_id: int,

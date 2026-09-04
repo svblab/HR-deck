@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from domain.employee import EmployeeValidationError
+from domain.employee import EmployeeValidationError, normalize_name_for_match
 from domain.employee_import import (
     ImportCatalog,
     evaluate_row,
@@ -68,3 +68,16 @@ def test_parse_hire_date_accepts_iso() -> None:
     assert parse_hire_date("  ") is None
     with pytest.raises(EmployeeValidationError):
         parse_hire_date("15/01/2024")
+
+
+def test_normalize_name_treats_yo_and_ye_as_equivalent() -> None:
+    """ТЗ §3.7 / ANCHOR_CORE: ФИО не уникальный ID, но совпадение по имени
+    при дедупе импорта должно считать «ё» и «е» одним символом (как §3.4 поиск).
+    """
+    assert normalize_name_for_match("Семёнов") == normalize_name_for_match("Семенов")
+    assert normalize_name_for_match("семенов") == normalize_name_for_match("СЕМЁНОВ")
+
+
+def test_normalize_name_yo_ye_is_case_insensitive() -> None:
+    """ТЗ §3.7: нормализация ФИО для сопоставления — без учёта регистра."""
+    assert normalize_name_for_match("СЁМЁН") == normalize_name_for_match("семен")

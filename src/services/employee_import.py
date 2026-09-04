@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from domain.employee import EmployeeCreateInput, format_search_hit_label
+from domain.employee import (
+    EmployeeCreateInput,
+    format_search_hit_label,
+    normalize_name_for_match,
+)
 from domain.employee_import import (
     ImportCatalog,
     ImportIssue,
@@ -93,15 +97,27 @@ class EmployeeImportService:
     def _duplicate_warnings(
         self, payload: EmployeeCreateInput, values: dict[str, str], source_row: int
     ) -> list[ImportIssue]:
-        hits = self._employees.search_by_name(payload.full_name)
-        dept = values["department"].strip().casefold()
-        div = values["division"].strip().casefold()
+        needle = normalize_name_for_match(payload.full_name)
+        dept = normalize_name_for_match(values["department"])
+        div = normalize_name_for_match(values["division"])
+        # Кандидаты: LIKE-поиск по исходной строке + обход активных карточек
+        # (LIKE не считает «ё»/«е» эквивалентными, см. ТЗ §3.7).
+        by_id = {hit.id: hit for hit in self._employees.search_by_name(payload.full_name)}
+        for card in self._employees.list_employees(active_only=True):
+            if card.id in by_id:
+                continue
+            if normalize_name_for_match(card.full_name) != needle:
+                continue
+            for hit in self._employees.search_by_name(card.full_name):
+                if hit.id == card.id:
+                    by_id[hit.id] = hit
+                    break
         matches = [
             hit
-            for hit in hits
-            if hit.full_name.strip().casefold() == payload.full_name.casefold()
-            and hit.department_name.strip().casefold() == dept
-            and (hit.division_name or "").strip().casefold() == div
+            for hit in by_id.values()
+            if normalize_name_for_match(hit.full_name) == needle
+            and normalize_name_for_match(hit.department_name) == dept
+            and normalize_name_for_match(hit.division_name or "") == div
         ]
         if not matches:
             return []

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from domain.employee import EmployeeCreateInput
 from domain.employee_import import EXPORT_HEADERS, SENSITIVE_EXPORT_HEADERS
 from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
@@ -115,6 +116,103 @@ def test_duplicate_name_subdivision_is_warning_not_error(tmp_path: Path) -> None
     assert preview.warnings
     assert not preview.errors
     assert "duplicate" in preview.warnings[0].message
+    conn.close()
+
+
+def test_duplicate_warning_yo_in_db_ye_in_import(tmp_path: Path) -> None:
+    """ТЗ §3.7: дедуп импорта — ФИО с «ё» в БД и «е» в файле → предупреждение.
+
+    Критерий приёмки: импорт с предупреждением о дубликатах ФИО, без
+    автосоздания второго человека (TESTING.md §2.6 импорт/экспорт).
+    """
+    conn, _session, employees, _dirs, importer, _exp, ids, _db = _open(tmp_path)
+    employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Семёнов Иван",
+            position_id=ids["position_engineer_id"],
+            branch_id=ids["branch_id"],
+            department_id=ids["department_id"],
+            division_id=ids["division_id"],
+            employment_type_id=1,
+        )
+    )
+    preview = importer.preview_rows(
+        list(EXPORT_HEADERS),
+        [
+            [
+                "Семенов Иван",
+                "Инженер",
+                "Филиал Север (тест)",
+                "Департамент разработки",
+                "Отдел платформы",
+                "Штатный",
+            ]
+        ],
+    )
+    assert preview.ready
+    assert any("duplicate" in w.message for w in preview.warnings)
+    conn.close()
+
+
+def test_duplicate_warning_ye_in_db_yo_in_import(tmp_path: Path) -> None:
+    """ТЗ §3.7: дедуп импорта — ФИО с «е» в БД и «ё» в файле → предупреждение."""
+    conn, _session, employees, _dirs, importer, _exp, ids, _db = _open(tmp_path)
+    employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Семенов Пётр",
+            position_id=ids["position_engineer_id"],
+            branch_id=ids["branch_id"],
+            department_id=ids["department_id"],
+            division_id=ids["division_id"],
+            employment_type_id=1,
+        )
+    )
+    preview = importer.preview_rows(
+        list(EXPORT_HEADERS),
+        [
+            [
+                "Семёнов Пётр",
+                "Инженер",
+                "Филиал Север (тест)",
+                "Департамент разработки",
+                "Отдел платформы",
+                "Штатный",
+            ]
+        ],
+    )
+    assert preview.ready
+    assert any("duplicate" in w.message for w in preview.warnings)
+    conn.close()
+
+
+def test_duplicate_warning_yo_ye_case_insensitive(tmp_path: Path) -> None:
+    """ТЗ §3.7: дедуп импорта — «ё»/«е» + регистр не мешают сопоставлению."""
+    conn, _session, employees, _dirs, importer, _exp, ids, _db = _open(tmp_path)
+    employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Сёмён Сёмёнович",
+            position_id=ids["position_engineer_id"],
+            branch_id=ids["branch_id"],
+            department_id=ids["department_id"],
+            division_id=ids["division_id"],
+            employment_type_id=1,
+        )
+    )
+    preview = importer.preview_rows(
+        list(EXPORT_HEADERS),
+        [
+            [
+                "СЕМЕН СЕМЕНОВИЧ",
+                "Инженер",
+                "Филиал Север (тест)",
+                "Департамент разработки",
+                "Отдел платформы",
+                "Штатный",
+            ]
+        ],
+    )
+    assert preview.ready
+    assert any("duplicate" in w.message for w in preview.warnings)
     conn.close()
 
 
