@@ -50,3 +50,5 @@ def test_documentation_package_files_exist() -> None:
     ):
         assert (MANUAL / name).is_file()
     assert (PROMO / "product-booklet.md").is_file()
+    assert (ROOT / "tests/fixtures/generate_perf_dataset.py").is_file()
+    assert (ROOT / "docs/acceptance/EPIC-016-signoff.md").is_file()
