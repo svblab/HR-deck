@@ -43,6 +43,24 @@ def test_name_search_is_case_insensitive() -> None:
     assert [r.employee_id for r in got] == [1]
 
 
+def test_name_search_treats_yo_and_ye_as_equivalent() -> None:
+    rows = [
+        _row(employee_id=1, full_name="Семёнов Иван"),
+        _row(employee_id=2, full_name="Семенов Пётр"),
+        _row(employee_id=3, full_name="Петров Алексей"),
+    ]
+    by_ye = apply_filters(rows, RosterFilters(name_query="семенов"))
+    by_yo = apply_filters(rows, RosterFilters(name_query="семёнов"))
+    assert [r.employee_id for r in by_ye] == [1, 2]
+    assert [r.employee_id for r in by_yo] == [1, 2]
+
+
+def test_name_search_yo_ye_is_case_insensitive() -> None:
+    rows = [_row(full_name="Сёмён Сёмёнович")]
+    got = apply_filters(rows, RosterFilters(name_query="СЕМЕН"))
+    assert [r.employee_id for r in got] == [1]
+
+
 def test_cascading_org_filters() -> None:
     rows = [
         _row(),
