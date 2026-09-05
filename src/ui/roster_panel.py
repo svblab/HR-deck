@@ -24,11 +24,13 @@ from domain.roster import (
     group_rows,
     summary_counts,
 )
+from services.availability_statuses import AvailabilityStatusService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from services.standard_reports import StandardReportService
+from services.status_history import StatusHistoryService
 from services.template_library import TemplateLibraryService
 from ui.board_widget import BoardWidget
 from ui.employee_card_form import EmployeeCardDialog
@@ -51,6 +53,8 @@ class RosterPanel(QWidget):
         session: SessionState | None = None,
         reports: StandardReportService | None = None,
         templates: TemplateLibraryService | None = None,
+        status_history: StatusHistoryService | None = None,
+        availability_statuses: AvailabilityStatusService | None = None,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -59,6 +63,8 @@ class RosterPanel(QWidget):
         self._session = session
         self._reports = reports
         self._templates = templates
+        self._status_history = status_history
+        self._availability_statuses = availability_statuses
         self._all_rows: list[RosterRow] = []
         self._group_by = GroupBy.STATUS
         self._name_query = ""
@@ -282,8 +288,18 @@ class RosterPanel(QWidget):
         if row is None:
             return
         history = self._service.history_preview(employee_id)
-        popup = EmployeePopupDialog(row, history, self)
+        popup = EmployeePopupDialog(
+            row,
+            history,
+            self,
+            session=self._session,
+            status_history=self._status_history,
+            availability_statuses=self._availability_statuses,
+        )
         popup.exec()
+        if popup.status_changed:
+            self.reload()
+            return
         if popup.open_card_id is not None:
             self._open_card(popup.open_card_id)
 
@@ -299,6 +315,8 @@ class RosterPanel(QWidget):
             self._session,
             employee_id=employee_id,
             parent=self,
+            status_history=self._status_history,
+            availability_statuses=self._availability_statuses,
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.reload()

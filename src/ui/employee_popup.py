@@ -12,8 +12,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from domain.permissions import Permission, has_permission
 from domain.roster import HistoryPreviewRow, RosterRow, format_display_date
+from services.availability_statuses import AvailabilityStatusService
+from services.session import SessionState
+from services.status_history import StatusHistoryService
 from ui.board_widget import status_chip_style, subdivision_label
+from ui.status_assign_dialog import StatusAssignDialog
 from ui.theme import BORDER, TEXT_MUTED
 
 
@@ -23,12 +28,20 @@ class EmployeePopupDialog(QDialog):
         row: RosterRow,
         history: list[HistoryPreviewRow],
         parent: QWidget | None = None,
+        *,
+        session: SessionState | None = None,
+        status_history: StatusHistoryService | None = None,
+        availability_statuses: AvailabilityStatusService | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(row.full_name)
         self.setModal(True)
         self._row = row
+        self._session = session
+        self._status_history = status_history
+        self._availability_statuses = availability_statuses
         self.open_card_id: int | None = None
+        self.status_changed = False
         self.setMinimumWidth(360)
         layout = QVBoxLayout(self)
         name = QLabel(row.full_name)
@@ -72,12 +85,40 @@ class EmployeePopupDialog(QDialog):
             )
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        can_assign = (
+            self._session is not None
+            and self._status_history is not None
+            and self._availability_statuses is not None
+            and has_permission(self._session.role, Permission.MANAGE_STATUSES)
+        )
+        if can_assign:
+            assign_btn = buttons.addButton(
+                "Назначить статус…", QDialogButtonBox.ButtonRole.ActionRole
+            )
+            assign_btn.setObjectName("assignStatusBtn")
+            assign_btn.clicked.connect(self._assign_status)
         card_btn = buttons.addButton("Карточка", QDialogButtonBox.ButtonRole.ActionRole)
         card_btn.setObjectName("openEmployeeCard")
         card_btn.clicked.connect(self._open_card)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         layout.addWidget(buttons)
+
+    def _assign_status(self) -> None:
+        assert self._session is not None
+        assert self._status_history is not None
+        assert self._availability_statuses is not None
+        dialog = StatusAssignDialog(
+            self._status_history,
+            self._availability_statuses,
+            self._session,
+            employee_id=self._row.employee_id,
+            employee_name=self._row.full_name,
+            parent=self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.status_changed = True
+            self.accept()
 
     def _open_card(self) -> None:
         self.open_card_id = self._row.employee_id

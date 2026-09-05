@@ -18,7 +18,7 @@
 | EPIC-003 | Учётные записи, роли и вход | ✅ Завершён | [#3](https://github.com/svblab/HR-deck/pull/3) |
 | EPIC-004 | Справочники и оргструктура | ✅ Завершён | [#4](https://github.com/svblab/HR-deck/pull/4) |
 | EPIC-005 | Карточка сотрудника | ✅ Завершён (сервис #5; форма UI #10) | [#5](https://github.com/svblab/HR-deck/pull/5), [#10](https://github.com/svblab/HR-deck/pull/10) |
-| EPIC-006 | Статусы доступности и история | ✅ Завершён | [#6](https://github.com/svblab/HR-deck/pull/6) |
+| EPIC-006 | Статусы доступности и история | ✅ Завершён (сервис #6; UI назначения статуса) | [#6](https://github.com/svblab/HR-deck/pull/6) |
 | EPIC-007 | «Требует уточнения статуса» | ✅ Завершён | [#7](https://github.com/svblab/HR-deck/pull/7), UI [#9](https://github.com/svblab/HR-deck/pull/9) |
 | EPIC-008 | Главный экран | ✅ Завершён | [#9](https://github.com/svblab/HR-deck/pull/9), [#10](https://github.com/svblab/HR-deck/pull/10) |
 | EPIC-009 | Импорт и экспорт | ✅ Завершён | [#11](https://github.com/svblab/HR-deck/pull/11) |
@@ -187,6 +187,10 @@
 **Примечание по рискам.** Это один из двух эпиков с наибольшей логической
 сложностью (второй — EPIC-011). Подпадает под правило diff-first из
 `ANCHOR_PROTOCOL.md` п.5.
+
+**Срез сервиса:** PR #6 — `StatusHistoryService` / справочник статусов, RBAC,
+аудит. **UI назначения периода** (диалог из popup/карточки) закрывает
+оставшийся пользовательский скоуп «Карточка → назначить период».
 
 ---
 
