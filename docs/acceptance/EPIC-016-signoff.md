@@ -86,7 +86,9 @@ Automated partial coverage: `test_main_window_smoke.py`, dialog unit tests.
 | 3 | Standard report Excel+PDF | ☐ | ☐ | ☐ | yes | _pending_ |
 | 4 | Template report generate | ☐ | ☐ | ☐ | yes | _pending_ |
 | 5 | Backup create + restore | ☐ | — | — | yes | _pending_ |
-| 6 | `.deb` upgrade on test copy | ☐ | — | — | CI deb-verify | _pending_ |
+| 6 | `.deb` upgrade on test copy | ☑ | — | — | CI deb-verify | PASS (2026-09-05; путь b) |
+
+**Item 6 evidence (path b — Windows host, no local Ubuntu upgrade):** packaging/offline closed by CI on `master` @ `e4e3b04` — [run 33956982879](https://github.com/svblab/HR-deck/actions/runs/33956982879): `deb-build` + `deb-verify` (install smoke on `ubuntu:24.04` and offline `--network none`) both success. Upgrade/data path: `pytest tests/integration/test_safe_upgrade.py` — 3 passed (pre-upgrade `pre-upgrade-*` on non-empty DB, data preserved, rollback). Full dual-`.deb` install on a training DB copy (path a) not required for this gate.
 
 ---
 
@@ -94,10 +96,11 @@ Automated partial coverage: `test_main_window_smoke.py`, dialog unit tests.
 
 | Check | Evidence |
 |---|---|
-| `deb-build` job | `.github/workflows/ci.yml` |
-| Docker install smoke | `scripts/verify-deb-smoke.sh` |
-| Offline `--network none` | CI `deb-verify` + `test_packaging_smoke.py` |
+| `deb-build` job | CI run above — success |
+| Docker install smoke | CI `deb-verify` step «Install and smoke-verify on clean Ubuntu 24.04» |
+| Offline `--network none` | CI `deb-verify` step «Offline smoke (--network none)» |
 | Local maintainer path | `packaging/README.md`, `docs/manual/deployment-guide.md` |
+| pre-upgrade + migrations | `tests/integration/test_safe_upgrade.py` (acceptance) |
 
 ---
 
