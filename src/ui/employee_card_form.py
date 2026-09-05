@@ -22,11 +22,13 @@ from domain.employee import (
     SensitiveEmployeeInput,
     format_search_hit_label,
 )
-from domain.permissions import Permission
+from domain.permissions import Permission, has_permission
 from services.authorization import AuthorizationError, AuthorizationService
+from services.availability_statuses import AvailabilityStatusService
 from services.directories import DirectoryService
 from services.employees import EmployeeError, EmployeeService
 from services.session import SessionState
+from services.status_history import StatusHistoryService
 from ui.theme import TEXT_MUTED
 
 _REQUIRED = (
@@ -49,14 +51,19 @@ class EmployeeCardDialog(QDialog):
         employee_id: int | None = None,
         parent: QWidget | None = None,
         authz: AuthorizationService | None = None,
+        status_history: StatusHistoryService | None = None,
+        availability_statuses: AvailabilityStatusService | None = None,
     ) -> None:
         super().__init__(parent)
         self._employees = employees
         self._directories = directories
         self._session = session
         self._authz = authz or AuthorizationService()
+        self._status_history = status_history
+        self._availability_statuses = availability_statuses
         self._employee_id = employee_id
         self.saved_employee_id: int | None = None
+        self.status_changed = False
         self._is_archived = False
         self._loading = False
         self._original_sensitive: tuple[str | None, str | None] = (None, None)
@@ -122,6 +129,17 @@ class EmployeeCardDialog(QDialog):
             self._archive_btn.setObjectName("archiveEmployeeBtn")
             self._archive_btn.clicked.connect(self._toggle_archive)
             layout.addWidget(self._archive_btn)
+        can_assign = (
+            employee_id is not None
+            and self._status_history is not None
+            and self._availability_statuses is not None
+            and has_permission(session.role, Permission.MANAGE_STATUSES)
+        )
+        if can_assign:
+            self._assign_status_btn = QPushButton("Назначить статус…")
+            self._assign_status_btn.setObjectName("assignStatusFromCardBtn")
+            self._assign_status_btn.clicked.connect(self._open_assign_status)
+            layout.addWidget(self._assign_status_btn)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._branch.currentIndexChanged.connect(self._on_branch_changed)
@@ -165,6 +183,29 @@ class EmployeeCardDialog(QDialog):
         if hasattr(self, "_archive_btn"):
             self._archive_btn.setText("Восстановить" if archived else "В архив")
             self._archive_btn.setEnabled(True)
+        if hasattr(self, "_assign_status_btn"):
+            self._assign_status_btn.setEnabled(not archived)
+
+    def _open_assign_status(self) -> None:
+        if (
+            self._employee_id is None
+            or self._status_history is None
+            or self._availability_statuses is None
+        ):
+            return
+        from ui.status_assign_dialog import StatusAssignDialog
+
+        dialog = StatusAssignDialog(
+            self._status_history,
+            self._availability_statuses,
+            self._session,
+            employee_id=self._employee_id,
+            employee_name=self._name.text().strip() or f"#{self._employee_id}",
+            parent=self,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.status_changed = True
+            self.accept()
 
     def _fill_static_combos(self) -> None:
         self._loading = True

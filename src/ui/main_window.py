@@ -24,12 +24,14 @@ from domain.permissions import Permission
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
+from services.availability_statuses import AvailabilityStatusService
 from services.backup import BackupService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from services.standard_reports import StandardReportService
+from services.status_history import StatusHistoryService
 from services.template_library import TemplateLibraryService
 from services.user_action_log import UserActionLogService
 from ui.action_log_dialog import ActionLogDialog
@@ -112,6 +114,10 @@ class MainWindow(QMainWindow):
                 reports=StandardReportService(self._conn, self._session),
                 templates=TemplateLibraryService(
                     self._conn, self._session, data_dir=data_dir
+                ),
+                status_history=StatusHistoryService(self._conn, self._session),
+                availability_statuses=AvailabilityStatusService(
+                    self._conn, self._session
                 ),
             )
             self._roster.filters_reset.connect(self._clear_search)
@@ -328,6 +334,12 @@ class MainWindow(QMainWindow):
             self._roster._reports = StandardReportService(self._conn, self._session)
             self._roster._templates = TemplateLibraryService(
                 self._conn, self._session, data_dir=data_dir
+            )
+            self._roster._status_history = StatusHistoryService(
+                self._conn, self._session
+            )
+            self._roster._availability_statuses = AvailabilityStatusService(
+                self._conn, self._session
             )
             self._roster.reload()
 
