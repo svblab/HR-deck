@@ -22,6 +22,7 @@ from domain.template_markers import (
     block_name_from_token,
     canonical_key,
     extract_markers,
+    find_malformed_marker_fragments,
     is_structural_token,
     validate_block_name,
 )
@@ -110,6 +111,12 @@ def _validate_sheet(sheet: Worksheet) -> set[str]:
             text = _cell_source_text(cell)
             if not text:
                 continue
+            malformed = find_malformed_marker_fragments(text)
+            if malformed:
+                raise TemplateValidationError(
+                    "malformed marker syntax in sheet "
+                    f"{sheet.title!r} cell {cell.coordinate}: {malformed[0]!r}"
+                )
             try:
                 tokens = extract_markers(text)
             except MarkerSyntaxError as exc:

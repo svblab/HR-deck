@@ -15,7 +15,12 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
-from domain.template_markers import CANONICAL_KEYS, CONTRACT_VERSION, canonical_key
+from domain.template_markers import (
+    CANONICAL_KEYS,
+    CONTRACT_VERSION,
+    canonical_key,
+    find_malformed_marker_fragments,
+)
 from reports.pdf_export import _find_font
 
 BindingMode = Literal["acroform", "regions"]
@@ -94,6 +99,13 @@ def validate_pdf(source: Path, *, manifest_path: Path | None = None) -> Archived
 
     field_names = _acroform_field_names(reader)
     if field_names:
+        for index, name in enumerate(field_names):
+            malformed = find_malformed_marker_fragments(name)
+            if malformed:
+                raise PdfTemplateValidationError(
+                    "malformed marker syntax in acroform field "
+                    f"index {index}: {malformed[0]!r}"
+                )
         unknown = tuple(sorted(name for name in field_names if canonical_key(name) is None))
         if unknown:
             raise PdfTemplateValidationError(
@@ -151,10 +163,16 @@ def _load_regions_manifest(path: Path) -> tuple[RegionSpec, ...]:
     if not isinstance(raw, list) or not raw:
         raise PdfTemplateValidationError("regions manifest has no regions")
     specs: list[RegionSpec] = []
-    for item in raw:
+    for index, item in enumerate(raw):
         if not isinstance(item, dict):
             raise PdfTemplateValidationError("invalid region entry")
         field = str(item.get("field", ""))
+        malformed = find_malformed_marker_fragments(field)
+        if malformed:
+            raise PdfTemplateValidationError(
+                "malformed marker syntax in regions manifest "
+                f"region index {index}: {malformed[0]!r}"
+            )
         if field not in CANONICAL_KEYS:
             raise PdfTemplateValidationError(f"unknown region field: {field}")
         specs.append(

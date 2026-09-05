@@ -10,6 +10,11 @@ CONTRACT_VERSION = "1.0"
 MARKER_RE = re.compile(r"\{\{([^{}]+)\}\}")
 BLOCK_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
+# После удаления валидных {{…}} — «почти-маркеры» с битыми скобками (issue #36).
+_MALFORMED_SINGLE_CLOSE = re.compile(r"\{\{[^{}]*\}(?!\})")
+_MALFORMED_UNCLOSED = re.compile(r"\{\{[^{}]*\Z")
+_MALFORMED_SINGLE_OPEN = re.compile(r"(?<!\{)\{[^{}]+\}\}")
+
 # canonical key -> aliases (ADR-0005 table)
 _ALIASES: dict[str, tuple[str, ...]] = {
     "report.title": ("заголовок",),
@@ -73,6 +78,30 @@ def extract_markers(text: str) -> list[str]:
         if " " in token or "\t" in token:
             raise MarkerSyntaxError(f"spaces inside marker: {{{{{token}}}}}")
         found.append(token)
+    return found
+
+
+def find_malformed_marker_fragments(text: str) -> list[str]:
+    """
+    Найти подстроки, похожие на маркеры {{…}}, но не совпадающие с MARKER_RE.
+
+    Узкая эвристика: после удаления валидных совпадений остаются
+    ``{{…}`` (одна закрывающая), незакрытый ``{{…`` до конца строки, или
+    ``{…}}`` (одна открывающая). Не трогает текст без ``{``.
+    """
+    if not text or not isinstance(text, str) or "{" not in text:
+        return []
+    remainder = MARKER_RE.sub("", text)
+    found: list[str] = []
+    for pattern in (
+        _MALFORMED_SINGLE_CLOSE,
+        _MALFORMED_UNCLOSED,
+        _MALFORMED_SINGLE_OPEN,
+    ):
+        for match in pattern.finditer(remainder):
+            fragment = match.group(0)
+            if fragment and fragment not in found:
+                found.append(fragment)
     return found
 
 

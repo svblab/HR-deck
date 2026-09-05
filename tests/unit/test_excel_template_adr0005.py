@@ -40,6 +40,29 @@ def test_adr0005_excel_unknown_marker_rejected_on_upload(tmp_path: Path) -> None
     assert not archive.exists()
 
 
+def test_adr0005_excel_malformed_marker_rejected_on_upload(tmp_path: Path) -> None:
+    """Issue #36 / ТЗ §11: {{должность} (одна «}») не должна проходить валидацию.
+
+    До фикса MARKER_RE не матчил фрагмент → upload успешен, в отчёте литерал
+    оставался без подсказки.
+    """
+    src = tmp_path / "malformed.xlsx"
+    _save_template(
+        src,
+        [
+            ["{{заголовок}}", "{{должность}"],
+            ["{{#ROW}}", "{{ФИО}}"],
+        ],
+    )
+    archive = tmp_path / "archive.xlsx"
+    with pytest.raises(TemplateValidationError, match="malformed marker") as exc:
+        archive_upload(src, archive)
+    msg = str(exc.value)
+    assert "должность" in msg
+    assert "B1" in msg
+    assert not archive.exists()
+
+
 def test_adr0005_excel_alias_resolves_like_canonical_key() -> None:
     assert canonical_key("ФИО") == "employee.full_name"
     assert canonical_key("employee.full_name") == "employee.full_name"
