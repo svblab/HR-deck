@@ -43,6 +43,13 @@ def test_disabled_timeout_never_auto_locks() -> None:
     assert not s.locked
 
 
+def test_zero_timeout_never_auto_locks() -> None:
+    s = _session(inactivity_timeout_seconds=0)
+    assert not s.check_inactivity(1_000.0 + 10_000)
+    assert not s.locked
+    assert not s.inactivity_lock_active
+
+
 def test_configurable_timeout() -> None:
     s = _session(inactivity_timeout_seconds=60)
     assert s.check_inactivity(1_060.0)
