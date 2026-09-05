@@ -85,8 +85,25 @@ Automated partial coverage: `test_main_window_smoke.py`, dialog unit tests.
 | 2 | Search → card → status cycle | ☐ | ☐ | view only | partial | _pending_ |
 | 3 | Standard report Excel+PDF | ☐ | ☐ | ☐ | yes | _pending_ |
 | 4 | Template report generate | ☐ | ☐ | ☐ | yes | _pending_ |
-| 5 | Backup create + restore | ☐ | — | — | yes | _pending_ |
+| 5 | Backup create + restore | ☑ | — | — | yes | PASS (2026-09-05) |
 | 6 | `.deb` upgrade on test copy | ☑ | — | — | CI deb-verify | PASS (2026-09-05; путь b) |
+
+**Item 5 evidence:** manual round-trip on training DB (PR #41) — created copy of
+`personnel-*.db` + `.keywrap` (verify OK), changed employee #1 status
+office → remote, restored → `pre-restore-personnel-20260905T102805Z.db`
+created automatically, status reverted to office; exercised through
+`BackupService` directly (same service the ⚙ dialog wraps), plus green
+`test_backup_restore.py` / `test_backup_dialog.py` (buttons, confirmation
+warning, cancel path, reconnect callback with mocked `QFileDialog`).
+Gap found in review: none of the above ever drove the real
+`MainWindow._replace_connection()` reconnect path — closed separately by
+PR #47 (`tests/integration/test_main_window_reconnect.py`): real
+`MainWindow` built with a live connection, roster populated, employee
+renamed after backup, `_replace_connection()` called with the restored
+connection, asserts old connection closed, roster service swapped, and
+`RosterPanel` reflects the pre-mutation (restored) name after reload —
+this is the one piece of the flow specific to the live app, not just to
+`BackupService` or `BackupDialog` in isolation.
 
 **Item 6 evidence (path b — Windows host, no local Ubuntu upgrade):** packaging/offline closed by CI on `master` @ `e4e3b04` — [run 33956982879](https://github.com/svblab/HR-deck/actions/runs/33956982879): `deb-build` + `deb-verify` (install smoke on `ubuntu:24.04` and offline `--network none`) both success. Upgrade/data path: `pytest tests/integration/test_safe_upgrade.py` — 3 passed (pre-upgrade `pre-upgrade-*` on non-empty DB, data preserved, rollback). Full dual-`.deb` install on a training DB copy (path a) not required for this gate.
 
