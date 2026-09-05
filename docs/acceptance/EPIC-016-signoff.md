@@ -66,7 +66,7 @@
 
 | Field | Value |
 |---|---|
-| Reviewer (non-author) | _[ФИО проверяющего — заполнить]_ |
+| Reviewer (non-author) | Петров Семён Романович |
 | Date | 2026-09-05 |
 | Outcome | ☑ PASS ☐ FAIL |
 | Notes | Шаблон собран самостоятельно по `docs/report-templates-guide.md` без обращения к разработчику, валидация при загрузке прошла без ошибок. Отчёт сформирован; скалярные и `{{#ROW}}`-маркеры вышли пустыми — соответствует §8 гайда (текущая версия генерирует с `values={}`, диалога ввода данных нет). Отдельно замечено: в одной ячейке маркер `{{должность}` написан с опечаткой (одна закрывающая скобка вместо двух) — движок (`MARKER_RE` требует ровно `{{…}}`) не распознал его ни как известный, ни как unknown-маркер, поэтому валидация его пропустила молча, а в отчёте он остался как есть. Это не помешало пройти гейт (баг относится к движку/UX валидации, не к качеству документации); тикет: [#36](https://github.com/svblab/HR-deck/issues/36). |
@@ -120,7 +120,7 @@ Record actual counts in PR verification section.
 | Automated acceptance scope | ✅ in PR |
 | Performance dataset + tests | ✅ in PR |
 | Crash/recovery gap test | ✅ in PR |
-| Template non-author gate | ✅ PASS (2026-09-05; ФИО reviewer — уточнить) |
+| Template non-author gate | ✅ PASS (2026-09-05; Петров Семён Романович) |
 | UI manual checklist | ⏸ **PENDING HUMAN** |
 | ROADMAP EPIC-016 row | ⏸ separate closeout after human gates |
 
