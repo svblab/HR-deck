@@ -158,4 +158,7 @@ QLabel#summaryStrip {{
     font-size: 12px;
     color: {TEXT_MUTED};
 }}
+QWidget#sessionLockOverlay {{
+    background: rgba(27, 42, 61, 0.94);
+}}
 """

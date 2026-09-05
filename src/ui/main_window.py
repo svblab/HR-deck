@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
         self._authz = AuthorizationService()
         self._auth = AuthenticationService()
         self._roster: RosterPanel | None = None
+        self._lock_overlay: QWidget | None = None
 
         root = QWidget(objectName="centralRoot")
         root_layout = QVBoxLayout(root)
@@ -262,6 +263,25 @@ class MainWindow(QMainWindow):
         self._clock_time.setText(time_text)
         self._clock_date.setText(date_text)
 
+    def _ensure_lock_overlay(self) -> QWidget:
+        if self._lock_overlay is None:
+            overlay = QWidget(self)
+            overlay.setObjectName("sessionLockOverlay")
+            overlay.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            overlay.hide()
+            self._lock_overlay = overlay
+        return self._lock_overlay
+
+    def _show_lock_overlay(self) -> None:
+        overlay = self._ensure_lock_overlay()
+        overlay.setGeometry(self.rect())
+        overlay.show()
+        overlay.raise_()
+
+    def _hide_lock_overlay(self) -> None:
+        if self._lock_overlay is not None:
+            self._lock_overlay.hide()
+
     def _check_idle(self) -> None:
         if self._session is None or self._db_path is None:
             return
@@ -272,8 +292,13 @@ class MainWindow(QMainWindow):
                 except Exception:  # noqa: BLE001
                     pass
                 self._conn = None
+            self._show_lock_overlay()
             dlg = UnlockDialog(self._session, self._db_path, self, conn=self._conn)
-            if dlg.exec() != UnlockDialog.DialogCode.Accepted:
+            dlg.raise_()
+            dlg.activateWindow()
+            accepted = dlg.exec() == UnlockDialog.DialogCode.Accepted
+            self._hide_lock_overlay()
+            if not accepted:
                 self.close()
                 return
             self._conn = dlg.conn
@@ -354,6 +379,11 @@ class MainWindow(QMainWindow):
             except Exception:  # noqa: BLE001
                 pass
         self.close()
+
+    def resizeEvent(self, event) -> None:  # noqa: ANN001
+        super().resizeEvent(event)
+        if self._lock_overlay is not None and self._lock_overlay.isVisible():
+            self._lock_overlay.setGeometry(self.rect())
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._session is not None and not self._session.locked:

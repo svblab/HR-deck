@@ -27,6 +27,11 @@ class SessionState:
     inactivity_timeout_seconds: int = 900
     inactivity_timeout_enabled: bool = True
 
+    @property
+    def inactivity_lock_active(self) -> bool:
+        """Автоблокировка включена и таймаут больше нуля."""
+        return self.inactivity_timeout_enabled and self.inactivity_timeout_seconds > 0
+
     def touch(self, now_mono: float | None = None) -> None:
         if not self.locked:
             self.last_activity_mono = monotonic() if now_mono is None else now_mono
@@ -45,7 +50,7 @@ class SessionState:
         Если таймаут истёк — перевести в locked и вернуть True.
         Без реальных sleep: вызывающий передаёт monotonic-время в тестах.
         """
-        if self.locked or not self.inactivity_timeout_enabled:
+        if self.locked or not self.inactivity_lock_active:
             return self.locked
         now = monotonic() if now_mono is None else now_mono
         elapsed = now - self.last_activity_mono
