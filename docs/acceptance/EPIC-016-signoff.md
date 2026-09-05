@@ -16,7 +16,7 @@
 | 2.2 | Журнал действий | `test_user_action_log.py`, `test_repositories_append_only.py` | — | ✅ automated |
 | 2.3 | 5 стандартных отчётов | `test_standard_reports.py` | — | ✅ automated |
 | 2.4 | Шаблоны Excel/PDF | `test_template_library*.py`, `test_template_samples.py` | — | ✅ automated |
-| 2.5 | Документация шаблонов (non-author) | — | **§3 ниже — PENDING HUMAN** | ⏸ human gate |
+| 2.5 | Документация шаблонов (non-author) | — | **§3 ниже — PASS (2026-09-05)** | ✅ human gate |
 | 2.6 | Расширяемость, архив, импорт | `test_employee_*`, `test_roster.py`, … | UI чек-лист §4 | 🟡 partial auto |
 | 2.7 | Бэкап, миграции, аварийное завершение | `test_backup_restore.py`, `test_safe_upgrade.py`, `test_crash_recovery_acceptance.py` | offline §5 | ✅ automated (+ offline CI) |
 | 2.8 | Производительность ~400 сотр. | `generate_perf_dataset.py`, `test_perf_acceptance.py` | качественная оценка §2 | ✅ automated smoke |
@@ -66,10 +66,10 @@
 
 | Field | Value |
 |---|---|
-| Reviewer (non-author) | _pending_ |
-| Date | _pending_ |
-| Outcome | ☐ PASS ☐ FAIL |
-| Notes | |
+| Reviewer (non-author) | Петров Семён Романович |
+| Date | 2026-09-05 |
+| Outcome | ☑ PASS ☐ FAIL |
+| Notes | Шаблон собран самостоятельно по `docs/report-templates-guide.md` без обращения к разработчику, валидация при загрузке прошла без ошибок. Отчёт сформирован; скалярные и `{{#ROW}}`-маркеры вышли пустыми — соответствует §8 гайда (текущая версия генерирует с `values={}`, диалога ввода данных нет). Отдельно замечено: в одной ячейке маркер `{{должность}` написан с опечаткой (одна закрывающая скобка вместо двух) — движок (`MARKER_RE` требует ровно `{{…}}`) не распознал его ни как известный, ни как unknown-маркер, поэтому валидация его пропустила молча, а в отчёте он остался как есть. Это не помешало пройти гейт (баг относится к движку/UX валидации, не к качеству документации); тикет: [#36](https://github.com/svblab/HR-deck/issues/36). |
 
 ---
 
@@ -120,7 +120,7 @@ Record actual counts in PR verification section.
 | Automated acceptance scope | ✅ in PR |
 | Performance dataset + tests | ✅ in PR |
 | Crash/recovery gap test | ✅ in PR |
-| Template non-author gate | ⏸ **PENDING HUMAN** |
+| Template non-author gate | ✅ PASS (2026-09-05; Петров Семён Романович) |
 | UI manual checklist | ⏸ **PENDING HUMAN** |
 | ROADMAP EPIC-016 row | ⏸ separate closeout after human gates |
 
