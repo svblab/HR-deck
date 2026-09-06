@@ -84,7 +84,7 @@ Automated partial coverage: `test_main_window_smoke.py`, dialog unit tests.
 | 1 | Login / unlock | ☑ | ☑ | ☑ | yes | PASS (2026-09-05; path b) |
 | 2 | Search → card → status cycle | ☑ | ☑ | view only | yes | PASS (2026-09-05; path b) |
 | 3 | Standard report Excel+PDF | ☑ | ☑ | ☑ | yes | PASS (2026-09-05; path b) |
-| 4 | Template report generate | ☐ | ☐ | ☐ | yes | _pending_ |
+| 4 | Template report generate | ☑ | ☑ | ☑ | yes | PASS (2026-09-06; path b) |
 | 5 | Backup create + restore | ☑ | — | — | yes | PASS (2026-09-05; training DB) |
 | 6 | `.deb` upgrade on test copy | ☑ | — | — | CI deb-verify | PASS (2026-09-05; путь b) |
 
@@ -93,6 +93,8 @@ Automated partial coverage: `test_main_window_smoke.py`, dialog unit tests.
 **Item 2 evidence (path b — automated UI):** search fixture employee by ФИО → open popup → full `EmployeeCardDialog` → `StatusAssignDialog` (office→remote); roster/board chip updates. Admin + HR happy path; Observer can search/open card but has no assign controls. Covered by `pytest tests/unit/test_search_card_status_ui.py` (`@pytest.mark.acceptance`) plus existing `tests/unit/test_main_roster_ui.py` / `tests/unit/test_status_assign_dialog.py`. Full three-role click-through on a training DB (path a) not required for this gate.
 
 **Item 3 evidence (path b — automated UI):** MainWindow «Отчёты» → `ReportsDialog` → SNAPSHOT preview (≥1 row) → export Excel + PDF (non-empty `PK…` / `%PDF` files) for Administrator, HR, and Observer (`VIEW_STANDARD_REPORTS`). Covered by `pytest tests/unit/test_standard_report_ui.py` (`@pytest.mark.acceptance`) plus existing `tests/unit/test_reports_dialog.py` and `tests/integration/test_standard_reports.py`. Full three-role click-through on a training DB (path a) not required for this gate.
+
+**Item 4 evidence (path b — automated UI):** Admin uploads `templates_samples/sample_report.xlsx` and `sample_report.pdf` (+ `sample_report.regions.json`) via `TemplateLibraryDialog` upload flow; then MainWindow «Шаблоны» → select version → «Сформировать…» produces non-empty Excel (`PK…`) and PDF (`%PDF`) for Administrator, HR, and Observer (`USE_ACTIVE_REPORT_TEMPLATES`). Both formats covered. Covered by `pytest tests/unit/test_template_report_ui.py` (`@pytest.mark.acceptance`) plus existing `tests/unit/test_template_library_dialog.py` / `tests/integration/test_template_samples.py`. Full three-role click-through on a training DB (path a) not required for this gate.
 
 **Item 5 evidence:** dialog `BackupDialog` (⚙) delegates to `BackupService` / `MainWindow._replace_connection` (reconnect without restart). On training DB (`personnel-availability-training`, admin/`Training-1`): create → `personnel-*.db` + `.keywrap` + integrity verify; change employee #1 status office→remote; restore → new `pre-restore-personnel-*.db` (+ keywrap), status rolled back to office. Also `pytest tests/integration/test_backup_restore.py tests/unit/test_backup_dialog.py` — all passed (incl. round-trip, pre-restore, UI create/restore with mocked file dialogs).
 
@@ -132,7 +134,7 @@ Record actual counts in PR verification section.
 | Performance dataset + tests | ✅ in PR |
 | Crash/recovery gap test | ✅ in PR |
 | Template non-author gate | ✅ PASS (2026-09-05; Петров Семён Романович) |
-| UI manual checklist | ⏸ **PENDING HUMAN** |
+| UI manual checklist | ✅ all 6 items PASS (path b, automated evidence — see §4) |
 | ROADMAP EPIC-016 row | ⏸ separate closeout after human gates |
 
 **EPIC-017 → EPIC-016 hard dependency:** unchanged on master (PR #30).
