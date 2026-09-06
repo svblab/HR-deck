@@ -19,10 +19,16 @@ from data.report_templates import (
 from data.repositories import UserActionLogRepository
 from domain.action_log import ENTITY_TEMPLATE
 from domain.permissions import Permission
-from reports.excel_template import ArchivedTemplate, archive_upload, generate_excel_report
+from reports.excel_template import (
+    ArchivedTemplate,
+    ExcelTemplateError,
+    archive_upload,
+    generate_excel_report,
+)
 from reports.pdf_template import (
     ArchivedPdfTemplate,
     BindingMode,
+    PdfTemplateError,
     archive_pdf_upload,
     generate_pdf_report,
 )
@@ -150,6 +156,9 @@ class TemplateLibraryService:
             )
             self._conn.commit()
             return version_id
+        except (ExcelTemplateError, PdfTemplateError) as exc:
+            self._conn.rollback()
+            raise TemplateLibraryError(str(exc)) from exc
         except Exception:
             self._conn.rollback()
             raise

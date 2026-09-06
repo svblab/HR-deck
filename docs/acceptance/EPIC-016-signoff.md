@@ -83,7 +83,7 @@ Automated partial coverage: `test_main_window_smoke.py`, dialog unit tests.
 |---|---|:---:|:---:|:---:|:---:|:---:|
 | 1 | Login / unlock | ☑ | ☑ | ☑ | yes | PASS (2026-09-05; path b) |
 | 2 | Search → card → status cycle | ☑ | ☑ | view only | yes | PASS (2026-09-05; path b) |
-| 3 | Standard report Excel+PDF | ☐ | ☐ | ☐ | yes | _pending_ |
+| 3 | Standard report Excel+PDF | ☑ | ☑ | ☑ | yes | PASS (2026-09-05; path b) |
 | 4 | Template report generate | ☐ | ☐ | ☐ | yes | _pending_ |
 | 5 | Backup create + restore | ☑ | — | — | yes | PASS (2026-09-05; training DB) |
 | 6 | `.deb` upgrade on test copy | ☑ | — | — | CI deb-verify | PASS (2026-09-05; путь b) |
@@ -91,6 +91,8 @@ Automated partial coverage: `test_main_window_smoke.py`, dialog unit tests.
 **Item 1 evidence (path b — automated UI + service):** `LoginDialog` success for Administrator / HR / Observer; `UnlockDialog` wrong-password generic message + correct-password restore; `MainWindow._check_idle` shows `sessionLockOverlay` under unlock dialog and hides it after success; cancel of unlock closes the window. Covered by `pytest tests/unit/test_login_unlock_ui.py` (`@pytest.mark.acceptance`) plus existing `tests/integration/test_auth_rbac.py` (`test_login_success_and_failure`, `test_session_lock_and_unlock`) and `tests/unit/test_session_timeout.py` / `tests/unit/test_ui_auth_dialogs.py`. Full three-role click-through on a training DB (path a) not required for this gate.
 
 **Item 2 evidence (path b — automated UI):** search fixture employee by ФИО → open popup → full `EmployeeCardDialog` → `StatusAssignDialog` (office→remote); roster/board chip updates. Admin + HR happy path; Observer can search/open card but has no assign controls. Covered by `pytest tests/unit/test_search_card_status_ui.py` (`@pytest.mark.acceptance`) plus existing `tests/unit/test_main_roster_ui.py` / `tests/unit/test_status_assign_dialog.py`. Full three-role click-through on a training DB (path a) not required for this gate.
+
+**Item 3 evidence (path b — automated UI):** MainWindow «Отчёты» → `ReportsDialog` → SNAPSHOT preview (≥1 row) → export Excel + PDF (non-empty `PK…` / `%PDF` files) for Administrator, HR, and Observer (`VIEW_STANDARD_REPORTS`). Covered by `pytest tests/unit/test_standard_report_ui.py` (`@pytest.mark.acceptance`) plus existing `tests/unit/test_reports_dialog.py` and `tests/integration/test_standard_reports.py`. Full three-role click-through on a training DB (path a) not required for this gate.
 
 **Item 5 evidence:** dialog `BackupDialog` (⚙) delegates to `BackupService` / `MainWindow._replace_connection` (reconnect without restart). On training DB (`personnel-availability-training`, admin/`Training-1`): create → `personnel-*.db` + `.keywrap` + integrity verify; change employee #1 status office→remote; restore → new `pre-restore-personnel-*.db` (+ keywrap), status rolled back to office. Also `pytest tests/integration/test_backup_restore.py tests/unit/test_backup_dialog.py` — all passed (incl. round-trip, pre-restore, UI create/restore with mocked file dialogs).
 
