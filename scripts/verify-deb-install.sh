@@ -1,5 +1,5 @@
 #!/bin/bash
-# Проверка: собранный .deb устанавливается на чистый Ubuntu 24.04 (EPIC-015).
+# Проверка: собранный .deb устанавливается на чистый Debian 12 (bookworm).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -23,7 +23,7 @@ run_in_container() {
   "$engine" run --name "$cname" \
     -v "$DEB_DIR:/pkgs:ro" \
     -v "$SMOKE:/verify-deb-smoke.sh:ro" \
-    ubuntu:24.04 bash -cex "
+    debian:12 bash -cex "
       export DEBIAN_FRONTEND=noninteractive
       apt-get update
       apt-get install -y /pkgs/$DEB_NAME
