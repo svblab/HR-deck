@@ -9,6 +9,10 @@
 
 ## Сборка (Linux)
 
+Собирайте на **Debian 12** (или в `docker run … debian:12`), чтобы vendored
+venv совпал с целевым Python 3.11. Сборка на Ubuntu 24.04 (Python 3.12) даёт
+пакет, который не импортирует зависимости после установки на bookworm.
+
 ```bash
 chmod +x scripts/build-deb.sh packaging/debian/*.sh
 ./scripts/build-deb.sh
@@ -55,13 +59,16 @@ Debian 12 **не** поставляет `python3-pyside6*` и `sqlcipher3` в ap
 
 ## CI
 
-- Job `deb-build`: `dpkg-buildpackage` (артефакт `.deb`).
+- Job `deb-build`: Docker `debian:12` on the Ubuntu runner — builds the `.deb`
+  with bookworm’s Python 3.11 so the vendored venv matches the deploy target
+  (building on the runner’s Ubuntu Python 3.12 breaks install on Debian 12).
 - Job `deb-verify`: Docker `debian:12` (preinstalled runner Docker),
   `apt-get install` артефакта, `verify-deb-smoke.sh`, затем тот же smoke в
   образе с `--network none` (офлайн-старт без сети).
 
-Локально: `./scripts/build-deb.sh` затем `./scripts/verify-deb-install.sh`
-(docker/podman + smoke + `--network none`).
+Локально: предпочтительно собирать на Debian 12 (или
+`docker run … debian:12 ./scripts/build-deb.sh`), затем
+`./scripts/verify-deb-install.sh` (docker/podman + smoke + `--network none`).
 
 Папка для передачи тестировщику (`.deb` + checksum + инструкции):  
 `./scripts/make-test-bundle.sh` → `dist/test-bundle-<version>/`.

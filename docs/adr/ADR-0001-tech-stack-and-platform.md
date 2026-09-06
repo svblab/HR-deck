@@ -165,6 +165,9 @@ Windows/Wine/VM (соответствует разделу 11 ТЗ, блок «�
 
 - `scripts/verify-deb-install.sh` и job `deb-verify` используют образ
   `debian:12` (не `ubuntu:24.04`).
+- Job `deb-build` тоже собирает `.deb` внутри `debian:12`: vendored venv
+  привязан к minor-версии Python сборки; пакет, собранный на Ubuntu 24.04
+  (Python 3.12), не проходит smoke на Debian 12 (Python 3.11).
 - Документация установки и packaging указывают Debian 12+.
 - Runner GitHub Actions (`runs-on: ubuntu-24.04`) — ОС **сборщика CI**, не
   целевой ноутбук; это не часть данного решения.
