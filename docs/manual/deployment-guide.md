@@ -5,7 +5,7 @@
 `services/upgrade.py`.
 
 Установка рассчитана на **Debian/Ubuntu** (ADR-0001, ТЗ §8). Целевая проверка:
-**Ubuntu 24.04 LTS**.
+**Debian 12 (bookworm) или новее** (ADR-0001, дополнение 2026-09-06).
 
 Краткая памятка для администратора — [`install-update-quick.md`](install-update-quick.md).
 

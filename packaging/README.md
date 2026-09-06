@@ -4,7 +4,8 @@
 
 Ожидаемый пакет: `personnel-availability`.
 
-**Целевой релиз для проверки:** Ubuntu 24.04 LTS.
+**Целевой релиз для проверки:** Debian 12 (bookworm) или новее
+(ADR-0001, дополнение 2026-09-06).
 
 ## Сборка (Linux)
 
@@ -16,7 +17,7 @@ chmod +x scripts/build-deb.sh packaging/debian/*.sh
 
 ## Зависимости Python (vendored venv)
 
-Ubuntu 24.04 **не** поставляет `python3-pyside6*` и `sqlcipher3` в apt. Пакет
+Debian 12 **не** поставляет `python3-pyside6*` и `sqlcipher3` в apt. Пакет
 собирает приватный virtualenv в `/opt/personnel-availability/venv` на этапе
 `dpkg-buildpackage` (`pip install` wheel + зависимости из `pyproject.toml`) и
 включает его в `.deb`. При установке пользователю **не** нужен `pip install`.
@@ -55,7 +56,7 @@ Ubuntu 24.04 **не** поставляет `python3-pyside6*` и `sqlcipher3` в
 ## CI
 
 - Job `deb-build`: `dpkg-buildpackage` (артефакт `.deb`).
-- Job `deb-verify`: Docker `ubuntu:24.04` (preinstalled runner Docker),
+- Job `deb-verify`: Docker `debian:12` (preinstalled runner Docker),
   `apt-get install` артефакта, `verify-deb-smoke.sh`, затем тот же smoke в
   образе с `--network none` (офлайн-старт без сети).
 

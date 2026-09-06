@@ -84,13 +84,13 @@ jobs:
           name: personnel-availability-deb
           path: pkgs
 
-      - name: Install and smoke-verify on clean Ubuntu 24.04
+      - name: Install and smoke-verify on clean Debian 12
         run: |
           chmod +x scripts/verify-deb-smoke.sh
           docker run --name pa-verify \
             -v "$PWD/pkgs:/pkgs:ro" \
             -v "$PWD/scripts/verify-deb-smoke.sh:/verify-deb-smoke.sh:ro" \
-            ubuntu:24.04 bash -cex "
+            debian:12 bash -cex "
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
               apt-get install -y /pkgs/*.deb
