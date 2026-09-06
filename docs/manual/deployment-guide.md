@@ -30,6 +30,10 @@ chmod +x scripts/build-deb.sh packaging/debian/*.sh
 
 ## 2. Установка
 
+Перед установкой на реальном ноутбуке выполните проверки из
+[`install-update-quick.md`](install-update-quick.md) §0 (ОС, архитектура, место,
+зависимости, сеть / офлайн).
+
 ```bash
 sudo dpkg -i dist/personnel-availability_*.deb
 sudo apt-get install -f   # если не хватило зависимостей
