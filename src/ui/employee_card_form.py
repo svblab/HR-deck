@@ -254,13 +254,34 @@ class EmployeeCardDialog(QDialog):
         self._is_archived = card.is_archived
         self._loading = True
         self._name.setText(card.full_name)
+        self._fill_static_combos()
+        self._include_archived_directory_values(card)
         _select(self._position, card.position_id)
         _select(self._branch, card.branch_id)
         self._fill_departments()
+        _include_if_missing(
+            self._department,
+            self._directories.list_departments(
+                branch_id=card.branch_id, active_only=False
+            ),
+            card.department_id,
+        )
         _select(self._department, card.department_id)
         self._fill_divisions()
         if card.division_id is not None:
+            _include_if_missing(
+                self._division,
+                self._directories.list_divisions(
+                    department_id=card.department_id, active_only=False
+                ),
+                card.division_id,
+            )
             _select(self._division, card.division_id)
+        _include_if_missing(
+            self._employment,
+            self._directories.list_employment_types(active_only=False),
+            card.employment_type_id,
+        )
         _select(self._employment, card.employment_type_id)
         self._note.setText(card.note or "")
         self._sensitive_masked = card.sensitive_fields_masked
@@ -271,6 +292,18 @@ class EmployeeCardDialog(QDialog):
         self._loading = False
         self._refresh_similar()
         self._apply_archived_state()
+
+    def _include_archived_directory_values(self, card) -> None:
+        _include_if_missing(
+            self._position,
+            self._directories.list_positions(active_only=False),
+            card.position_id,
+        )
+        _include_if_missing(
+            self._branch,
+            self._directories.list_branches(active_only=False),
+            card.branch_id,
+        )
 
     def _toggle_archive(self) -> None:
         if self._employee_id is None:
@@ -403,3 +436,12 @@ def _select(combo: QComboBox, value: int) -> None:
     idx = combo.findData(value)
     if idx >= 0:
         combo.setCurrentIndex(idx)
+
+
+def _include_if_missing(combo: QComboBox, items: list, entity_id: int) -> None:
+    if combo.findData(entity_id) >= 0:
+        return
+    for item in items:
+        if item.id == entity_id:
+            combo.addItem(item.name, item.id)
+            return
