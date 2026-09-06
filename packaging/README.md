@@ -61,3 +61,6 @@ Ubuntu 24.04 **не** поставляет `python3-pyside6*` и `sqlcipher3` в
 
 Локально: `./scripts/build-deb.sh` затем `./scripts/verify-deb-install.sh`
 (docker/podman + smoke + `--network none`).
+
+Папка для передачи тестировщику (`.deb` + checksum + инструкции):  
+`./scripts/make-test-bundle.sh` → `dist/test-bundle-<version>/`.

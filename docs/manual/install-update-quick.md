@@ -5,6 +5,122 @@
 
 ---
 
+## 0. Перед установкой — проверка системы
+
+Выполните эти шаги **до** `dpkg -i`, на ноутбуке, куда ставите программу.
+Цель: понять, подойдёт ли машина и нужна ли сеть при установке.
+
+Список runtime-зависимостей ниже взят из поля `Depends:` файла
+`packaging/debian/control` (и совпадает с `dpkg-deb --info` у собранного
+`.deb`). Целевая платформа — **Ubuntu 24.04 LTS (amd64)** по ADR-0001 / ТЗ §8.
+
+### 0.1. Версия Ubuntu
+
+```bash
+. /etc/os-release
+echo "$NAME $VERSION_ID"
+```
+
+**ОК:** `Ubuntu` и `VERSION_ID=24.04`.
+
+Если другая версия или другой дистрибутив (например, Linux Mint / Debian):
+пакет **не проверялся** вне Ubuntu 24.04. Можно пробовать на свой риск или
+взять машину/ВМ с Ubuntu 24.04.
+
+### 0.2. Архитектура
+
+```bash
+uname -m
+```
+
+**ОК:** `x86_64` (это amd64 — архитектура пакета в `control`).
+
+Если вывод другой (например, `aarch64`) — этот `.deb` **не** подойдёт.
+
+### 0.3. Свободное место на диске
+
+Узнайте размер установки из самого файла пакета (поле `Installed-Size` —
+в килобайтах):
+
+```bash
+dpkg-deb --info personnel-availability_*.deb | grep Installed-Size
+df -h /
+```
+
+Для выпуска `0.1.0-1` при сборке было: **Installed-Size ≈ 743098 КБ (~726 МБ)**
+плюс сам файл `.deb` ≈ **204 МБ**. С запасом на распаковку и данные
+пользователя держите **не меньше ~1,5 ГБ** свободно на `/`
+(операционная рекомендация; CI это число не измеряет).
+
+**ОК:** `df -h /` показывает достаточно свободного места (колонка `Avail`).
+
+### 0.4. Уже ли стоят системные библиотеки
+
+Проверьте каждый пакет из `Depends:` (имена — как в `packaging/debian/control`):
+
+```bash
+for pkg in python3 libegl1 libxkbcommon0 libgl1 libdbus-1-3 \
+  libfontconfig1 libfreetype6 libglib2.0-0 libxcb-xinerama0 libxcb-cursor0 \
+  libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
+  libxcb-shape0 fonts-dejavu-core
+do
+  echo -n "$pkg: "
+  if dpkg -s "$pkg" >/dev/null 2>&1; then echo OK; else echo MISSING; fi
+done
+```
+
+**ОК:** у всех строк `OK`.  
+`MISSING` значит при `apt-get install -f` apt попытается **скачать** пакет
+из интернета (если сеть есть).
+
+Замечание: на Ubuntu 24.04 пакет `libglib2.0-0` может быть установлен как
+`libglib2.0-0t64` — тогда `dpkg -s libglib2.0-0` всё равно обычно успешен
+(виртуальный пакет / переходное имя). Если видите `MISSING` только для
+glib — дополнительно: `dpkg -s libglib2.0-0t64`.
+
+### 0.5. Есть ли интернет и что делать дальше
+
+```bash
+ping -c 1 1.1.1.1
+# или: curl -I --max-time 5 https://archive.ubuntu.com/
+```
+
+| Сеть | Результат §0.4 | Действие |
+|---|---|---|
+| Есть | любые | Обычная установка (§ «Установка»): `dpkg -i` + `apt-get install -f`. |
+| Нет | все `OK` | Можно ставить **полностью офлайн**: достаточно `sudo dpkg -i …deb` (без `apt-get install -f`). |
+| Нет | есть `MISSING` | Сначала на **другой** машине с Ubuntu 24.04 amd64 **и** интернетом скачайте недостающие `.deb`, скопируйте на тот же носитель, что и основной пакет, затем на целевом ноутбуке установите все сразу (см. ниже). |
+
+**Предзагрузка зависимостей** (рекомендуемая процедура для офлайн-ноутбука;
+**не** покрыта текущими автотестами CI — проверяется вручную):
+
+На машине с сетью (та же Ubuntu 24.04 amd64):
+
+```bash
+mkdir -p ~/pa-deps && cd ~/pa-deps
+# Перечислите только то, что было MISSING в §0.4, например:
+sudo apt-get update
+apt-get download python3 libegl1 libxkbcommon0 libgl1 libdbus-1-3 \
+  libfontconfig1 libfreetype6 libglib2.0-0 libxcb-xinerama0 libxcb-cursor0 \
+  libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
+  libxcb-shape0 fonts-dejavu-core
+# При необходимости apt может предложить дополнительные пакеты —
+# их тоже нужно скачать (apt-get download …).
+```
+
+Скопируйте папку `pa-deps` и файл `personnel-availability_*.deb` на флешку.
+На целевом ноутбуке **без сети**:
+
+```bash
+cd /path/to/media   # где лежат .deb зависимостей и основной пакет
+sudo dpkg -i *.deb
+```
+
+Если `dpkg` всё ещё ругается на зависимости — какого-то `.deb` не хватило;
+докачайте его на машине с сетью и повторите.
+
+---
+
 ## Установка (Ubuntu 24.04 / Debian)
 
 ```bash
@@ -38,7 +154,7 @@ sudo apt-get install -f
 ## Обновление
 
 ```bash
-sudo dpkg -i dist/personnel-availability_<новая>_all.deb
+sudo dpkg -i dist/personnel-availability_<новая>_amd64.deb
 ```
 
 - Файлы в `/opt` и `/usr` обновляются; домашний каталог **не трогается**.
