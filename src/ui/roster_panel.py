@@ -126,6 +126,14 @@ class RosterPanel(QWidget):
         )
         self._reports_btn.setEnabled(bool(can_reports and self._reports and self._directories))
         self._reports_btn.clicked.connect(self._open_reports)
+        self._directories_btn = QPushButton("Справочники", objectName="directoriesBtn")
+        can_directories = self._session is not None and has_permission(
+            self._session.role, Permission.VIEW_DIRECTORIES
+        )
+        self._directories_btn.setEnabled(
+            bool(can_directories and self._directories and self._session)
+        )
+        self._directories_btn.clicked.connect(self._open_directories)
         self._templates_btn = QPushButton("Шаблоны", objectName="templatesBtn")
         can_templates = self._session is not None and (
             has_permission(self._session.role, Permission.MANAGE_REPORT_TEMPLATES)
@@ -141,6 +149,7 @@ class RosterPanel(QWidget):
         row1.addWidget(self._import_btn)
         row1.addWidget(self._export_btn)
         row1.addWidget(self._reports_btn)
+        row1.addWidget(self._directories_btn)
         row1.addWidget(self._templates_btn)
         row1.addWidget(self._board_btn)
         row1.addWidget(self._table_btn)
@@ -336,6 +345,13 @@ class RosterPanel(QWidget):
         if self._reports is None or self._directories is None or self._employees is None:
             return
         ReportsDialog(self._reports, self._directories, self._employees, self).exec()
+
+    def _open_directories(self) -> None:
+        if self._directories is None or self._session is None:
+            return
+        from ui.directories_dialog import DirectoriesDialog
+
+        DirectoriesDialog(self._directories, self._session, self).exec()
 
     def _open_templates(self) -> None:
         if self._templates is None or self._session is None:
