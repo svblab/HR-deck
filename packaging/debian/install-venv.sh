@@ -31,3 +31,13 @@ fi
 install -d "$DESTDIR/usr/bin"
 install -m 755 "$ROOT/packaging/debian/personnel-availability-launcher" \
     "$DESTDIR/usr/bin/personnel-availability"
+# Windows checkouts may leave CRLF in the launcher; Linux rejects #!/bin/sh\r.
+sed -i 's/\r$//' "$DESTDIR/usr/bin/personnel-availability"
+# Defense in depth: strip CR from any text entry-point scripts we rewrote.
+for script in "$TARGET/venv/bin"/*; do
+    [ -f "$script" ] || continue
+    [ -L "$script" ] && continue
+    if head -1 "$script" 2>/dev/null | grep -q '^#!'; then
+        sed -i 's/\r$//' "$script"
+    fi
+done

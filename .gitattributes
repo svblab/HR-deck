@@ -1,0 +1,5 @@
+# Keep packaging shell scripts LF-only (CRLF shebangs break on Debian).
+*.sh text eol=lf
+packaging/debian/rules text eol=lf
+packaging/debian/postinst text eol=lf
+packaging/debian/personnel-availability-launcher text eol=lf
