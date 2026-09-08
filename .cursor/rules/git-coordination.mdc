@@ -1,0 +1,155 @@
+---
+description: Git/branch/PR coordination — remote-first, three states, human merge handoff
+alwaysApply: true
+---
+
+# Git Coordination (complements docs/ANCHOR_PROTOCOL.md)
+
+Repository: `https://github.com/svblab/HR-deck`
+
+**ANCHOR_PROTOCOL.md remains authoritative** for branch naming, diff-first, ADR triggers, tests, and Definition of Done. This rule adds Git coordination safeguards so Cursor, humans, and LLM reviewers stay synchronized with GitHub.
+
+Human-readable reference: `docs/CURSOR_GIT_COORDINATION.md`.
+
+## Source of truth
+
+- **`origin/master` is authoritative.** Never assume local `master` reflects GitHub.
+- Before any branch, merge, rebase, PR, push, or sync decision:
+
+```bash
+git fetch --all --prune
+git status --short --branch
+git branch -vv
+```
+
+- Conversation history is **not** Git state. A commit existing is **not** proof its content is in `origin/master`.
+
+## Three states (never say "done" alone)
+
+| State | Meaning |
+|-------|---------|
+| **WORKING** | Local development on a dedicated branch; base SHA identified |
+| **PR READY** | Pushed, PR exists, diff reviewed, DoD satisfied — **not merged** |
+| **MERGED** | Intended content verified present in `origin/master` |
+
+`PR READY` ≠ `MERGED`. CI green ≠ merged. Human said "I'll merge" ≠ merged.
+
+## Verify merge by content
+
+After squash/rebase merges, `merge-base --is-ancestor` may fail. Verify **content**:
+
+```bash
+git fetch origin --prune
+git diff origin/master...HEAD   # before push
+git show origin/master:<path>   # after reported merge
+```
+
+Question: *Does the expected content exist in `origin/master`?* — not *Does the original SHA exist?*
+
+## Branch rules
+
+- Follow naming in `docs/ANCHOR_PROTOCOL.md` (`epic/`, `fix/`, `docs/`, `spike/`).
+- Never develop on `master` unless explicitly authorized for repo-level emergencies.
+- New work bases on verified `origin/master`, not stale local `master`:
+
+```bash
+git fetch origin
+git switch master
+git pull --ff-only origin master   # only when worktree is safe to update
+git switch -c <branch> origin/master
+```
+
+- Stale local `master` is normal after human merges. **Never** push local `master` over `origin/master`. **Never** force-push `master`.
+
+## Diff-first (before implement and before every push)
+
+```bash
+git diff --stat origin/master...HEAD
+git diff origin/master...HEAD
+git diff --check
+git status
+```
+
+STOP and investigate: unrelated files, accidental reverts, EOL noise, generated files, stale-branch inheritance, unexpected deletions.
+
+## Canonical workflow
+
+```
+VERIFY → DIFF → ACT → TEST → COMMIT → PUSH → PR READY
+  → LLM REVIEW → (CHANGES REQUESTED → VERIFY) → APPROVED
+  → HUMAN MERGE → VERIFY origin/master → MERGED
+```
+
+Cursor implements, commits, pushes, prepares/updates PR, reports Git state. **Cursor does not merge PRs** unless explicitly instructed.
+
+After human reports merge: `git fetch --all --prune`, verify `origin/master`, then `git pull --ff-only origin master` before the next branch.
+
+## Destructive operations — require explicit authorization
+
+Never silently run:
+
+```text
+git reset --hard
+git clean -fd
+git push --force
+git push --force-with-lease
+git branch -D
+git rebase
+```
+
+- **`[gone]` upstream does NOT mean safe to delete.** Verify no unique/unmerged commits first.
+- Do not delete, stash, reset, or overwrite **untracked files** without authorization.
+
+## Suspicious history — STOP and report
+
+Do not auto-repair. Report:
+
+```text
+STOP — repository state inconsistency detected.
+Expected: ...
+Observed: ...
+Likely cause: ...
+No destructive Git operation was performed.
+```
+
+Triggers: orphan/unrelated `origin/master`, lost history, large unrelated revert, unexpected PR base, force-push, missing expected files/ADRs/EPICs.
+
+## ADR
+
+Evaluate ADR triggers per `docs/ANCHOR_PROTOCOL.md` §4 before implementation. Process-only Git coordination docs do not require an ADR by themselves.
+
+## Required final report (PR work)
+
+```text
+## PR Status
+PR: #<number>
+Branch: <branch>
+Base: origin/master @ <SHA>
+HEAD: <SHA>
+State: WORKING | PR READY | MERGED
+
+## Diff
+Files changed: <N> | Insertions: <N> | Deletions: <N>
+Unrelated changes: none / <details>
+
+## Tests
+- <command> — PASS/FAIL
+- CI — PASS/FAIL/PENDING
+
+## Architecture
+ADR impact: NONE / UPDATED / NEW ADR REQUIRED
+EPIC impact: <list>
+
+## DoD
+- [x] ...
+
+## Git Coordination
+Remote checked at: origin/master @ <SHA>
+Local master: <SHA>
+Merge verified: YES / NO / NOT YET
+
+## Next action
+<exact next step for human or LLM>
+```
+
+Principle: **VERIFY → DIFF → ACT → VERIFY → REPORT** — not ASSUME → ACT → REPORT.
