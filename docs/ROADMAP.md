@@ -29,6 +29,7 @@
 | EPIC-014 | Архивирование сотрудников | ✅ Завершён | [#23](https://github.com/svblab/HR-deck/pull/23) |
 | EPIC-015 | Поставка под Linux | ✅ Завершён | [#28](https://github.com/svblab/HR-deck/pull/28) |
 | EPIC-017 | Комплект документации | ✅ Завершён | [#31](https://github.com/svblab/HR-deck/pull/31) |
+| EPIC-016 | Приёмочное тестирование и стабилизация | ✅ Завершён (см. [`acceptance/EPIC-016-signoff.md`](acceptance/EPIC-016-signoff.md)) | [#33](https://github.com/svblab/HR-deck/pull/33), [#40](https://github.com/svblab/HR-deck/pull/40), [#41](https://github.com/svblab/HR-deck/pull/41), [#47](https://github.com/svblab/HR-deck/pull/47), [#51](https://github.com/svblab/HR-deck/pull/51), [#52](https://github.com/svblab/HR-deck/pull/52), [#53](https://github.com/svblab/HR-deck/pull/53), [#54](https://github.com/svblab/HR-deck/pull/54) |
 | EPIC-018 | Конвертация неструктурированных данных (Механизм 1) | 📋 Запланирован | — |
 | EPIC-019 | Управление ключами шифрования транспортных пакетов | 📋 Запланирован | — |
 | EPIC-020 | Импорт данных филиалов (Механизм 2) | 📋 Запланирован | — |
