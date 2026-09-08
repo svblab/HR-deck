@@ -25,6 +25,12 @@ fi
 
 grep -q '/opt/personnel-availability/venv/bin/personnel-availability' "$LAUNCHER"
 
+if grep -a $'\r' "$LAUNCHER" >/dev/null; then
+  echo "CRLF in $LAUNCHER — Linux cannot exec shebang with \\r" >&2
+  od -An -tx1 "$LAUNCHER" | head -2 >&2
+  exit 1
+fi
+
 "$PY" -c "
 import argon2  # noqa: F401
 import sqlcipher3  # noqa: F401
