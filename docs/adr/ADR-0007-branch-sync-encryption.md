@@ -1,7 +1,7 @@
 # ADR-0007: Протокол доверенного обмена данными между установками (v3)
 
-Статус: Предложено
-Дата: 2026-09-08 (v3 final — transaction-authoritative transport state, identity separation)
+Статус: Принято
+Дата: 2026-09-08 (v3); принято человеком 2026-09-11 (v3 + pre-acceptance hardening)
 Автор: архитектурное решение заказчика/тимлида; документировано Cursor
 Затронутый EPIC: EPIC-019, EPIC-020
 
@@ -675,10 +675,9 @@ Transport merge опирается на **`external_id` + ФИО** для **dete
 момент v3: **Предложено**). Transport import **не** invent альтернативный
 cross-installation identity mechanism.
 
-**EPIC-020 не начинается**, пока:
-
-- ADR-0006 **не принята** человеком, **и**
-- миграция/генерация `external_id` **не реализована** в коде.
+**EPIC-020 не начинается** по business-import slices, пока **ADR-0006 не
+принята** **и** миграция/генерация `external_id` **не реализована** в коде.
+(Transport architecture: **ADR-0007 принята** 2026-09-11.)
 
 ### Разделение transport import vs reconciliation (ADR-0006)
 
@@ -800,3 +799,4 @@ permitted elsewhere.
 | v2 | 2026-09-07 | Box, branch/center, branch_key_id — заменена v3 |
 | v3 | 2026-09-08 | Duplex sender/recipient, SK+WK chains, TransportKeyStore in DB, signing/bootstrap separation |
 | v3 (hardening) | 2026-09-11 | Pre-acceptance audit fixes: recommended signing/bootstrap algorithm families, explicit bootstrap-envelope sender-auth+recipient-binding rationale, key_id uniqueness scope, single-writer-per-direction concurrency invariant, nonce-reuse/key_id/concurrency tests added |
+| v3 accepted | 2026-09-11 | Статус **Принято** — подтверждено человеком (заказчик/тимлид) |

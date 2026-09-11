@@ -563,21 +563,19 @@ bootstrap/trust между peer-установками, независимые �
   (отдельные роли; отдельно от `WK`).
 - Право `MANAGE_ENCRYPTION_KEYS` — только Администратор.
 - UI/сервис управления ключами и trust (детали UI — implementation).
-- Новая криптографическая зависимость — только после **принятия ADR-0007**
-  (`ANCHOR_PROTOCOL.md` §4); конкретная библиотека — decision
-  implementation model.
+- Новая криптографическая зависимость — по **ADR-0007** (принята 2026-09-11,
+  `ANCHOR_PROTOCOL.md` §4); конкретная библиотека — decision implementation model.
 
 **Вне скоупа.** Формирование/приём business payload, merge сотрудников,
 atomic package import — **EPIC-020**.
 
 **Зависимости:** нет — может разрабатываться и мержиться независимо от
-EPIC-020 (как EPIC-004 service от UI), при условии принятой ADR-0007.
+EPIC-020 (как EPIC-004 service от UI). **ADR-0007 принята** (2026-09-11).
 
 **DoD / трассировка:** тесты ADR-0007 v3: TransportKeyStore/DB atomicity,
 signing vs bootstrap separation, bootstrap, `key_id` lookup, duplex
 independence, lost-WK/lost-signing re-init, compromised-key revocation,
-transport backup via `.db`/`.keywrap`, admin permission; ADR-0007 принята до PR с новой
-зависимостью; локальный гейт зелёный. Криптография — отдельный internal
+transport backup via `.db`/`.keywrap`, admin permission; локальный гейт зелёный. Криптография — отдельный internal
 service (`services/transport_keys.py` или аналог); UI не работает с сырыми
 ключами напрямую.
 
@@ -619,11 +617,9 @@ EPIC-020 разбивается на implementation slices (отдельные P
 **Вне скоупа.** Multi-master merge между peer-ами; полная синхронизация
 истории статусов (переносится текущее состояние; история локальна).
 
-**Зависимости:** 020-A…020-F как выше; все зависят от **EPIC-019**. EPIC-020
-**не начинается**, пока **ADR-0007 v3 не принята** явно человеком. Business
-match требует **`external_id` из ADR-0006** — ADR-0006 **не принята
-автоматически этой задачей**; dependency остаётся: ADR-0006 принята **и**
-реализована в коде до business-import slices.
+**Зависимости:** 020-A…020-F как выше; все зависят от **EPIC-019**. **ADR-0007
+принята** (2026-09-11). EPIC-020 **не начинается** по business-import slices,
+пока **ADR-0006 не принята** **и** `external_id` **не реализован** в коде.
 
 **DoD / трассировка:** тесты ADR-0007 v3 по transport/import/atomicity/replay/
 confirmation/transaction composition;
