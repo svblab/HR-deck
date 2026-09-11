@@ -68,8 +68,11 @@ Signing identity
     public verification key  — проверяет подпись входящих пакетов (peer trust)
 ```
 
-- У каждой установки — **собственная** signing identity (алгоритм/API —
-  implementation model, см. `ANCHOR_PROTOCOL.md` §4).
+- У каждой установки — **собственная** signing identity. **Рекомендуемое
+  семейство алгоритма:** EdDSA/Ed25519-класс (или эквивалент по security
+  margin). Конкретная библиотека, версия и точный API — **implementation
+  model**, см. `ANCHOR_PROTOCOL.md` §4 (новая зависимость → ADR принята до
+  PR).
 - **Public verification key** peer-а устанавливается при **одноразовом ручном
   bootstrap** (см. ниже).
 - Это **идентичность установки в протоколе**, но **не** bootstrap encryption
@@ -95,6 +98,9 @@ Bootstrap encryption identity
 - Используется **только** для первого пакета направления; последующие пакеты
   — через цепочку `WK`, не через bootstrap encryption.
 - **Не** используется для подписи и **не** заменяет signing identity.
+- **Рекомендуемое семейство алгоритма:** X25519-класс (ECDH) или эквивалент.
+  Конкретная библиотека и точный wrap-механизм — **implementation model**,
+  см. `ANCHOR_PROTOCOL.md` §4.
 
 ### 4. Ключ файла / полезной нагрузки (`SK_n`)
 
@@ -181,6 +187,15 @@ Package1  = подписан **private signing key** отправителя; с�
             Envelope1, и недоверенные метаданные маршрутизации
 ```
 
+**Инвариант bootstrap-конверта:** Envelope1 адресован **конкретному**
+получателю (зашифрован под его public encryption key) — открыть его может
+только держатель соответствующего private decryption key. Package1 в целом
+подписан **private signing key** отправителя, включая Envelope1 и
+недоверенные метаданные маршрутизации. Совместно это уже даёт первому
+пакету направления оба требуемых свойства — **аутентификацию отправителя**
+(через подпись) и **привязку к получателю** (через шифрование под его
+bootstrap encryption key) — без дополнительного механизма.
+
 ### N-й пакет (N > 1)
 
 ```text
@@ -245,6 +260,13 @@ use WKN to protect its envelope
   если implementation не докажет необходимость.
 - Получатель **обязан** находить `WK` по `key_id` через **TransportKeyStore**
   (см. ниже) — **без** перебора всех сохранённых ключей.
+- **Область уникальности:** `key_id` **обязан** быть уникальным **в
+  пределах установки** (across all directions/peers, не только внутри одного
+  направления) — lookup через TransportKeyStore не должен требовать
+  дополнительного disambiguation по direction/peer. Коллизия `key_id` при
+  создании нового `WK` **обязана** быть невозможна by construction
+  (например, достаточно случайный генератор с пренебрежимой вероятностью
+  коллизии, или монотонный счётчик с проверкой).
 
 ```text
 package metadata (untrusted until verified)
@@ -613,6 +635,24 @@ ROLLBACK
 
 Пакет остаётся **непринятым**; transport-state **не** продвигается.
 
+### Конкурентный доступ (single-writer per direction)
+
+**Инвариант:** одновременный accept/export для **одного и того же
+направления** (`sender → recipient` конкретной пары установок) **обязан**
+сериализоваться — **один writer** на direction в любой момент времени.
+Параллельный accept двух пакетов одного направления (например, из двух
+открытых окон/инстансов приложения на одной БД) **не должен** приводить к
+гонке за `sequence`/`WK_n` или к повреждению transport-state.
+
+- Конкретный механизм (DB-level lock, application-level mutex,
+  `BEGIN IMMEDIATE` или аналог) — **implementation model** (EPIC-019/020).
+- **Разные** направления (`A→B` и `B→A`) сериализации друг относительно
+  друга **не требуют** — независимость направлений (см. «Duplex: независимое
+  transport-state») сохраняется.
+- Экспорт (`sending` side) для **одного** направления также сериализуется
+  относительно самого себя по той же причине (монотонный `sequence` и
+  цепочка `WK` — общий mutable state направления).
+
 ## Владение полями — whitelist (сохранено от v2)
 
 Импорт transport-payload обновляет **только** перечисленные поля существующей
@@ -735,6 +775,9 @@ permitted elsewhere.
 | Status service | Статусы через `StatusHistoryService` внутри package transaction | SPECIFIED |
 | Admin permission | Key management только admin | SPECIFIED |
 | Authenticated coverage | Tamper cleartext vs signed fields → reject | SPECIFIED |
+| Nonce reuse | Nonce reuse under same `SK_n`/`WK` key → detected or fails closed, never silently accepted | SPECIFIED |
+| key_id uniqueness | New `WK`'s `key_id` collision within the installation is prevented/rejected by construction | SPECIFIED |
+| Concurrent direction accept | Two concurrent accept/export attempts for the same direction serialize; no sequence/WK race or state corruption | SPECIFIED |
 
 ## Оставшиеся вопросы (implementation model only)
 
@@ -756,3 +799,4 @@ permitted elsewhere.
 | v1 | 2026-09-06 | SealedBox confidentiality only — отклонена |
 | v2 | 2026-09-07 | Box, branch/center, branch_key_id — заменена v3 |
 | v3 | 2026-09-08 | Duplex sender/recipient, SK+WK chains, TransportKeyStore in DB, signing/bootstrap separation |
+| v3 (hardening) | 2026-09-11 | Pre-acceptance audit fixes: recommended signing/bootstrap algorithm families, explicit bootstrap-envelope sender-auth+recipient-binding rationale, key_id uniqueness scope, single-writer-per-direction concurrency invariant, nonce-reuse/key_id/concurrency tests added |
