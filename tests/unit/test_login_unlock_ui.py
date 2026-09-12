@@ -12,7 +12,7 @@ from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.bootstrap import BootstrapService
-from ui.auth_dialogs import LoginDialog, UnlockDialog
+from ui.auth_dialogs import AccountsDialog, LoginDialog, UnlockDialog
 from ui.main_window import MainWindow
 
 
@@ -111,6 +111,29 @@ def test_unlock_dialog_accepts_correct_password(qtbot, tmp_path: Path) -> None:
     assert session.master_key == original_key
     assert dlg.conn is not None
     dlg.conn.close()
+
+
+@pytest.mark.acceptance
+def test_accounts_dialog_create_account_from_role_combo(
+    qtbot, tmp_path: Path,
+) -> None:
+    """QComboBox возвращает StrEnum как str — создание учётки не должно падать."""
+    db = _seed_accounts(tmp_path)
+    auth = AuthenticationService(sleeper=lambda _s: None)
+    conn, session = auth.login(db_path=db, login="admin", password="AdminPass-1")
+    service = AccountManagementService(conn, session, db_path=db)
+
+    dlg = AccountsDialog(service)
+    qtbot.addWidget(dlg)
+    dlg._login.setText("hr2")
+    dlg._password.setText("HrPass-2")
+    dlg._role.setCurrentIndex(dlg._role.findData(RoleCode.HR_EMPLOYEE.value))
+    dlg._create()
+
+    created = [row for row in service.list_accounts() if row.login == "hr2"]
+    assert len(created) == 1
+    assert created[0].role_code == RoleCode.HR_EMPLOYEE.value
+    conn.close()
 
 
 @pytest.mark.acceptance
