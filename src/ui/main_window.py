@@ -301,7 +301,8 @@ class MainWindow(QMainWindow):
             if not accepted:
                 self.close()
                 return
-            self._conn = dlg.conn
+            if dlg.conn is not None:
+                self._replace_connection(dlg.conn)
 
     def _require_unlocked(self) -> bool:
         if self._session is None or self._conn is None:
