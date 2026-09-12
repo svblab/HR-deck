@@ -298,6 +298,30 @@ def test_delete_non_admin_account(tmp_path: Path) -> None:
     conn.close()  # type: ignore[union-attr]
 
 
+def test_delete_account_keeps_append_only_audit_rows(tmp_path: Path) -> None:
+    db, conn, session = _setup(tmp_path)
+    mgr = AccountManagementService(
+        conn, session, db_path=db, clock=lambda: "2026-08-26T20:05:00Z"
+    )
+    hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+    conn.execute(  # type: ignore[union-attr]
+        "INSERT INTO user_action_log (account_id, action_type, result, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (hr_id, "employee.view", "success", "2026-08-26T20:05:01Z"),
+    )
+    conn.commit()  # type: ignore[union-attr]
+
+    mgr.delete_account(hr_id)
+
+    assert AccountRepository(conn).get_by_id(hr_id) is None  # type: ignore[arg-type]
+    row = conn.execute(  # type: ignore[union-attr]
+        "SELECT COUNT(*) FROM user_action_log WHERE account_id = ?",
+        (hr_id,),
+    ).fetchone()
+    assert row is not None and int(row[0]) == 1
+    conn.close()  # type: ignore[union-attr]
+
+
 def test_delete_account_rejects_administrator(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
     mgr = AccountManagementService(

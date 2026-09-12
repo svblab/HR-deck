@@ -116,18 +116,12 @@ class AccountRepository:
         )
 
     def delete(self, account_id: int) -> None:
-        for table, column in (
-            ("user_action_log", "account_id"),
-            ("status_history", "created_by_account_id"),
-            ("report_template_versions", "created_by_account_id"),
-            ("template_generated_reports", "generated_by_account_id"),
-            ("status_history_corrections", "created_by_account_id"),
-        ):
-            self._conn.execute(
-                f"UPDATE {table} SET {column} = NULL WHERE {column} = ?",
-                (account_id,),
-            )
-        self._conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+        # Append-only tables keep historical account_id values; relax FK for this delete.
+        self._conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            self._conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+        finally:
+            self._conn.execute("PRAGMA foreign_keys = ON")
 
 
 class SettingsRepository:
