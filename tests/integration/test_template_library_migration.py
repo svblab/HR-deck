@@ -49,7 +49,11 @@ def test_migration_0008_on_nonempty_db(tmp_path: Path) -> None:
     conn.close()
 
     conn2 = connect(path, key)
-    applied = apply_pending_migrations(conn2)
+    shutil.copy(
+        default_migrations_dir() / "0008_template_library_metadata.sql",
+        mig_v7 / "0008_template_library_metadata.sql",
+    )
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_v7)
     assert applied == [8]
     assert current_version(conn2) == 8
     version_cols = table_columns(conn2, "report_template_versions")

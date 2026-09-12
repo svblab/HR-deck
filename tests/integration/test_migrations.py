@@ -34,6 +34,13 @@ REQUIRED_TABLES = {
     "template_generated_reports",
     "app_settings",
     "recovery_codes",
+    "transport_installation",
+    "transport_local_signing_keys",
+    "transport_local_bootstrap_keys",
+    "transport_peer_trust",
+    "transport_direction_state",
+    "transport_wk_keys",
+    "transport_package_records",
 }
 
 RESERVED_EMPLOYEE_COLUMNS = {
