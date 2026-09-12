@@ -297,13 +297,19 @@ class _DirectoryPanel(QWidget):
         if self._kind == "branch":
             return self._directories.list_branches(active_only=active_only)
         if self._kind == "department":
+            branch_id = self._parent_id()
+            if branch_id is None:
+                return []
             return self._directories.list_departments(
-                branch_id=self._parent_id(),
+                branch_id=branch_id,
                 active_only=active_only,
             )
         if self._kind == "division":
+            department_id = self._parent_id()
+            if department_id is None:
+                return []
             return self._directories.list_divisions(
-                department_id=self._parent_id(),
+                department_id=department_id,
                 active_only=active_only,
             )
         if self._kind == "position":
