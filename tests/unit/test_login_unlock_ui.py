@@ -146,6 +146,10 @@ def test_main_window_idle_lock_shows_overlay_then_unlock(qtbot, tmp_path: Path) 
     overlay = window.findChild(QWidget, "sessionLockOverlay")
     assert overlay is not None
     assert not overlay.isVisible()
+    assert window._roster is not None
+    assert window._roster._directories._conn is window._conn
+    window._roster._service.filter_branches()
+    window._roster._directories.list_branches(active_only=True)
     window.close()
     window._conn.close()
 
