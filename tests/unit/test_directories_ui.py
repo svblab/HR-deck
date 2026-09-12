@@ -267,18 +267,18 @@ def test_observer_directories_dialog_is_view_only(
                     "directoriesPosition",
                     "directoriesEmployment",
                 ):
-                    assert not widget.findChild(
+                    assert widget.findChild(
                         QPushButton, f"{prefix}CreateBtn"
-                    ).isEnabled()
-                    assert not widget.findChild(
+                    ).isHidden()
+                    assert widget.findChild(
                         QPushButton, f"{prefix}RenameBtn"
-                    ).isEnabled()
-                    assert not widget.findChild(
+                    ).isHidden()
+                    assert widget.findChild(
                         QPushButton, f"{prefix}ArchiveBtn"
-                    ).isEnabled()
-                    assert not widget.findChild(
+                    ).isHidden()
+                    assert widget.findChild(
                         QPushButton, f"{prefix}RestoreBtn"
-                    ).isEnabled()
+                    ).isHidden()
                 table = widget.findChild(QTableWidget, "directoriesBranchTable")
                 assert table is not None and table.rowCount() >= 1
                 widget.accept()

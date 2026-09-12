@@ -202,7 +202,7 @@ class _DirectoryPanel(QWidget):
             self._archive_btn,
             self._restore_btn,
         ):
-            btn.setEnabled(can_manage)
+            btn.setVisible(can_manage)
         self._create_btn.clicked.connect(self._create)
         self._rename_btn.clicked.connect(self._rename)
         self._archive_btn.clicked.connect(self._archive)

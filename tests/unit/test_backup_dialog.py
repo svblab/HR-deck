@@ -82,20 +82,20 @@ def test_backup_buttons_follow_role_permissions(qtbot, tmp_path: Path) -> None:
     db, conn, admin, backup, clock = _open(tmp_path)
     admin_dialog = BackupDialog(backup, admin)
     qtbot.addWidget(admin_dialog)
-    assert admin_dialog.findChild(QPushButton, "backupCreateBtn").isEnabled()
-    assert admin_dialog.findChild(QPushButton, "backupRestoreBtn").isEnabled()
+    assert not admin_dialog.findChild(QPushButton, "backupCreateBtn").isHidden()
+    assert not admin_dialog.findChild(QPushButton, "backupRestoreBtn").isHidden()
 
     hr = _hr_session(conn, admin, db, clock)
     hr_dialog = BackupDialog(BackupService(conn, hr, db_path=db, clock=clock), hr)
     qtbot.addWidget(hr_dialog)
-    assert hr_dialog.findChild(QPushButton, "backupCreateBtn").isEnabled()
-    assert not hr_dialog.findChild(QPushButton, "backupRestoreBtn").isEnabled()
+    assert not hr_dialog.findChild(QPushButton, "backupCreateBtn").isHidden()
+    assert hr_dialog.findChild(QPushButton, "backupRestoreBtn").isHidden()
 
     obs = _observer_session(conn, admin, db, clock)
     obs_dialog = BackupDialog(BackupService(conn, obs, db_path=db, clock=clock), obs)
     qtbot.addWidget(obs_dialog)
-    assert not obs_dialog.findChild(QPushButton, "backupCreateBtn").isEnabled()
-    assert not obs_dialog.findChild(QPushButton, "backupRestoreBtn").isEnabled()
+    assert obs_dialog.findChild(QPushButton, "backupCreateBtn").isHidden()
+    assert obs_dialog.findChild(QPushButton, "backupRestoreBtn").isHidden()
     conn.close()
 
 

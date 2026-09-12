@@ -70,8 +70,7 @@ def run(db_path: Path | None = None) -> int:
         conn.close()
         return 1
 
-    window = MainWindow(db_path=path)
-    window._bind_session(conn, session)
+    window = MainWindow(conn=conn, session=session, db_path=path)
     window.showFullScreen()
     return app.exec()
 

@@ -284,6 +284,7 @@ class MainWindow(QMainWindow):
                     or self._authz.check(self._session.role, Permission.RESTORE_BACKUP)
                 )
             )
+            self._settings_btn.setVisible(can_backup)
             self._settings_btn.setEnabled(can_backup)
 
     def _close_child_dialogs(self) -> None:
