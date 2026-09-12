@@ -42,6 +42,15 @@ class AccountManagementError(Exception):
 
 
 class AccountManagementService:
+    @staticmethod
+    def _coerce_role(role: RoleCode | str) -> RoleCode:
+        if isinstance(role, RoleCode):
+            return role
+        try:
+            return RoleCode(role)
+        except ValueError as exc:
+            raise AccountManagementError("invalid role") from exc
+
     def __init__(
         self,
         conn: Connection,
@@ -76,14 +85,13 @@ class AccountManagementService:
         *,
         login: str,
         password: str,
-        role: RoleCode,
+        role: RoleCode | str,
     ) -> int:
         self._guard(Permission.MANAGE_ACCOUNTS)
+        role = self._coerce_role(role)
         login = login.strip()
         if not login or not password:
             raise AccountManagementError("login and password are required")
-        if role not in RoleCode:
-            raise AccountManagementError("invalid role")
         if self._accounts.get_by_login(login) is not None:
             raise AccountManagementError("login already exists")
         if role == RoleCode.ADMINISTRATOR:
@@ -115,8 +123,9 @@ class AccountManagementService:
 
         return account_id
 
-    def set_role(self, account_id: int, role: RoleCode) -> None:
+    def set_role(self, account_id: int, role: RoleCode | str) -> None:
         self._guard(Permission.MANAGE_ACCOUNTS)
+        role = self._coerce_role(role)
         target = self._require_account(account_id)
         if (
             role == RoleCode.ADMINISTRATOR
