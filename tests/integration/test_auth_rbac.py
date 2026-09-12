@@ -229,7 +229,7 @@ def test_cannot_create_or_promote_second_active_administrator(tmp_path: Path) ->
     )
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
 
-    with pytest.raises(AccountManagementError, match="only one active administrator"):
+    with pytest.raises(AccountManagementError, match="only one administrator"):
         mgr.create_account(login="admin2", password="AdminPass-2", role=RoleCode.ADMINISTRATOR)
 
     with pytest.raises(AccountManagementError, match="only one active administrator"):

@@ -12,6 +12,7 @@ from data.db import Connection
 from data.keywrap import (
     keywrap_path_for,
     load_keywrap,
+    remove_account_wrap,
     save_keywrap,
     upsert_account_wrap,
     wrap_secret,
@@ -95,7 +96,7 @@ class AccountManagementService:
         if self._accounts.get_by_login(login) is not None:
             raise AccountManagementError("login already exists")
         if role == RoleCode.ADMINISTRATOR:
-            self._reject_second_active_administrator()
+            self._reject_create_administrator()
 
         now = self._clock()
         password_hash = hash_password(password)
@@ -213,6 +214,32 @@ class AccountManagementService:
             self._conn.rollback()
             raise
 
+    def delete_account(self, account_id: int) -> None:
+        self._guard(Permission.MANAGE_ACCOUNTS)
+        target = self._require_account(account_id)
+        if target.role_code == RoleCode.ADMINISTRATOR.value:
+            raise AccountManagementError("cannot delete administrator account")
+        if account_id == self._session.account_id:
+            raise AccountManagementError("cannot delete your own account")
+        now = self._clock()
+        login = target.login
+        try:
+            self._accounts.delete(account_id)
+            self._audit.record(
+                account_id=self._session.account_id,
+                action_type="account.delete",
+                result="success",
+                created_at=now,
+                entity_type="account",
+                entity_id=account_id,
+                details=f"login={login}",
+            )
+            self._remove_account_wrap(login)
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
     def update_security_settings(
         self,
         *,
@@ -280,6 +307,10 @@ class AccountManagementService:
             raise AccountManagementError("account not found")
         return account
 
+    def _reject_create_administrator(self) -> None:
+        if self._accounts.count_administrators() >= 1:
+            raise AccountManagementError("only one administrator is allowed")
+
     def _reject_second_active_administrator(self) -> None:
         if self._accounts.count_active_administrators() >= 1:
             raise AccountManagementError("only one active administrator is allowed")
@@ -289,6 +320,11 @@ class AccountManagementService:
         keywrap = load_keywrap(wrap_path)
         entry = wrap_secret(self._session.master_key, password, kind="account", login=login)
         save_keywrap(wrap_path, upsert_account_wrap(keywrap, entry))
+
+    def _remove_account_wrap(self, login: str) -> None:
+        wrap_path = keywrap_path_for(self._db_path)
+        keywrap = load_keywrap(wrap_path)
+        save_keywrap(wrap_path, remove_account_wrap(keywrap, login))
 
 
 # Re-export for callers that probe authorization without UI.

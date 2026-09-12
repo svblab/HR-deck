@@ -115,6 +115,20 @@ class AccountRepository:
             (1 if is_active else 0, updated_at, account_id),
         )
 
+    def delete(self, account_id: int) -> None:
+        for table, column in (
+            ("user_action_log", "account_id"),
+            ("status_history", "created_by_account_id"),
+            ("report_template_versions", "created_by_account_id"),
+            ("template_generated_reports", "generated_by_account_id"),
+            ("status_history_corrections", "created_by_account_id"),
+        ):
+            self._conn.execute(
+                f"UPDATE {table} SET {column} = NULL WHERE {column} = ?",
+                (account_id,),
+            )
+        self._conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+
 
 class SettingsRepository:
     def __init__(self, conn: Connection) -> None:

@@ -8,6 +8,7 @@ import pytest
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
 
+from data.accounts import AccountRepository
 from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
@@ -133,6 +134,51 @@ def test_accounts_dialog_create_account_from_role_combo(
     created = [row for row in service.list_accounts() if row.login == "hr2"]
     assert len(created) == 1
     assert created[0].role_code == RoleCode.HR_EMPLOYEE.value
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_accounts_dialog_offers_only_hr_and_observer_roles(qtbot, tmp_path: Path) -> None:
+    db = _seed_accounts(tmp_path)
+    auth = AuthenticationService(sleeper=lambda _s: None)
+    conn, session = auth.login(db_path=db, login="admin", password="AdminPass-1")
+    service = AccountManagementService(conn, session, db_path=db)
+
+    dlg = AccountsDialog(service)
+    qtbot.addWidget(dlg)
+    roles = {dlg._role.itemData(i) for i in range(dlg._role.count())}
+    assert roles == {RoleCode.HR_EMPLOYEE.value, RoleCode.OBSERVER.value}
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_accounts_dialog_delete_non_admin_account(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _seed_accounts(tmp_path)
+    auth = AuthenticationService(sleeper=lambda _s: None)
+    conn, session = auth.login(db_path=db, login="admin", password="AdminPass-1")
+    service = AccountManagementService(conn, session, db_path=db)
+    hr_id = service.create_account(login="hr-del", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_a, **_k: QMessageBox.StandardButton.Yes,
+    )
+
+    dlg = AccountsDialog(service)
+    qtbot.addWidget(dlg)
+    for row in range(dlg._table.rowCount()):
+        item = dlg._table.item(row, 0)
+        assert item is not None
+        if item.text() == str(hr_id):
+            dlg._table.selectRow(row)
+            break
+    assert dlg._delete_btn.isEnabled()
+    dlg._delete_selected()
+    assert all(a.id != hr_id for a in service.list_accounts())
+    assert AccountRepository(conn).get_by_id(hr_id) is None
     conn.close()
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -259,19 +260,33 @@ class AccountsDialog(QDialog):
         layout = QVBoxLayout(self)
         self._table = QTableWidget(0, 4)
         self._table.setHorizontalHeaderLabels(["ID", "Логин", "Роль", "Активна"])
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._table.itemSelectionChanged.connect(self._update_delete_button)
         layout.addWidget(self._table)
+
+        account_actions = QHBoxLayout()
+        self._delete_btn = QPushButton("Удалить…")
+        self._delete_btn.clicked.connect(self._delete_selected)
+        account_actions.addWidget(self._delete_btn)
+        account_actions.addStretch(1)
+        layout.addLayout(account_actions)
 
         form = QFormLayout()
         self._login = QLineEdit()
         self._password = QLineEdit()
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         self._role = QComboBox()
-        for role in RoleCode:
-            self._role.addItem(role.value, role)
         form.addRow("Логин", self._login)
         form.addRow("Пароль", self._password)
         form.addRow("Роль", self._role)
         layout.addLayout(form)
+        layout.addWidget(
+            QLabel(
+                "Администратор один и создаётся при первичной настройке. "
+                "Здесь можно создавать только HR и Наблюдателя."
+            )
+        )
 
         create_btn = QPushButton("Создать")
         create_btn.clicked.connect(self._create)
@@ -300,7 +315,31 @@ class AccountsDialog(QDialog):
 
         self._reload()
 
+    def _fill_role_combo(self) -> None:
+        self._role.clear()
+        for role in (RoleCode.HR_EMPLOYEE, RoleCode.OBSERVER):
+            self._role.addItem(role.value, role.value)
+
+    def _selected_account_id(self) -> int | None:
+        row = self._table.currentRow()
+        if row < 0:
+            return None
+        item = self._table.item(row, 0)
+        if item is None:
+            return None
+        return int(item.text())
+
+    def _update_delete_button(self) -> None:
+        account_id = self._selected_account_id()
+        if account_id is None:
+            self._delete_btn.setEnabled(False)
+            return
+        role_item = self._table.item(self._table.currentRow(), 2)
+        is_admin = role_item is not None and role_item.text() == RoleCode.ADMINISTRATOR.value
+        self._delete_btn.setEnabled(not is_admin)
+
     def _reload(self) -> None:
+        self._fill_role_combo()
         rows = self._service.list_accounts()
         self._table.setRowCount(len(rows))
         for i, row in enumerate(rows):
@@ -313,6 +352,7 @@ class AccountsDialog(QDialog):
         self._timeout_enabled.setChecked(bool(settings["inactivity_timeout_enabled"]))
         self._delay.setValue(int(settings["login_failure_delay_seconds"]))
         self._delay_enabled.setChecked(bool(settings["login_failure_delay_enabled"]))
+        self._update_delete_button()
 
     def _create(self) -> None:
         role = self._role.currentData()
@@ -327,6 +367,28 @@ class AccountsDialog(QDialog):
             return
         self._login.clear()
         self._password.clear()
+        self._reload()
+
+    def _delete_selected(self) -> None:
+        account_id = self._selected_account_id()
+        if account_id is None:
+            return
+        login_item = self._table.item(self._table.currentRow(), 1)
+        login = login_item.text() if login_item is not None else str(account_id)
+        answer = QMessageBox.question(
+            self,
+            "Удаление учётной записи",
+            f"Удалить учётную запись «{login}»? Это действие необратимо.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self._service.delete_account(account_id)
+        except Exception as exc:  # noqa: BLE001 — показать пользователю
+            QMessageBox.warning(self, "Учётные записи", str(exc))
+            return
         self._reload()
 
     def _save_settings(self) -> None:

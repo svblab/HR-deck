@@ -270,3 +270,43 @@ def test_create_account_requires_login_and_password(tmp_path: Path) -> None:
     with pytest.raises(AccountManagementError, match="login and password are required"):
         mgr.create_account(login="obs2", password="", role=RoleCode.OBSERVER)
     conn.close()  # type: ignore[union-attr]
+
+
+def test_delete_non_admin_account(tmp_path: Path) -> None:
+    db, conn, session = _setup(tmp_path)
+    mgr = AccountManagementService(
+        conn, session, db_path=db, clock=lambda: "2026-08-26T20:00:00Z"
+    )
+    hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+
+    mgr.delete_account(hr_id)
+
+    assert AccountRepository(conn).get_by_id(hr_id) is None  # type: ignore[arg-type]
+    wrap = load_keywrap(keywrap_path_for(db))
+    assert find_account_wrap(wrap, "hr1") is None
+    rows = conn.execute(  # type: ignore[union-attr]
+        "SELECT action_type, result, details FROM user_action_log WHERE entity_id = ?",
+        (hr_id,),
+    ).fetchall()
+    assert ("account.delete", "success", "login=hr1") in {
+        (r[0], r[1], r[2]) for r in rows
+    }
+
+    auth = _sleepless_auth()
+    with pytest.raises(AuthenticationError):
+        auth.login(db_path=db, login="hr1", password="HrPass-1")
+    conn.close()  # type: ignore[union-attr]
+
+
+def test_delete_account_rejects_administrator(tmp_path: Path) -> None:
+    db, conn, session = _setup(tmp_path)
+    mgr = AccountManagementService(
+        conn, session, db_path=db, clock=lambda: "2026-08-26T20:10:00Z"
+    )
+    hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+
+    with pytest.raises(AccountManagementError, match="cannot delete administrator"):
+        mgr.delete_account(session.account_id)
+
+    mgr.delete_account(hr_id)
+    conn.close()  # type: ignore[union-attr]
