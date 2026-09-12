@@ -23,7 +23,8 @@ class TransportIdentityStore:
     def create_local_installation(self, *, display_label: str | None, now: str) -> str:
         installation_id = str(uuid.uuid4())
         self._conn.execute(
-            "INSERT INTO transport_installation (installation_id, display_label, created_at, updated_at)"
+            "INSERT INTO transport_installation"
+            " (installation_id, display_label, created_at, updated_at)"
             " VALUES (?, ?, ?, ?)",
             (installation_id, display_label, now, now),
         )

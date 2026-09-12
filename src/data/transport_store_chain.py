@@ -184,7 +184,8 @@ class TransportChainStore:
 
     def set_direction_status(self, direction_id: int, status: DirectionStatus, *, now: str) -> None:
         self._conn.execute(
-            "UPDATE transport_direction_state SET direction_status = ?, updated_at = ? WHERE id = ?",
+            "UPDATE transport_direction_state"
+            " SET direction_status = ?, updated_at = ? WHERE id = ?",
             (status.value, now, direction_id),
         )
 

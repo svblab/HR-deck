@@ -68,7 +68,8 @@ def test_current_wk_id_fk_rejects_missing_reference(tmp_path: Path) -> None:
     apply_pending_migrations(conn)
     now = "2026-09-12T00:00:00Z"
     conn.execute(
-        "INSERT INTO transport_installation (installation_id, display_label, created_at, updated_at)"
+        "INSERT INTO transport_installation"
+        " (installation_id, display_label, created_at, updated_at)"
         " VALUES ('local', 'Local', ?, ?)",
         (now, now),
     )

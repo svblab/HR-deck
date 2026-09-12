@@ -34,7 +34,14 @@ class TransportKeyAdminService:
         self._session.require_unlocked()
         self._authz.require(self._session.role, Permission.MANAGE_ENCRYPTION_KEYS)
 
-    def _mutate(self, *, action: str, entity_id: int | None, details: str, fn: Callable[[], int]) -> int:
+    def _mutate(
+        self,
+        *,
+        action: str,
+        entity_id: int | None,
+        details: str,
+        fn: Callable[[], int],
+    ) -> int:
         self._require_admin()
         now = self._clock()
         try:

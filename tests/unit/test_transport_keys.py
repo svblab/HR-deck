@@ -9,14 +9,17 @@ import pytest
 
 from data.db import create_database, generate_master_key
 from data.migrations import apply_pending_migrations
-from data.transport_crypto import generate_bootstrap_keypair, generate_signing_keypair, key_fingerprint
+from data.transport_crypto import (
+    generate_bootstrap_keypair,
+    generate_signing_keypair,
+)
 from domain.permissions import Permission, RoleCode
-from domain.transport import PackageClassification, TransportKeyError, TrustStatus, WkRole
+from domain.transport import PackageClassification, TransportKeyError, WkRole
 from services.authorization import AuthorizationError
 from services.bootstrap import BootstrapService
+from services.session import SessionState
 from services.transport_key_admin import TransportKeyAdminService
 from services.transport_keys import TransportKeyStore
-from services.session import SessionState
 
 
 def _open_store(tmp_path: Path) -> tuple:
@@ -94,7 +97,8 @@ def test_register_peer_trust_stores_both_keys(tmp_path: Path) -> None:
     _, peer_id = _seed_peer(store)
     conn.commit()
     row = conn.execute(
-        "SELECT signing_key_fingerprint, bootstrap_key_fingerprint FROM transport_peer_trust WHERE id=?",
+        "SELECT signing_key_fingerprint, bootstrap_key_fingerprint"
+        " FROM transport_peer_trust WHERE id=?",
         (peer_id,),
     ).fetchone()
     assert row[0] != row[1]
@@ -169,7 +173,11 @@ def test_historical_wk_not_auto_promoted(tmp_path: Path) -> None:
         peer_trust_id=peer_id,
     )
     first = store.create_wk_key(direction_id=direction.id, wk_role=WkRole.ACTIVE)
-    store.activate_wk_for_direction(direction_id=direction.id, wk_row_id=first.id, accepted_sequence=1)
+    store.activate_wk_for_direction(
+        direction_id=direction.id,
+        wk_row_id=first.id,
+        accepted_sequence=1,
+    )
     second = store.create_wk_key(
         direction_id=direction.id,
         wk_role=WkRole.HISTORICAL,
@@ -298,7 +306,9 @@ def test_admin_service_requires_manage_encryption_keys(tmp_path: Path) -> None:
 
 
 def test_admin_service_writes_audit_on_bootstrap(tmp_path: Path) -> None:
-    clock = lambda: "2026-09-12T00:00:00Z"
+    def clock() -> str:
+        return "2026-09-12T00:00:00Z"
+
     conn, session, _code = BootstrapService(clock=clock).initial_administrator_setup(
         login="admin",
         password="AdminPass-1",
