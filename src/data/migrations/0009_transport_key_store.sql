@@ -1,5 +1,4 @@
--- EPIC-019 Phase 0: TransportKeyStore schema skeleton (ADR-0007 v3).
--- PROPOSAL ONLY — service logic and enforcement triggers follow human approval.
+-- EPIC-019: TransportKeyStore schema (ADR-0007 v3).
 
 PRAGMA foreign_keys = ON;
 
@@ -67,13 +66,13 @@ CREATE INDEX idx_transport_peer_trust_signing_fp
     ON transport_peer_trust (signing_key_fingerprint);
 
 -- Per-direction transport chain state (duplex: independent rows per sender→recipient).
+-- current_wk_id is added after transport_wk_keys exists (ALTER below).
 CREATE TABLE transport_direction_state (
     id INTEGER PRIMARY KEY,
     sender_installation_id TEXT NOT NULL,
     recipient_installation_id TEXT NOT NULL,
-    peer_trust_id INTEGER NOT NULL REFERENCES transport_peer_trust(id),
+    peer_trust_id INTEGER NOT NULL REFERENCES transport_peer_trust(id) ON DELETE RESTRICT,
     accepted_sequence INTEGER NOT NULL DEFAULT 0,
-    current_wk_key_id INTEGER,
     direction_status TEXT NOT NULL DEFAULT 'active'
         CHECK (direction_status IN ('active', 'broken', 'reinit_required')),
     created_at TEXT NOT NULL,
@@ -85,10 +84,11 @@ CREATE INDEX idx_transport_direction_peer
     ON transport_direction_state (peer_trust_id);
 
 -- WK chain material. key_id is globally unique within this installation (ADR-0007).
+-- Rows are never DELETE'd; lifecycle is wk_role only (ON DELETE RESTRICT).
 CREATE TABLE transport_wk_keys (
     id INTEGER PRIMARY KEY,
     key_id TEXT NOT NULL UNIQUE,
-    direction_id INTEGER NOT NULL REFERENCES transport_direction_state(id),
+    direction_id INTEGER NOT NULL REFERENCES transport_direction_state(id) ON DELETE RESTRICT,
     sequence_established INTEGER,
     wk_key_material BLOB NOT NULL,
     wk_role TEXT NOT NULL
@@ -104,10 +104,16 @@ CREATE INDEX idx_transport_wk_keys_direction
 CREATE INDEX idx_transport_wk_keys_role
     ON transport_wk_keys (direction_id, wk_role);
 
+-- Surrogate FK to transport_wk_keys(id), NOT the TEXT wire key_id.
+-- Transaction insert order: INSERT transport_wk_keys row first, then UPDATE
+-- transport_direction_state.current_wk_id to that row's id (never the reverse).
+ALTER TABLE transport_direction_state
+    ADD COLUMN current_wk_id INTEGER REFERENCES transport_wk_keys(id) ON DELETE RESTRICT;
+
 -- Package acceptance / replay / rejection records (freshness + idempotency).
 CREATE TABLE transport_package_records (
     id INTEGER PRIMARY KEY,
-    direction_id INTEGER NOT NULL REFERENCES transport_direction_state(id),
+    direction_id INTEGER NOT NULL REFERENCES transport_direction_state(id) ON DELETE RESTRICT,
     package_id TEXT NOT NULL UNIQUE,
     sequence INTEGER NOT NULL,
     classification TEXT NOT NULL

@@ -24,8 +24,8 @@ At implementation time, tighten the pin to a single patch release:
 cryptography==50.0.1
 ```
 
-(replaces the current `>=50,<51` range in the implementation PR that introduces
-transport crypto code — not in this proposal PR.)
+**Resolved (reviewer 2026-09-12):** exact pin `==50.0.1` applied in
+`pyproject.toml` (reviewer accepts manual bump risk for future security patches).
 
 ### Primitive mapping (ADR-0007 → `cryptography` API)
 
@@ -187,7 +187,7 @@ CREATE TABLE transport_direction_state (
     recipient_installation_id TEXT NOT NULL,
     peer_trust_id INTEGER NOT NULL REFERENCES transport_peer_trust(id),
     accepted_sequence INTEGER NOT NULL DEFAULT 0,
-    current_wk_key_id INTEGER,
+    current_wk_id INTEGER,
     direction_status TEXT NOT NULL DEFAULT 'active'
         CHECK (direction_status IN ('active', 'broken', 'reinit_required')),
     created_at TEXT NOT NULL,
@@ -246,11 +246,14 @@ CREATE UNIQUE INDEX idx_transport_package_accepted_sequence
     WHERE classification = 'accepted';
 ```
 
-**Note on `current_wk_key_id`:** intentionally **without** a SQLite FK to
-`transport_wk_keys` in this skeleton — avoids a create-order cycle
-(`direction_state` is created before `transport_wk_keys`). The implementation
-PR will enforce referential integrity in `TransportKeyStore` on accept, or add
-a post-create FK via table rebuild if review requires DB-level enforcement.
+**Resolved (reviewer 2026-09-12):** `current_wk_id INTEGER` is a **surrogate FK** to
+`transport_wk_keys(id)` (renamed from `current_wk_key_id` to avoid confusion with
+TEXT wire `key_id`). FK enforced via `ALTER TABLE … ADD COLUMN … REFERENCES
+transport_wk_keys(id) ON DELETE RESTRICT` after `transport_wk_keys` exists.
+WK rows are never `DELETE`d — lifecycle via `wk_role` only; `ON DELETE RESTRICT`
+relies on that invariant. **Insert order:** `INSERT transport_wk_keys` first,
+then `UPDATE transport_direction_state.current_wk_id` within the same DB
+transaction (ADR-0007 transaction-authoritative invariant).
 
 **Deferred to implementation PR (not in skeleton):**
 
@@ -401,14 +404,14 @@ HKDF info = b"HRTR-bootstrap-wrap-v1"
 
 ## Approval checkpoint
 
-**Do not implement** migration apply logic, `TransportKeyStore` service, wire
-codec, or tests until this proposal is **explicitly approved** by the human
-reviewer.
+**Status:** Approved 2026-09-12 — implementation proceeds on PR #65.
 
-Open questions for reviewer (non-blocking suggestions welcome):
+### Resolved open questions
 
-1. `current_wk_key_id` — keep application-enforced (as proposed), or rebuild table with FK after review?
-2. Tighten `cryptography` pin to `50.0.1` in implementation PR or keep `<51` range?
+1. **`current_wk_id` FK** — Renamed from `current_wk_key_id`; surrogate
+   `INTEGER REFERENCES transport_wk_keys(id) ON DELETE RESTRICT`. Insert order:
+   WK row first, then update `current_wk_id` in the same transaction.
+2. **`cryptography` pin** — Exact `==50.0.1` in `pyproject.toml`.
 
 ---
 
