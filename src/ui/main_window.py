@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -35,7 +38,7 @@ from services.status_history import StatusHistoryService
 from services.template_library import TemplateLibraryService
 from services.user_action_log import UserActionLogService
 from ui.action_log_dialog import ActionLogDialog
-from ui.auth_dialogs import AccountsDialog, UnlockDialog
+from ui.auth_dialogs import AccountsDialog, LoginDialog, UnlockDialog
 from ui.backup_dialog import BackupDialog
 from ui.roster_panel import RosterPanel
 from ui.theme import APP_STYLESHEET
@@ -97,37 +100,21 @@ class MainWindow(QMainWindow):
         self._auth = AuthenticationService()
         self._roster: RosterPanel | None = None
         self._lock_overlay: QWidget | None = None
+        self._user_label: QLabel | None = None
+        self._switch_user_btn: QToolButton | None = None
+        self._accounts_btn: QToolButton | None = None
+        self._log_btn: QToolButton | None = None
+        self._settings_btn: QToolButton | None = None
 
         root = QWidget(objectName="centralRoot")
-        root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
+        self._root_layout = QVBoxLayout(root)
+        self._root_layout.setContentsMargins(0, 0, 0, 0)
+        self._root_layout.setSpacing(0)
 
-        root_layout.addWidget(self._build_title_bar())
-        if self._conn is not None and self._session is not None:
-            roster_service = RosterService(self._conn, self._session)
-            data_dir = self._db_path.parent if self._db_path is not None else None
-            self._roster = RosterPanel(
-                roster_service,
-                employees=EmployeeService(self._conn, self._session),
-                directories=DirectoryService(self._conn, self._session),
-                session=self._session,
-                reports=StandardReportService(self._conn, self._session),
-                templates=TemplateLibraryService(
-                    self._conn, self._session, data_dir=data_dir
-                ),
-                status_history=StatusHistoryService(self._conn, self._session),
-                availability_statuses=AvailabilityStatusService(
-                    self._conn, self._session
-                ),
-            )
-            self._roster.filters_reset.connect(self._clear_search)
-            self._search.setEnabled(True)
-            self._search.textChanged.connect(self._roster.set_name_query)
-            root_layout.addWidget(self._roster, stretch=1)
-        else:
-            root_layout.addWidget(self._build_toolbar())
-            root_layout.addWidget(self._build_content_placeholder(), stretch=1)
+        self._root_layout.addWidget(self._build_title_bar())
+        if self._conn is None or self._session is None:
+            self._root_layout.addWidget(self._build_toolbar())
+            self._root_layout.addWidget(self._build_content_placeholder(), stretch=1)
 
         self.setCentralWidget(root)
 
@@ -140,8 +127,9 @@ class MainWindow(QMainWindow):
         self._idle_timer = QTimer(self)
         self._idle_timer.setInterval(5_000)
         self._idle_timer.timeout.connect(self._check_idle)
-        if self._session is not None:
-            self._idle_timer.start()
+
+        if self._conn is not None and self._session is not None:
+            self._bind_session(self._conn, self._session)
 
     def _build_title_bar(self) -> QWidget:
         bar = QWidget(objectName="titleBar")
@@ -189,10 +177,13 @@ class MainWindow(QMainWindow):
         clock_box.addWidget(self._clock_date)
         right.addLayout(clock_box)
 
-        if self._session is not None:
-            user_label = QLabel(f"{self._session.login} ({self._session.role.value})")
-            user_label.setObjectName("clockDate")
-            right.addWidget(user_label)
+        self._user_label = QLabel(
+            f"{self._session.login} ({self._session.role.value})"
+            if self._session is not None
+            else ""
+        )
+        self._user_label.setObjectName("sessionUserLabel")
+        right.addWidget(self._user_label)
 
         self._accounts_btn = QToolButton(objectName="titleIconBtn")
         self._accounts_btn.setText("👤")
@@ -202,29 +193,16 @@ class MainWindow(QMainWindow):
         self._log_btn.setText("📋")
         self._log_btn.setToolTip("Журнал действий")
         self._log_btn.clicked.connect(self._open_action_log)
-        for btn, perm in (
-            (self._accounts_btn, Permission.MANAGE_ACCOUNTS),
-            (self._log_btn, Permission.VIEW_USER_ACTION_LOG),
-        ):
-            allowed = bool(
-                self._session is not None and self._authz.check(self._session.role, perm)
-            )
-            btn.setVisible(allowed)
-            btn.setEnabled(allowed)
 
         settings_btn = QToolButton(objectName="titleIconBtn")
         settings_btn.setText("⚙")
         settings_btn.setToolTip("Резервное копирование")
-        can_backup = bool(
-            self._session is not None
-            and (
-                self._authz.check(self._session.role, Permission.CREATE_BACKUP)
-                or self._authz.check(self._session.role, Permission.RESTORE_BACKUP)
-            )
-        )
-        settings_btn.setEnabled(can_backup)
         settings_btn.clicked.connect(self._open_backup)
         self._settings_btn = settings_btn
+        self._switch_user_btn = QToolButton(objectName="switchUserBtn")
+        self._switch_user_btn.setText("⇄")
+        self._switch_user_btn.setToolTip("Сменить пользователя")
+        self._switch_user_btn.clicked.connect(self._switch_user)
         exit_btn = QToolButton(objectName="titleIconBtn")
         exit_btn.setText("⏻")
         exit_btn.setToolTip("Выход")
@@ -232,9 +210,135 @@ class MainWindow(QMainWindow):
         right.addWidget(self._accounts_btn)
         right.addWidget(self._log_btn)
         right.addWidget(settings_btn)
+        right.addWidget(self._switch_user_btn)
         right.addWidget(exit_btn)
         layout.addLayout(right)
+        self._update_session_controls()
         return bar
+
+    def _bind_session(self, conn: Connection, session: SessionState) -> None:
+        self._conn = conn
+        self._session = session
+        session.touch()
+        self._update_session_controls()
+        if self._roster is not None:
+            self._root_layout.removeWidget(self._roster)
+            self._roster.deleteLater()
+            self._roster = None
+        data_dir = self._db_path.parent if self._db_path is not None else None
+        roster_service = RosterService(self._conn, self._session)
+        self._roster = RosterPanel(
+            roster_service,
+            employees=EmployeeService(self._conn, self._session),
+            directories=DirectoryService(self._conn, self._session),
+            session=self._session,
+            reports=StandardReportService(self._conn, self._session),
+            templates=TemplateLibraryService(
+                self._conn, self._session, data_dir=data_dir
+            ),
+            status_history=StatusHistoryService(self._conn, self._session),
+            availability_statuses=AvailabilityStatusService(
+                self._conn, self._session
+            ),
+        )
+        self._roster.filters_reset.connect(self._clear_search)
+        self._clear_search()
+        self._search.setEnabled(True)
+        with contextlib.suppress(TypeError, RuntimeError):
+            self._search.textChanged.disconnect()
+        self._search.textChanged.connect(self._roster.set_name_query)
+        self._root_layout.addWidget(self._roster, stretch=1)
+        if not self._idle_timer.isActive():
+            self._idle_timer.start()
+
+    def _update_session_controls(self) -> None:
+        has_session = self._conn is not None and self._session is not None
+        if self._user_label is not None:
+            if has_session and self._session is not None:
+                self._user_label.setText(
+                    f"{self._session.login} ({self._session.role.value})"
+                )
+            else:
+                self._user_label.setText("")
+        if self._switch_user_btn is not None:
+            self._switch_user_btn.setEnabled(has_session and self._db_path is not None)
+        for btn, perm in (
+            (self._accounts_btn, Permission.MANAGE_ACCOUNTS),
+            (self._log_btn, Permission.VIEW_USER_ACTION_LOG),
+        ):
+            if btn is None:
+                continue
+            allowed = bool(
+                has_session
+                and self._session is not None
+                and self._authz.check(self._session.role, perm)
+            )
+            btn.setVisible(allowed)
+            btn.setEnabled(allowed)
+        if self._settings_btn is not None:
+            can_backup = bool(
+                has_session
+                and self._session is not None
+                and (
+                    self._authz.check(self._session.role, Permission.CREATE_BACKUP)
+                    or self._authz.check(self._session.role, Permission.RESTORE_BACKUP)
+                )
+            )
+            self._settings_btn.setVisible(can_backup)
+            self._settings_btn.setEnabled(can_backup)
+
+    def _close_child_dialogs(self) -> None:
+        app = QApplication.instance()
+        if app is None:
+            return
+        for widget in app.topLevelWidgets():
+            if widget is self or not isinstance(widget, QDialog):
+                continue
+            widget.close()
+
+    def _teardown_session(self) -> None:
+        self._close_child_dialogs()
+        self._hide_lock_overlay()
+        if self._session is not None and self._conn is not None:
+            try:
+                self._auth.logout(self._session, self._conn)
+            except Exception:  # noqa: BLE001
+                pass
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+        if self._session is not None:
+            self._session.lock(clear_key=True)
+        if self._roster is not None:
+            self._root_layout.removeWidget(self._roster)
+            self._roster.deleteLater()
+            self._roster = None
+        self._clear_search()
+        self._search.setEnabled(False)
+        self._conn = None
+        self._session = None
+        self._update_session_controls()
+
+    def switch_user(self) -> bool:
+        """Log out current user and show login. Returns False if login was cancelled."""
+        if self._db_path is None:
+            return False
+        self._teardown_session()
+        login = LoginDialog(self._db_path, self)
+        login.raise_()
+        login.activateWindow()
+        if login.exec() != LoginDialog.DialogCode.Accepted:
+            return False
+        if login.conn is None or login.session is None:
+            return False
+        self._bind_session(login.conn, login.session)
+        return True
+
+    def _switch_user(self) -> None:
+        if not self.switch_user():
+            self.close()
 
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget(objectName="toolbar")
@@ -301,7 +405,8 @@ class MainWindow(QMainWindow):
             if not accepted:
                 self.close()
                 return
-            self._conn = dlg.conn
+            if dlg.conn is not None:
+                self._replace_connection(dlg.conn)
 
     def _require_unlocked(self) -> bool:
         if self._session is None or self._conn is None:
@@ -343,14 +448,7 @@ class MainWindow(QMainWindow):
 
     def _replace_connection(self, conn: Connection) -> None:
         self._conn = conn
-        if self._roster is not None:
-            from services.directories import DirectoryService
-            from services.employees import EmployeeService
-            from services.roster import RosterService
-            from services.standard_reports import StandardReportService
-            from services.template_library import TemplateLibraryService
-
-            assert self._session is not None
+        if self._roster is not None and self._session is not None:
             data_dir = self._db_path.parent if self._db_path is not None else None
             roster_service = RosterService(self._conn, self._session)
             self._roster._service = roster_service

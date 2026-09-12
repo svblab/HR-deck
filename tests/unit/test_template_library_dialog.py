@@ -52,18 +52,18 @@ def _save_excel(path: Path, marker: str) -> None:
 def test_template_dialog_manage_buttons_enabled_for_admin(qtbot, tmp_path: Path) -> None:
     dlg = _dialog(tmp_path)
     qtbot.addWidget(dlg)
-    assert dlg.findChild(QPushButton, "templateUploadBtn").isEnabled()
-    assert dlg.findChild(QPushButton, "templateArchiveBtn").isEnabled()
-    assert dlg.findChild(QPushButton, "templateGenerateBtn").isEnabled()
+    assert not dlg.findChild(QPushButton, "templateUploadBtn").isHidden()
+    assert not dlg.findChild(QPushButton, "templateArchiveBtn").isHidden()
+    assert not dlg.findChild(QPushButton, "templateGenerateBtn").isHidden()
     dlg._conn.close()  # type: ignore[attr-defined]
 
 
 def test_template_dialog_manage_buttons_disabled_for_hr(qtbot, tmp_path: Path) -> None:
     dlg = _dialog(tmp_path, RoleCode.HR_EMPLOYEE)
     qtbot.addWidget(dlg)
-    assert not dlg.findChild(QPushButton, "templateUploadBtn").isEnabled()
-    assert not dlg.findChild(QPushButton, "templateArchiveBtn").isEnabled()
-    assert dlg.findChild(QPushButton, "templateGenerateBtn").isEnabled()
+    assert dlg.findChild(QPushButton, "templateUploadBtn").isHidden()
+    assert dlg.findChild(QPushButton, "templateArchiveBtn").isHidden()
+    assert not dlg.findChild(QPushButton, "templateGenerateBtn").isHidden()
     dlg._conn.close()  # type: ignore[attr-defined]
 
 

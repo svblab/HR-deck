@@ -115,6 +115,14 @@ class AccountRepository:
             (1 if is_active else 0, updated_at, account_id),
         )
 
+    def delete(self, account_id: int) -> None:
+        # Append-only tables keep historical account_id values; relax FK for this delete.
+        self._conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            self._conn.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+        finally:
+            self._conn.execute("PRAGMA foreign_keys = ON")
+
 
 class SettingsRepository:
     def __init__(self, conn: Connection) -> None:

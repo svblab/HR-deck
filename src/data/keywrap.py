@@ -148,6 +148,13 @@ def find_recovery_wrap(keywrap: KeywrapFile) -> WrapEntry | None:
     return None
 
 
+def remove_account_wrap(keywrap: KeywrapFile, login: str) -> KeywrapFile:
+    remaining = [
+        w for w in keywrap.wraps if not (w.kind == "account" and w.login == login)
+    ]
+    return KeywrapFile(wraps=remaining)
+
+
 def upsert_account_wrap(keywrap: KeywrapFile, entry: WrapEntry) -> KeywrapFile:
     if entry.kind != "account" or not entry.login:
         raise KeywrapError("upsert_account_wrap requires account entry with login")

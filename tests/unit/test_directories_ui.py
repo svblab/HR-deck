@@ -185,6 +185,56 @@ def test_directories_dialog_populates_employee_card_combos(
 
 
 @pytest.mark.acceptance
+def test_directories_hierarchical_tabs_empty_until_parent_selected(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Департаменты/отделы: таблица пуста, пока родитель в комбобоксе не выбран."""
+    conn, admin, db = _open_empty_db(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    directories = DirectoryService(conn, admin, clock=clock)
+    monkeypatch.setattr(
+        "ui.directories_dialog._prompt_text",
+        lambda *_a, **_k: ("Тест", True),
+    )
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    branch_id = directories.create_branch("Филиал А")
+    dept_id = directories.create_department(branch_id, "Департамент А")
+    directories.create_division(dept_id, "Отдел А")
+    branch_b_id = directories.create_branch("Филиал Б")
+    directories.create_department(branch_b_id, "Департамент Б")
+
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    dept_parent = dlg.findChild(QComboBox, "directoriesDepartmentParent")
+    dept_table = dlg.findChild(QTableWidget, "directoriesDepartmentTable")
+    div_branch = dlg.findChild(QComboBox, "directoriesDivisionExtraParent")
+    div_dept = dlg.findChild(QComboBox, "directoriesDivisionParent")
+    div_table = dlg.findChild(QTableWidget, "directoriesDivisionTable")
+    assert dept_parent is not None and dept_table is not None
+    assert div_branch is not None and div_dept is not None and div_table is not None
+
+    assert dept_parent.currentData() is None
+    assert dept_table.rowCount() == 0
+    assert div_branch.currentData() is None
+    assert div_dept.currentData() is None
+    assert div_table.rowCount() == 0
+
+    _select_combo(dept_parent, branch_id)
+    assert dept_table.rowCount() == 1
+
+    _select_combo(div_branch, branch_id)
+    assert div_dept.count() >= 2
+    assert div_table.rowCount() == 0
+
+    _select_combo(div_dept, dept_id)
+    assert div_table.rowCount() == 1
+
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
 def test_observer_directories_dialog_is_view_only(
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -217,18 +267,18 @@ def test_observer_directories_dialog_is_view_only(
                     "directoriesPosition",
                     "directoriesEmployment",
                 ):
-                    assert not widget.findChild(
+                    assert widget.findChild(
                         QPushButton, f"{prefix}CreateBtn"
-                    ).isEnabled()
-                    assert not widget.findChild(
+                    ).isHidden()
+                    assert widget.findChild(
                         QPushButton, f"{prefix}RenameBtn"
-                    ).isEnabled()
-                    assert not widget.findChild(
+                    ).isHidden()
+                    assert widget.findChild(
                         QPushButton, f"{prefix}ArchiveBtn"
-                    ).isEnabled()
-                    assert not widget.findChild(
+                    ).isHidden()
+                    assert widget.findChild(
                         QPushButton, f"{prefix}RestoreBtn"
-                    ).isEnabled()
+                    ).isHidden()
                 table = widget.findChild(QTableWidget, "directoriesBranchTable")
                 assert table is not None and table.rowCount() >= 1
                 widget.accept()
