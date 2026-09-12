@@ -31,8 +31,8 @@
 | EPIC-017 | Комплект документации | ✅ Завершён | [#31](https://github.com/svblab/HR-deck/pull/31) |
 | EPIC-016 | Приёмочное тестирование и стабилизация | ✅ Завершён (см. [`acceptance/EPIC-016-signoff.md`](acceptance/EPIC-016-signoff.md)) | [#33](https://github.com/svblab/HR-deck/pull/33), [#40](https://github.com/svblab/HR-deck/pull/40), [#41](https://github.com/svblab/HR-deck/pull/41), [#47](https://github.com/svblab/HR-deck/pull/47), [#51](https://github.com/svblab/HR-deck/pull/51), [#52](https://github.com/svblab/HR-deck/pull/52), [#53](https://github.com/svblab/HR-deck/pull/53), [#54](https://github.com/svblab/HR-deck/pull/54) |
 | EPIC-018 | Конвертация неструктурированных данных (Механизм 1) | 📋 Запланирован | — |
-| EPIC-019 | Управление ключами шифрования транспортных пакетов | 📋 Запланирован | — |
-| EPIC-020 | Импорт данных филиалов (Механизм 2) | 📋 Запланирован | — |
+| EPIC-019 | TransportKeyStore и transport-state | 📋 Запланирован | — |
+| EPIC-020 | Transport exchange между установками (Механизм 2) | 📋 Запланирован | — |
 | EPIC-021 | Единый диалог «Работа с базой данных» | 📋 Запланирован | — |
 
 ---
@@ -535,81 +535,95 @@ EPIC-015 (документация описывает уже реализова�
 
 ---
 
-## EPIC-019 — Управление ключами шифрования транспортных пакетов
+## EPIC-019 — TransportKeyStore и transport-state
 
-**Цель.** Инфраструктура шифрования, общая для последующего импорта данных
-филиалов (EPIC-020) — генерация/хранение/ротация собственной пары ключей,
-импорт чужих публичных ключей.
+**Цель.** Инфраструктура доверенного duplex-transport по **ADR-0007 v3** —
+**TransportKeyStore** (authoritative state в encrypted `personnel.db`),
+bootstrap/trust между peer-установками, независимые цепочки `WK` по
+направлениям, `key_id` lookup и ручная re-initialization при потере текущего
+`WK` / signing identity.
 
 **В скоупе**
-- Всё содержимое ADR-0007 v2 в части управления ключами — `keys.enc`, экран
-  управления ключами, право `MANAGE_ENCRYPTION_KEYS`, зависимость `PyNaCl`,
-  включение `keys.enc` в бэкап.
-- Каждая установка (не только центр) генерирует собственную пару ключей
-  X25519 — см. модель ключей в ADR-0007 v2.
+- Реализация архитектурных инвариантов ADR-0007 v3 в части **TransportKeyStore
+  и transport-state** (не business-import):
+  - authoritative transport keys/state **внутри transaction boundary
+    `personnel.db`** (conceptual `TransportKeyStore` service; **без**
+    independently mutable sidecar `keys.enc`);
+  - at-rest: plaintext `WK` не на диске; защита через SQLCipher + keywrap;
+  - одноразовый **manual bootstrap** (peer **signing** + **bootstrap encryption**
+    public keys out-of-band);
+  - **per-direction** цепочки `WK`, уникальные `key_id`, lookup без перебора;
+  - active/historical/revoked metadata; **без** rollback historical `WK`;
+  - **manual re-initialization** при lost current `WK` или lost/compromised
+    signing identity;
+  - пометка **revoked/compromised** keys; запрет active use compromised material;
+  - backup/restore: authoritative transport state **с `.db`/`.keywrap`** (без
+    обязательного отдельного KeyStore-file).
+- Долгоживущие **signing identity** и **bootstrap encryption identity**
+  (отдельные роли; отдельно от `WK`).
+- Право `MANAGE_ENCRYPTION_KEYS` — только Администратор.
+- UI/сервис управления ключами и trust (детали UI — implementation).
+- Новая криптографическая зависимость — по **ADR-0007** (принята 2026-09-11,
+  `ANCHOR_PROTOCOL.md` §4); конкретная библиотека — decision implementation model.
 
-**Вне скоупа.** Сама подготовка/расшифровка пакетов с данными филиала —
-это EPIC-020, использует инфраструктуру этого эпика, но не является его
-частью.
+**Вне скоупа.** Формирование/приём business payload, merge сотрудников,
+atomic package import — **EPIC-020**.
 
 **Зависимости:** нет — может разрабатываться и мержиться независимо от
-EPIC-020, как отдельный, самодостаточный слой (по аналогии с тем, как
-EPIC-004 сервис был отделён от EPIC-004 UI).
+EPIC-020 (как EPIC-004 service от UI). **ADR-0007 принята** (2026-09-11).
 
-**DoD / трассировка:** все тесты из таблицы ADR-0007 v2, относящиеся к
-управлению ключами; `ANCHOR_PROTOCOL.md` §4 (новая зависимость — ADR принята
-до PR), локальный гейт зелёный. Слой работы с `PyNaCl` (генерация пар,
-`Box`/открытие, хранение в `keys.enc`) — отдельный внутренний сервис
-(`services/transport_keys.py` или аналог), к которому обращается UI. UI-код
-не импортирует `nacl` напрямую и не работает с сырыми ключами — только
-через сервис.
+**DoD / трассировка:** тесты ADR-0007 v3: TransportKeyStore/DB atomicity,
+signing vs bootstrap separation, bootstrap, `key_id` lookup, duplex
+independence, lost-WK/lost-signing re-init, compromised-key revocation,
+transport backup via `.db`/`.keywrap`, admin permission; локальный гейт зелёный. Криптография — отдельный internal
+service (`services/transport_keys.py` или аналог); UI не работает с сырыми
+ключами напрямую.
 
 ---
 
-## EPIC-020 — Импорт данных филиалов (Механизм 2)
+## EPIC-020 — Transport exchange между установками (Механизм 2)
 
-**Цель.** Приём и применение авторитетного снимка данных филиала:
-шифрование/расшифровка пакета (через EPIC-019), фильтр периода на экспорте,
-защита от повторного применения пакета, слияние по `external_id`.
+**Цель.** Duplex обмен авторитетными снимками данных между **независимыми
+peer-установками** по **ADR-0007 v3**: роли **sender/recipient**; per-direction
+`WK` chains; per-package `SK`; **whole-package** atomic apply (no partial
+application); replay/idempotency; merge по `external_id` (**ADR-0006**).
+TransportKeyStore / transport-key lifecycle — **EPIC-019**, не дублировать здесь.
 
-EPIC-020 признан слишком большим для одного эпика — разбивается на
-implementation slices в рамках одного пользовательского эпика (не отдельные
-номера EPIC, но отдельные PR и отдельные пункты DoD):
+EPIC-020 разбивается на implementation slices (отдельные PR / DoD):
 
-- **020-A — Формат пакета.** Сериализация/десериализация `TransportPackage`
-  (заголовок + `Box`-шифротекст), без бизнес-логики импорта/экспорта.
-- **020-B — Экспорт.** Фильтр периода, выбор публичного ключа получателя,
-  инкремент `source_sequence`, формирование пакета через 020-A, запись в
-  журнал.
-- **020-C — Приём и проверка подлинности.** Разбор заголовка, выбор ключа
-  по `recipient_key_id`/`claimed_sender_branch_key_id`, `Box.open()`,
-  сверка `payload.sender_branch_key_id`, проверка freshness по
-  `source_sequence` — до этого шага никакой бизнес-логики.
-- **020-D — Бизнес-валидация.** Построчная проверка `external_id`+ФИО
-  (создать/обновить/отклонить), whitelist полей, формирование отчёта —
-  без записи в БД.
-- **020-E — Применение (транзакция).** Один коммит: все принятые строки +
-  статусы через `StatusHistoryService` + запись `package_id`/`source_sequence`
-  + журнал действий, атомарно.
-- **020-F — Повторный импорт и best-effort удаление файла.** Обработка уже
-  виденного `package_id` (идемпотентный повтор), попытка удаления исходного
-  файла после успешного коммита.
+- **020-A — Формат пакета.** Сериализация `TransportPackage`: untrusted
+  routing metadata + signature + envelope + ciphertext payload; без
+  business-import logic.
+- **020-B — Export (per direction).** Выбор recipient trust, фильтр периода,
+  генерация `SK_n`/`WK_n`, первый пакет направления vs последующие,
+  increment direction `sequence`, audit log.
+- **020-C — Crypto receive.** Parse → `key_id` lookup → decrypt envelope →
+  verify signing identity → decrypt payload; **без** business DB writes.
+- **020-D — Business validation & confirmation gate.** Pre-DB validation всего
+  payload: **`external_id`+ФИО only** (ADR-0006 boundary — no fuzzy reconcile,
+  no auto conflict resolve); whitelist, status plans; freshness/replay
+  classification; **любая** invalid строка или `ConfirmationRequiredError` →
+  **весь пакет** rejected или pending — **без** DB writes и **без**
+  transport advance.
+- **020-E — Atomic apply (orchestrator-owned transaction).** Import
+  orchestrator владеет **единственной** DB transaction: full package business
+  changes + `StatusHistoryService` (no duplicate on replay) + package/replay
+  record + transport-state advance (`WK_{n+1}`, sequence) + audit;
+  crypto/validation/confirmation **до** `BEGIN`; **no UI inside** transaction.
+- **020-F — Replay & cleanup.** Exact replay `package_id` — idempotent no-op
+  для business/status/transport; optional replay audit; best-effort delete
+  source file after first successful commit only.
 
-**Вне скоупа.** Обратный поток (центр → филиал), синхронизация полной
-истории статусов (переносится только текущее состояние; история хранится
-в каждой копии отдельно).
+**Вне скоупа.** Multi-master merge между peer-ами; полная синхронизация
+истории статусов (переносится текущее состояние; история локальна).
 
-**Зависимости:** 020-A ни от чего не зависит внутри эпика; 020-B зависит от
-020-A; 020-C зависит от 020-A; 020-D зависит от 020-C; 020-E зависит от
-020-D; 020-F зависит от 020-E. Все зависят от EPIC-019. EPIC-020 **не
-начинается**, пока ADR-0007 v2 не принята явно (пересмотренное решение —
-ранее в EPIC-020 было указано «зависит от EPIC-019», теперь явно — «и от
-принятия ADR-0007»). Переиспользует `external_id`/идентификацию из
-ADR-0006.
+**Зависимости:** 020-A…020-F как выше; все зависят от **EPIC-019**. **ADR-0007
+принята** (2026-09-11). EPIC-020 **не начинается** по business-import slices,
+пока **ADR-0006 не принята** **и** `external_id` **не реализован** в коде.
 
-**DoD / трассировка:** тесты из таблицы ADR-0007 v2, относящиеся к
-транспортным пакетам и импорту; запись в журнал действий на каждый экспорт
-и каждый импорт; локальный гейт зелёный.
+**DoD / трассировка:** тесты ADR-0007 v3 по transport/import/atomicity/replay/
+confirmation/transaction composition;
+audit на каждый export/import/replay; локальный гейт зелёный.
 
 ---
 
@@ -664,8 +678,8 @@ ADR-0006.
 | 015 | Поставка под Linux | 002, 012 |
 | 017 | Комплект документации | 005, 008, 009, 010, 011, 012, 015 |
 | 018 | Конвертация неструктурированных данных | — |
-| 019 | Управление ключами шифрования транспортных пакетов | — |
-| 020 | Импорт данных филиалов | 019, ADR-0007 (принята) |
+| 019 | TransportKeyStore и transport-state | — |
+| 020 | Transport exchange между установками | 019, ADR-0007 (принята), ADR-0006 (принята) + `external_id` в коде |
 | 021 | Единый диалог «Работа с базой данных» | 018, 020 (каркас — параллельно) |
 | 016 | Приёмка и стабилизация | 017, все |
 
