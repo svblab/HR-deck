@@ -5,6 +5,8 @@ DROP TRIGGER IF EXISTS trg_employees_org_consistency_insert;
 DROP TRIGGER IF EXISTS trg_employees_org_consistency_update;
 DROP TRIGGER IF EXISTS trg_divisions_no_rebranch_if_referenced;
 DROP TRIGGER IF EXISTS trg_departments_no_reparent_if_referenced;
+DROP TRIGGER IF EXISTS trg_status_history_no_update;
+DROP TRIGGER IF EXISTS trg_status_history_no_delete;
 
 CREATE TEMP TABLE _adr0008_status_history_backup AS
     SELECT * FROM status_history;
@@ -35,6 +37,18 @@ DROP TABLE employees;
 ALTER TABLE employees_new RENAME TO employees;
 
 INSERT INTO status_history SELECT * FROM _adr0008_status_history_backup;
+
+CREATE TRIGGER trg_status_history_no_update
+BEFORE UPDATE ON status_history
+BEGIN
+    SELECT RAISE(ABORT, 'status_history is append-only: UPDATE forbidden');
+END;
+
+CREATE TRIGGER trg_status_history_no_delete
+BEFORE DELETE ON status_history
+BEGIN
+    SELECT RAISE(ABORT, 'status_history is append-only: DELETE forbidden');
+END;
 
 CREATE INDEX idx_employees_branch ON employees(branch_id);
 CREATE INDEX idx_employees_department ON employees(department_id);

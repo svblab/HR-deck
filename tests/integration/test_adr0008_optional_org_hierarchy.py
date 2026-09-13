@@ -155,6 +155,51 @@ def test_adr0008_migration_employees_allows_null_department_on_nonempty_db(
 
 
 @pytest.mark.acceptance
+def test_adr0008_migration_employees_with_status_history_on_nonempty_db(
+    tmp_path: Path,
+) -> None:
+    key = generate_master_key()
+    path = tmp_path / "app.db"
+    mig_v9 = _migrations_through(9, tmp_path / "v9-status")
+    conn = create_database(path, key)
+    apply_pending_migrations(conn, migrations_dir=mig_v9)
+    ids = _seed_pre_0010_org(conn)
+    conn.execute(
+        "INSERT INTO status_history ("
+        " employee_id, status_id, start_date, end_date, note, created_at"
+        ") VALUES (?, 1, '2026-08-01', '2026-08-10', 'adr0008 fixture', ?)",
+        (ids["employee_id"], _NOW),
+    )
+    conn.commit()
+    expected = conn.execute(
+        "SELECT employee_id, status_id, start_date, end_date, note, created_at, "
+        "created_by_account_id FROM status_history WHERE employee_id = ?",
+        (ids["employee_id"],),
+    ).fetchone()
+    conn.close()
+
+    conn2 = connect(path, key)
+    applied = apply_pending_migrations(conn2)
+    assert applied == [10, 11]
+    assert current_version(conn2) == 11
+    restored = conn2.execute(
+        "SELECT employee_id, status_id, start_date, end_date, note, created_at, "
+        "created_by_account_id FROM status_history WHERE employee_id = ?",
+        (ids["employee_id"],),
+    ).fetchone()
+    assert restored == expected
+    _fk_check_clean(conn2)
+    with pytest.raises(sqlcipher.IntegrityError, match="DELETE forbidden"):
+        conn2.execute("DELETE FROM status_history WHERE employee_id = ?", (ids["employee_id"],))
+    with pytest.raises(sqlcipher.IntegrityError, match="UPDATE forbidden"):
+        conn2.execute(
+            "UPDATE status_history SET note = 'x' WHERE employee_id = ?",
+            (ids["employee_id"],),
+        )
+    conn2.close()
+
+
+@pytest.mark.acceptance
 def test_adr0008_create_division_directly_under_branch(tmp_path: Path) -> None:
     conn, session = _open_db(tmp_path)
     svc = DirectoryService(conn, session, clock=lambda: _NOW)
