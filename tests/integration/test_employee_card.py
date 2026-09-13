@@ -49,7 +49,7 @@ def _seed_directories(
     ds = DirectoryService(conn, session, clock=lambda: "2026-08-26T13:00:00Z")
     branch_id = ds.create_branch("Филиал Тест")
     dept_id = ds.create_department(branch_id, "Департамент QA")
-    div_id = ds.create_division(dept_id, "Отдел A")
+    div_id = ds.create_division(branch_id, dept_id, "Отдел A")
     pos_id = ds.create_position("Инженер")
     et_id = ds.create_employment_type("test_staff", "Тестовый штат")
     return {

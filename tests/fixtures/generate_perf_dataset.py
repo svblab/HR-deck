@@ -25,8 +25,9 @@ def seed_perf_org(conn) -> dict[str, int]:
         ("Департамент нагрузочного теста", _NOW, _NOW),
     )
     conn.execute(
-        "INSERT INTO divisions (id, department_id, name, is_archived, created_at, updated_at) "
-        "VALUES (1, 1, ?, 0, ?, ?)",
+        "INSERT INTO divisions ("
+        " id, branch_id, department_id, name, is_archived, created_at, updated_at"
+        ") VALUES (1, 1, 1, ?, 0, ?, ?)",
         ("Отдел синтетики", _NOW, _NOW),
     )
     conn.execute(

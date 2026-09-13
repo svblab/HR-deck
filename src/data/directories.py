@@ -29,7 +29,8 @@ class DepartmentRecord:
 @dataclass(frozen=True)
 class DivisionRecord:
     id: int
-    department_id: int
+    branch_id: int
+    department_id: int | None
     name: str
     is_archived: bool
     created_at: str
@@ -155,11 +156,15 @@ class DivisionRepository:
     def list(
         self,
         *,
+        branch_id: int | None = None,
         department_id: int | None = None,
         active_only: bool = False,
     ) -> list[DivisionRecord]:
         clauses: list[str] = []
         params: list[object] = []
+        if branch_id is not None:
+            clauses.append("branch_id = ?")
+            params.append(branch_id)
         if department_id is not None:
             clauses.append("department_id = ?")
             params.append(department_id)
@@ -167,24 +172,27 @@ class DivisionRepository:
             clauses.append("is_archived = 0")
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = (
-            "SELECT id, department_id, name, is_archived, created_at, updated_at "
+            "SELECT id, branch_id, department_id, name, is_archived, created_at, updated_at "
             f"FROM divisions{where} ORDER BY name"
         )
         return [_division_row(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def get(self, division_id: int) -> DivisionRecord | None:
         row = self._conn.execute(
-            "SELECT id, department_id, name, is_archived, created_at, updated_at "
+            "SELECT id, branch_id, department_id, name, is_archived, created_at, updated_at "
             "FROM divisions WHERE id = ?",
             (division_id,),
         ).fetchone()
         return _division_row(row) if row else None
 
-    def create(self, *, department_id: int, name: str, created_at: str) -> int:
+    def create(
+        self, *, branch_id: int, department_id: int | None, name: str, created_at: str
+    ) -> int:
         cur = self._conn.execute(
-            "INSERT INTO divisions (department_id, name, is_archived, created_at, updated_at) "
-            "VALUES (?, ?, 0, ?, ?)",
-            (department_id, name, created_at, created_at),
+            "INSERT INTO divisions ("
+            " branch_id, department_id, name, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, 0, ?, ?)",
+            (branch_id, department_id, name, created_at, created_at),
         )
         return int(cur.lastrowid)
 
@@ -311,11 +319,12 @@ def _department_row(row: tuple[object, ...]) -> DepartmentRecord:
 def _division_row(row: tuple[object, ...]) -> DivisionRecord:
     return DivisionRecord(
         id=int(row[0]),
-        department_id=int(row[1]),
-        name=str(row[2]),
-        is_archived=bool(int(row[3])),
-        created_at=str(row[4]),
-        updated_at=str(row[5]),
+        branch_id=int(row[1]),
+        department_id=int(row[2]) if row[2] is not None else None,
+        name=str(row[3]),
+        is_archived=bool(int(row[4])),
+        created_at=str(row[5]),
+        updated_at=str(row[6]),
     )
 
 

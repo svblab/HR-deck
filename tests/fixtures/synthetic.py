@@ -2,9 +2,33 @@
 
 from __future__ import annotations
 
-from data.db import Connection
+from data.db import Connection, table_columns
 
 _NOW = "2026-08-01T10:00:00Z"
+
+
+def _insert_division(
+    conn: Connection,
+    *,
+    division_id: int,
+    branch_id: int,
+    department_id: int,
+    name: str,
+) -> None:
+    if "branch_id" in table_columns(conn, "divisions"):
+        conn.execute(
+            "INSERT INTO divisions ("
+            " id, branch_id, department_id, name, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, 0, ?, ?)",
+            (division_id, branch_id, department_id, name, _NOW, _NOW),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO divisions ("
+            " id, department_id, name, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, 0, ?, ?)",
+            (division_id, department_id, name, _NOW, _NOW),
+        )
 
 
 def seed_synthetic_org(conn: Connection) -> dict[str, int]:
@@ -23,10 +47,12 @@ def seed_synthetic_org(conn: Connection) -> dict[str, int]:
         "VALUES (1, 1, ?, 0, ?, ?)",
         ("Департамент разработки", _NOW, _NOW),
     )
-    conn.execute(
-        "INSERT INTO divisions (id, department_id, name, is_archived, created_at, updated_at) "
-        "VALUES (1, 1, ?, 0, ?, ?)",
-        ("Отдел платформы", _NOW, _NOW),
+    _insert_division(
+        conn,
+        division_id=1,
+        branch_id=1,
+        department_id=1,
+        name="Отдел платформы",
     )
     conn.execute(
         "INSERT INTO positions (id, name, is_archived, created_at, updated_at) "

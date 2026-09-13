@@ -158,24 +158,43 @@ class DirectoryService:
 
     # --- Divisions ---
 
-    def list_divisions(self, *, department_id: int | None = None, active_only: bool = False):
+    def list_divisions(
+        self,
+        *,
+        branch_id: int | None = None,
+        department_id: int | None = None,
+        active_only: bool = False,
+    ):
         self._require(Permission.VIEW_DIRECTORIES)
-        return self._divisions.list(department_id=department_id, active_only=active_only)
+        return self._divisions.list(
+            branch_id=branch_id, department_id=department_id, active_only=active_only
+        )
 
-    def create_division(self, department_id: int, name: str) -> int:
+    def create_division(
+        self, branch_id: int, department_id: int | None, name: str
+    ) -> int:
         self._require(Permission.MANAGE_DIRECTORIES)
-        department = self._require_department(department_id)
-        if department.is_archived:
-            raise DirectoryError("cannot assign to archived department")
+        branch = self._require_branch(branch_id)
+        if branch.is_archived:
+            raise DirectoryError("cannot assign to archived branch")
+        if department_id is not None:
+            department = self._require_department(department_id)
+            if department.branch_id != branch_id:
+                raise DirectoryError("department does not belong to branch")
+            if department.is_archived:
+                raise DirectoryError("cannot assign to archived department")
         clean = _clean_name(name)
         now = self._clock()
         return self._mutate(
             action="directory.division.create",
             entity_type="division",
             mutate=lambda: self._divisions.create(
-                department_id=department_id, name=clean, created_at=now
+                branch_id=branch_id,
+                department_id=department_id,
+                name=clean,
+                created_at=now,
             ),
-            details=f"department_id={department_id};name={clean}",
+            details=f"branch_id={branch_id};department_id={department_id};name={clean}",
         )
 
     def rename_division(self, division_id: int, name: str) -> None:

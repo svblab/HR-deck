@@ -14,7 +14,7 @@ class EmployeeRecord:
     full_name: str
     position_id: int
     branch_id: int
-    department_id: int
+    department_id: int | None
     division_id: int | None
     employment_type_id: int
     note: str | None
@@ -64,7 +64,7 @@ class EmployeeRepository:
         full_name: str,
         position_id: int,
         branch_id: int,
-        department_id: int,
+        department_id: int | None,
         employment_type_id: int,
         created_at: str,
         division_id: int | None = None,
@@ -97,7 +97,7 @@ class EmployeeRepository:
         full_name: str,
         position_id: int,
         branch_id: int,
-        department_id: int,
+        department_id: int | None,
         employment_type_id: int,
         updated_at: str,
         division_id: int | None = None,
@@ -148,7 +148,7 @@ def _row(row: tuple[object, ...]) -> EmployeeRecord:
         full_name=str(row[1]),
         position_id=int(row[2]),
         branch_id=int(row[3]),
-        department_id=int(row[4]),
+        department_id=int(row[4]) if row[4] is not None else None,
         division_id=int(row[5]) if row[5] is not None else None,
         employment_type_id=int(row[6]),
         note=str(row[7]) if row[7] is not None else None,

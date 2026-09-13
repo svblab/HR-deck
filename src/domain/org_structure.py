@@ -12,7 +12,7 @@ class OrgConsistencyError(ValueError):
 @dataclass(frozen=True)
 class OrgAssignment:
     branch_id: int
-    department_id: int
+    department_id: int | None
     division_id: int | None = None
 
 
@@ -25,23 +25,30 @@ class DepartmentRef:
 @dataclass(frozen=True)
 class DivisionRef:
     id: int
-    department_id: int
+    branch_id: int
+    department_id: int | None
 
 
 def validate_org_assignment(
     assignment: OrgAssignment,
-    department: DepartmentRef,
+    department: DepartmentRef | None,
     division: DivisionRef | None = None,
 ) -> None:
     """
-    Проверить, что department принадлежит branch, а division — department.
+    Проверить согласованность branch/department/division до INSERT.
 
-    Вызывается из service-слоя до INSERT; дублируется триггерами БД.
+    department_id сравнивается точно (включая None); division.branch_id
+    сверяется с assignment.branch_id напрямую.
     """
-    if department.id != assignment.department_id:
-        raise OrgConsistencyError("department id mismatch")
-    if department.branch_id != assignment.branch_id:
-        raise OrgConsistencyError("department does not belong to branch")
+    if assignment.department_id is not None:
+        if department is None:
+            raise OrgConsistencyError("department_id set but department not loaded")
+        if department.id != assignment.department_id:
+            raise OrgConsistencyError("department id mismatch")
+        if department.branch_id != assignment.branch_id:
+            raise OrgConsistencyError("department does not belong to branch")
+    elif department is not None:
+        raise OrgConsistencyError("department provided but assignment has no department_id")
 
     if assignment.division_id is None:
         if division is not None:
@@ -52,5 +59,7 @@ def validate_org_assignment(
         raise OrgConsistencyError("division_id set but division not loaded")
     if division.id != assignment.division_id:
         raise OrgConsistencyError("division id mismatch")
+    if division.branch_id != assignment.branch_id:
+        raise OrgConsistencyError("division does not belong to branch")
     if division.department_id != assignment.department_id:
-        raise OrgConsistencyError("division does not belong to department")
+        raise OrgConsistencyError("division department does not match assignment")

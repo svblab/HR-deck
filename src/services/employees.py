@@ -181,9 +181,11 @@ class EmployeeService:
         full_name = clean_full_name(data.full_name)
         self._require_active_directory(self._positions.get, data.position_id, "position")
         self._require_active_directory(self._branches.get, data.branch_id, "branch")
-        department = self._require_active_directory(
-            self._departments.get, data.department_id, "department"
-        )
+        department = None
+        if data.department_id is not None:
+            department = self._require_active_directory(
+                self._departments.get, data.department_id, "department"
+            )
         division = None
         if data.division_id is not None:
             division = self._require_active_directory(
@@ -197,9 +199,17 @@ class EmployeeService:
                 branch_id=data.branch_id,
                 department_id=data.department_id,
                 division_id=data.division_id,
-                department=DepartmentRef(id=department.id, branch_id=department.branch_id),
+                department=(
+                    DepartmentRef(id=department.id, branch_id=department.branch_id)
+                    if department
+                    else None
+                ),
                 division=(
-                    DivisionRef(id=division.id, department_id=division.department_id)
+                    DivisionRef(
+                        id=division.id,
+                        branch_id=division.branch_id,
+                        department_id=division.department_id,
+                    )
                     if division
                     else None
                 ),
@@ -252,7 +262,11 @@ class EmployeeService:
     def _to_search_hit(self, record: EmployeeRecord) -> EmployeeSearchHit:
         position = self._positions.get(record.position_id)
         branch = self._branches.get(record.branch_id)
-        department = self._departments.get(record.department_id)
+        department = (
+            self._departments.get(record.department_id)
+            if record.department_id is not None
+            else None
+        )
         division = (
             self._divisions.get(record.division_id) if record.division_id is not None else None
         )

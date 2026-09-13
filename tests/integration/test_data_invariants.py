@@ -41,7 +41,7 @@ def test_domain_rejects_mismatched_org_assignment() -> None:
         validate_org_assignment(
             OrgAssignment(branch_id=1, department_id=1, division_id=1),
             DepartmentRef(id=1, branch_id=1),
-            DivisionRef(id=1, department_id=99),
+            DivisionRef(id=1, branch_id=1, department_id=99),
         )
 
 
@@ -79,8 +79,10 @@ def test_db_rejects_employee_with_foreign_division(tmp_path: Path) -> None:
         (_NOW, _NOW),
     )
     conn.execute(
-        "INSERT INTO divisions (id, department_id, name, is_archived, created_at, updated_at) "
-        "VALUES (2, 2, 'Div B', 0, ?, ?)",
+        "INSERT INTO divisions ("
+        " id, branch_id, department_id, name, is_archived, created_at, updated_at"
+        ") "
+        "VALUES (2, 1, 2, 'Div B', 0, ?, ?)",
         (_NOW, _NOW),
     )
     conn.commit()
