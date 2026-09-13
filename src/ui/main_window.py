@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 from datetime import datetime
 from pathlib import Path
 
@@ -105,6 +104,7 @@ class MainWindow(QMainWindow):
         self._accounts_btn: QToolButton | None = None
         self._log_btn: QToolButton | None = None
         self._settings_btn: QToolButton | None = None
+        self._search_signal_connected = False
 
         root = QWidget(objectName="centralRoot")
         self._root_layout = QVBoxLayout(root)
@@ -244,9 +244,10 @@ class MainWindow(QMainWindow):
         self._roster.filters_reset.connect(self._clear_search)
         self._clear_search()
         self._search.setEnabled(True)
-        with contextlib.suppress(TypeError, RuntimeError):
+        if self._search_signal_connected:
             self._search.textChanged.disconnect()
         self._search.textChanged.connect(self._roster.set_name_query)
+        self._search_signal_connected = True
         self._root_layout.addWidget(self._roster, stretch=1)
         if not self._idle_timer.isActive():
             self._idle_timer.start()
@@ -288,7 +289,7 @@ class MainWindow(QMainWindow):
 
     def _close_child_dialogs(self) -> None:
         app = QApplication.instance()
-        if app is None:
+        if not isinstance(app, QApplication):
             return
         for widget in app.topLevelWidgets():
             if widget is self or not isinstance(widget, QDialog):

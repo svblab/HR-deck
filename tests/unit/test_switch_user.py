@@ -7,7 +7,7 @@ from time import monotonic
 
 import pytest
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication, QDialog, QToolButton
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QToolButton
 
 from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
@@ -15,6 +15,7 @@ from services.authentication import AuthenticationService
 from services.bootstrap import BootstrapService
 from ui.auth_dialogs import AccountsDialog, LoginDialog
 from ui.main_window import MainWindow
+from ui.roster_panel import RosterPanel
 
 
 def _seed_accounts(tmp_path: Path) -> Path:
@@ -51,6 +52,36 @@ def _switch_btn(window: MainWindow) -> QToolButton:
     btn = window.findChild(QToolButton, "switchUserBtn")
     assert btn is not None
     return btn
+
+
+@pytest.mark.acceptance
+def test_switch_user_first_bind_emits_no_disconnect_warning(
+    qtbot, tmp_path: Path, recwarn
+) -> None:
+    db = _seed_accounts(tmp_path)
+    auth = AuthenticationService(sleeper=lambda _s: None)
+    conn, session = auth.login(db_path=db, login="admin", password="AdminPass-1")
+    window = MainWindow(db_path=db)
+    qtbot.addWidget(window)
+    window._bind_session(conn, session)
+    assert not any(
+        "Failed to disconnect" in str(w.message) for w in recwarn.list
+    )
+    window.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_startup_with_session_builds_single_roster_no_placeholder(
+    qtbot, tmp_path: Path
+) -> None:
+    window, _auth = _open_window(qtbot, tmp_path, login="admin", password="AdminPass-1")
+    assert window.findChild(QLabel, "contentPlaceholder") is None
+    assert window.findChild(QPushButton, "primaryBtn") is None
+    assert len(window.findChildren(RosterPanel)) == 1
+    window.close()
+    if window._conn is not None:
+        window._conn.close()
 
 
 @pytest.mark.acceptance
