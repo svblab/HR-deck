@@ -22,7 +22,7 @@ from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.session import SessionState
-from ui.directories_dialog import DirectoriesDialog
+from ui.directories_dialog import _NO_DEPARTMENT, DirectoriesDialog
 from ui.employee_card_form import EmployeeCardDialog
 from ui.main_window import MainWindow
 
@@ -290,4 +290,49 @@ def test_archived_position_hidden_for_new_employee_kept_on_existing(
     assert idx >= 0
     assert existing._position.itemText(idx) == "Инженер"
 
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_dialog_creates_branch_direct_division(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0008: отдел филиала без департамента через «— без департамента —»."""
+    conn, admin, _db = _open_empty_db(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    directories = DirectoryService(conn, admin, clock=clock)
+
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    branch_btn = dlg.findChild(QPushButton, "directoriesBranchCreateBtn")
+    monkeypatch.setattr(
+        "ui.directories_dialog._prompt_text",
+        lambda *_a, **_k: ("Филиал Центр", True),
+    )
+    _click(qtbot, branch_btn)
+    branch_id = directories.list_branches(active_only=True)[0].id
+
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Отделы"))
+    div_branch = dlg.findChild(QComboBox, "directoriesDivisionExtraParent")
+    div_dept = dlg.findChild(QComboBox, "directoriesDivisionParent")
+    assert div_branch is not None and div_dept is not None
+    _select_combo(div_branch, branch_id)
+    _select_combo(div_dept, _NO_DEPARTMENT)
+    monkeypatch.setattr(
+        "ui.directories_dialog._prompt_text",
+        lambda *_a, **_k: ("Секретариат филиала", True),
+    )
+    div_btn = dlg.findChild(QPushButton, "directoriesDivisionCreateBtn")
+    _click(qtbot, div_btn)
+
+    row = conn.execute(
+        "SELECT branch_id, department_id FROM divisions WHERE name = ?",
+        ("Секретариат филиала",),
+    ).fetchone()
+    assert row == (branch_id, None)
+    dlg.close()
     conn.close()

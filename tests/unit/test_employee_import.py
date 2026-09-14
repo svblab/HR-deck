@@ -15,7 +15,8 @@ _CATALOG = ImportCatalog(
     positions={"инженер": 1},
     branches={"филиал север": 2},
     departments={(2, "департамент qa"): 3},
-    divisions={(3, "отдел a"): 4},
+    divisions_by_department={(3, "отдел a"): 4},
+    divisions_by_branch={(2, "отдел филиала"): 5},
     employment_types={"штатный": 1, "staff": 1},
 )
 

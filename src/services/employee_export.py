@@ -44,7 +44,9 @@ class EmployeeExportService:
                 card.full_name,
                 names["positions"].get(card.position_id, ""),
                 names["branches"].get(card.branch_id, ""),
-                names["departments"].get(card.department_id, ""),
+                names["departments"].get(card.department_id, "")
+                if card.department_id is not None
+                else "",
                 names["divisions"].get(card.division_id, "")
                 if card.division_id is not None
                 else "",

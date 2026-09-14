@@ -90,3 +90,100 @@ def test_sensitive_fields_hidden_for_hr(qtbot, tmp_path: Path) -> None:
     assert dialog._home.isHidden()
     assert dialog._insurance.isHidden()
     conn.close()
+
+
+def _select_combo(combo, entity_id: int | None) -> None:  # noqa: ANN001
+    idx = combo.findData(entity_id)
+    assert idx >= 0, f"id {entity_id} not in combo"
+    combo.setCurrentIndex(idx)
+
+
+def _division_names(dialog: EmployeeCardDialog) -> list[str]:
+    combo = dialog._division
+    return [
+        combo.itemText(i)
+        for i in range(combo.count())
+        if combo.itemData(i) is not None
+    ]
+
+
+@pytest.mark.acceptance
+def test_employee_card_division_list_filters_by_department_or_branch_direct(
+    qtbot, tmp_path: Path
+) -> None:
+    """ADR-0008: без департамента — только отделы филиала; с департаментом — его отделы."""
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Юг")
+    dept_id = directories.create_department(branch_id, "Департамент QA")
+    directories.create_division(branch_id, dept_id, "Отдел QA")
+    directories.create_division(branch_id, None, "Секретариат филиала")
+
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    _select_combo(dialog._branch, branch_id)
+    dialog._fill_divisions()
+    assert "Секретариат филиала" in _division_names(dialog)
+    assert "Отдел QA" not in _division_names(dialog)
+
+    _select_combo(dialog._department, dept_id)
+    dialog._fill_divisions()
+    assert "Отдел QA" in _division_names(dialog)
+    assert "Секретариат филиала" not in _division_names(dialog)
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_employee_card_save_without_department_branch_direct_division(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0008: карточка сохраняется без департамента с отделом филиала."""
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Восток")
+    pos_id = directories.create_position("Менеджер")
+    div_id = directories.create_division(branch_id, None, "Секретариат")
+
+    warnings = _capture_warnings(monkeypatch)
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    dialog._name.setText("Петров Петр Петрович")
+    _select_combo(dialog._branch, branch_id)
+    _select_combo(dialog._position, pos_id)
+    _select_combo(dialog._employment, 1)
+    dialog._fill_divisions()
+    _select_combo(dialog._division, div_id)
+    dialog._submit()
+    assert not warnings
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    row = conn.execute(
+        "SELECT department_id, division_id FROM employees WHERE full_name = ?",
+        ("Петров Петр Петрович",),
+    ).fetchone()
+    assert row == (None, div_id)
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_employee_card_branch_only_payload_allows_null_department_and_division(
+    qtbot, tmp_path: Path
+) -> None:
+    """ADR-0008 branch-only: форма отдаёт NULL department/division; division ещё required в UI."""
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Запад")
+    pos_id = directories.create_position("Директор")
+
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    dialog._name.setText("Сидоров Сидор Сидорович")
+    _select_combo(dialog._branch, branch_id)
+    _select_combo(dialog._position, pos_id)
+    _select_combo(dialog._employment, 1)
+    payload = dialog._payload()
+    assert payload.department_id is None
+    assert payload.division_id is None
+    emp_id = employees.create_employee(payload)
+    row = conn.execute(
+        "SELECT department_id, division_id FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    assert row == (None, None)
+    conn.close()

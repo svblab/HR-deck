@@ -27,6 +27,7 @@ from services.directories import DirectoryError, DirectoryService
 from services.session import SessionState
 
 _USER_ROLE = 256  # Qt.ItemDataRole.UserRole
+_NO_DEPARTMENT = -1
 
 
 class DirectoriesDialog(QDialog):
@@ -72,6 +73,7 @@ class DirectoriesDialog(QDialog):
             parent_label="Департамент",
             extra_parent_label="Филиал",
             extra_parent_changed=self._on_div_branch_changed,
+            include_no_parent_option=True,
         )
         self._panels = [
             self._branch_panel,
@@ -138,6 +140,7 @@ class _DirectoryPanel(QWidget):
         list_items: Callable[[bool], list] | None = None,
         extra_parent_changed: Callable[[], None] | None = None,
         reload: Callable[[], None] | None = None,
+        include_no_parent_option: bool = False,
     ) -> None:
         super().__init__()
         self._directories = directories
@@ -148,6 +151,7 @@ class _DirectoryPanel(QWidget):
         self._list_items = list_items
         self._extra_parent_changed = extra_parent_changed
         self._reload_hook = reload
+        self._include_no_parent_option = include_no_parent_option
 
         layout = QVBoxLayout(self)
         filters = QHBoxLayout()
@@ -229,6 +233,8 @@ class _DirectoryPanel(QWidget):
         self._parent.blockSignals(True)
         self._parent.clear()
         self._parent.addItem("— выберите —", None)
+        if self._include_no_parent_option:
+            self._parent.addItem("— без департамента (отдел филиала) —", _NO_DEPARTMENT)
         for item_id, name in items:
             self._parent.addItem(name, item_id)
         if current is not None:
@@ -303,7 +309,8 @@ class _DirectoryPanel(QWidget):
             )
         if self._kind == "division":
             return self._directories.list_divisions(
-                department_id=self._parent_id(),
+                branch_id=self.extra_parent_id(),
+                department_id=self._parent_id() if self._parent_id() != _NO_DEPARTMENT else None,
                 active_only=active_only,
             )
         if self._kind == "position":
@@ -339,9 +346,17 @@ class _DirectoryPanel(QWidget):
                 QMessageBox.information(self, "Создание", "Выберите филиал.")
                 return
         elif self._kind == "division":
+            branch_id = self.extra_parent_id()
+            if branch_id is None:
+                QMessageBox.information(self, "Создание", "Выберите филиал.")
+                return
             parent_id = self._parent_id()
             if parent_id is None:
-                QMessageBox.information(self, "Создание", "Выберите департамент.")
+                QMessageBox.information(
+                    self,
+                    "Создание",
+                    "Выберите департамент или «— без департамента —».",
+                )
                 return
         elif self._kind == "employment_type":
             code, ok = _prompt_text(self, "Код типа занятости", "")
@@ -371,7 +386,10 @@ class _DirectoryPanel(QWidget):
                 self._directories.create_department(parent_id, name.strip())
             elif self._kind == "division":
                 assert parent_id is not None
-                self._directories.create_division(parent_id, name.strip())
+                branch_id = self.extra_parent_id()
+                assert branch_id is not None
+                dept_id = None if parent_id == _NO_DEPARTMENT else parent_id
+                self._directories.create_division(branch_id, dept_id, name.strip())
             elif self._kind == "position":
                 self._directories.create_position(name.strip())
         except (DirectoryError, AuthorizationError) as exc:

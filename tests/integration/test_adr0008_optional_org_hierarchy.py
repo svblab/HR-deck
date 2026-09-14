@@ -15,6 +15,8 @@ from domain.employee import EmployeeValidationError, validate_employee_org
 from domain.org_structure import DepartmentRef, DivisionRef
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryError, DirectoryService
+from services.employee_import import EmployeeImportService
+from services.employees import EmployeeService
 from services.session import SessionState
 
 _NOW = "2026-08-01T10:00:00Z"
@@ -386,4 +388,120 @@ def test_adr0008_employee_department_must_exactly_match_division_department_incl
             ") VALUES ('Y', 1, ?, NULL, ?, 1, 0, ?, ?)",
             (branch_id, div_dept, _NOW, _NOW),
         )
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0008_import_empty_department_nonempty_division_matches_branch_division(
+    tmp_path: Path,
+) -> None:
+    conn, session = _open_db(tmp_path)
+    svc = DirectoryService(conn, session, clock=lambda: _NOW)
+    branch_id = svc.create_branch("Филиал A")
+    svc.create_division(branch_id, None, "Секретариат")
+    pos_id = svc.create_position("Секретарь")
+    et_name = svc.list_employment_types(active_only=True)[0].name
+    employees = EmployeeService(conn, session, clock=lambda: _NOW)
+    importer = EmployeeImportService(employees, svc, session)
+    preview = importer.preview_rows(
+        [
+            "ФИО",
+            "Должность",
+            "Филиал",
+            "Департамент",
+            "Отдел",
+            "Тип занятости",
+        ],
+        [
+            [
+                "Секретарь импорт",
+                "Секретарь",
+                "Филиал A",
+                "",
+                "Секретариат",
+                et_name,
+            ]
+        ],
+    )
+    assert not preview.errors
+    assert len(preview.ready) == 1
+    payload = preview.ready[0].payload
+    assert payload.department_id is None
+    assert payload.division_id is not None
+    assert payload.position_id == pos_id
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0008_import_empty_department_unknown_division_name_errors(
+    tmp_path: Path,
+) -> None:
+    conn, session = _open_db(tmp_path)
+    svc = DirectoryService(conn, session, clock=lambda: _NOW)
+    svc.create_branch("Филиал A")
+    svc.create_position("Секретарь")
+    et_name = svc.list_employment_types(active_only=True)[0].name
+    employees = EmployeeService(conn, session, clock=lambda: _NOW)
+    importer = EmployeeImportService(employees, svc, session)
+    preview = importer.preview_rows(
+        [
+            "ФИО",
+            "Должность",
+            "Филиал",
+            "Департамент",
+            "Отдел",
+            "Тип занятости",
+        ],
+        [
+            [
+                "Секретарь импорт",
+                "Секретарь",
+                "Филиал A",
+                "",
+                "Нет такого отдела",
+                et_name,
+            ]
+        ],
+    )
+    assert not preview.ready
+    assert any("unknown division" in issue.message for issue in preview.errors)
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0008_import_both_department_and_division_empty_is_valid(
+    tmp_path: Path,
+) -> None:
+    conn, session = _open_db(tmp_path)
+    svc = DirectoryService(conn, session, clock=lambda: _NOW)
+    svc.create_branch("Филиал A")
+    svc.create_position("Директор")
+    et_name = svc.list_employment_types(active_only=True)[0].name
+    employees = EmployeeService(conn, session, clock=lambda: _NOW)
+    importer = EmployeeImportService(employees, svc, session)
+    preview = importer.preview_rows(
+        [
+            "ФИО",
+            "Должность",
+            "Филиал",
+            "Департамент",
+            "Отдел",
+            "Тип занятости",
+        ],
+        [
+            [
+                "Директор филиала",
+                "Директор",
+                "Филиал A",
+                "",
+                "",
+                et_name,
+            ]
+        ],
+    )
+    assert not preview.errors
+    assert len(preview.ready) == 1
+    payload = preview.ready[0].payload
+    assert payload.department_id is None
+    assert payload.division_id is None
     conn.close()

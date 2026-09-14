@@ -139,7 +139,11 @@ class RosterService:
         status = self._statuses.get(status_id) if status_id is not None else None
         position = self._positions.get(emp.position_id)
         branch = self._branches.get(emp.branch_id)
-        department = self._departments.get(emp.department_id)
+        department = (
+            self._departments.get(emp.department_id)
+            if emp.department_id is not None
+            else None
+        )
         division = self._divisions.get(emp.division_id) if emp.division_id is not None else None
         return RosterRow(
             employee_id=emp.id,

@@ -35,7 +35,6 @@ _REQUIRED = (
     ("full_name", "ФИО"),
     ("position_id", "должность"),
     ("branch_id", "филиал"),
-    ("department_id", "департамент"),
     ("division_id", "отдел"),
     ("employment_type_id", "тип занятости"),
 )
@@ -241,10 +240,17 @@ class EmployeeCardDialog(QDialog):
         _fill_combo(self._department, items, "Департамент")
 
     def _fill_divisions(self) -> None:
+        branch_id = _combo_id(self._branch)
         dept_id = _combo_id(self._department)
         items = (
-            self._directories.list_divisions(department_id=dept_id, active_only=True)
-            if dept_id is not None
+            [
+                d
+                for d in self._directories.list_divisions(
+                    branch_id=branch_id, active_only=True
+                )
+                if d.department_id == dept_id
+            ]
+            if branch_id is not None
             else []
         )
         _fill_combo(self._division, items, "Отдел")
@@ -271,9 +277,13 @@ class EmployeeCardDialog(QDialog):
         if card.division_id is not None:
             _include_if_missing(
                 self._division,
-                self._directories.list_divisions(
-                    department_id=card.department_id, active_only=False
-                ),
+                [
+                    d
+                    for d in self._directories.list_divisions(
+                        branch_id=card.branch_id, active_only=False
+                    )
+                    if d.department_id == card.department_id
+                ],
                 card.division_id,
             )
             _select(self._division, card.division_id)
@@ -366,7 +376,7 @@ class EmployeeCardDialog(QDialog):
             full_name=self._name.text(),
             position_id=_combo_id(self._position) or 0,
             branch_id=_combo_id(self._branch) or 0,
-            department_id=_combo_id(self._department) or 0,
+            department_id=_combo_id(self._department),
             employment_type_id=_combo_id(self._employment) or 0,
             division_id=_combo_id(self._division),
             note=self._note.text().strip() or None,
@@ -432,13 +442,15 @@ def _fill_combo(combo: QComboBox, items: list, placeholder: str) -> None:
     combo.blockSignals(False)
 
 
-def _select(combo: QComboBox, value: int) -> None:
+def _select(combo: QComboBox, value: int | None) -> None:
     idx = combo.findData(value)
     if idx >= 0:
         combo.setCurrentIndex(idx)
 
 
-def _include_if_missing(combo: QComboBox, items: list, entity_id: int) -> None:
+def _include_if_missing(combo: QComboBox, items: list, entity_id: int | None) -> None:
+    if entity_id is None:
+        return
     if combo.findData(entity_id) >= 0:
         return
     for item in items:

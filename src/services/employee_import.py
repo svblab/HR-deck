@@ -152,14 +152,20 @@ class EmployeeImportService:
         departments: dict[tuple[int, str], int] = {}
         for dept in self._directories.list_departments(active_only=True):
             departments[(dept.branch_id, dept.name.strip().casefold())] = dept.id
-        divisions: dict[tuple[int, str], int] = {}
+        divisions_by_department: dict[tuple[int, str], int] = {}
+        divisions_by_branch: dict[tuple[int, str], int] = {}
         for div in self._directories.list_divisions(active_only=True):
-            divisions[(div.department_id, div.name.strip().casefold())] = div.id
+            key_name = div.name.strip().casefold()
+            if div.department_id is not None:
+                divisions_by_department[(div.department_id, key_name)] = div.id
+            else:
+                divisions_by_branch[(div.branch_id, key_name)] = div.id
         return ImportCatalog(
             positions=positions,
             branches=branches,
             departments=departments,
-            divisions=divisions,
+            divisions_by_department=divisions_by_department,
+            divisions_by_branch=divisions_by_branch,
             employment_types=employment,
         )
 

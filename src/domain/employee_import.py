@@ -11,8 +11,6 @@ REQUIRED_KEYS = (
     "full_name",
     "position",
     "branch",
-    "department",
-    "division",
     "employment_type",
 )
 
@@ -47,7 +45,8 @@ class ImportCatalog:
     positions: dict[str, int]
     branches: dict[str, int]
     departments: dict[tuple[int, str], int]
-    divisions: dict[tuple[int, str], int]
+    divisions_by_department: dict[tuple[int, str], int]
+    divisions_by_branch: dict[tuple[int, str], int]
     employment_types: dict[str, int]
 
 
@@ -140,20 +139,33 @@ def evaluate_row(
         full_name = clean_full_name(values["full_name"])
         position_id = _lookup(catalog.positions, values["position"], "position")
         branch_id = _lookup(catalog.branches, values["branch"], "branch")
-        department_id = catalog.departments.get(
-            (branch_id, values["department"].strip().casefold())
-        )
-        if department_id is None:
-            raise EmployeeValidationError(
-                f"unknown department: {values['department'].strip()}"
+        department_raw = values["department"].strip()
+        if department_raw:
+            department_id = catalog.departments.get(
+                (branch_id, department_raw.casefold())
             )
-        division_id = catalog.divisions.get(
-            (department_id, values["division"].strip().casefold())
-        )
-        if division_id is None:
-            raise EmployeeValidationError(
-                f"unknown division: {values['division'].strip()}"
-            )
+            if department_id is None:
+                raise EmployeeValidationError(
+                    f"unknown department: {department_raw}"
+                )
+        else:
+            department_id = None
+        division_raw = values["division"].strip()
+        if division_raw:
+            if department_id is not None:
+                division_id = catalog.divisions_by_department.get(
+                    (department_id, division_raw.casefold())
+                )
+            else:
+                division_id = catalog.divisions_by_branch.get(
+                    (branch_id, division_raw.casefold())
+                )
+            if division_id is None:
+                raise EmployeeValidationError(
+                    f"unknown division: {division_raw}"
+                )
+        else:
+            division_id = None
         employment_type_id = _lookup(
             catalog.employment_types, values["employment_type"], "employment_type"
         )
