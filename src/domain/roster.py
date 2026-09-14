@@ -129,10 +129,15 @@ def group_rows(
         for spec in columns
     ]
     if extras:
+        extras_title = (
+            "Без департамента"
+            if group_by == GroupBy.DEPARTMENT
+            else UNASSIGNED_COLUMN_TITLE
+        )
         result.append(
             RosterColumn(
                 key=UNASSIGNED_COLUMN_ID,
-                title=UNASSIGNED_COLUMN_TITLE,
+                title=extras_title,
                 color_hex="#A32D2D",
                 rows=tuple(extras),
             )

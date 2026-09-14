@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from domain.roster import (
     UNASSIGNED_COLUMN_ID,
+    UNASSIGNED_COLUMN_TITLE,
     ColumnSpec,
     GroupBy,
     RosterFilters,
@@ -96,6 +97,26 @@ def test_no_status_goes_to_clarification_column() -> None:
     columns = group_rows(rows, GroupBy.STATUS, [ColumnSpec(1, "В офисе")])
     assert columns[-1].key == UNASSIGNED_COLUMN_ID
     assert columns[-1].rows[0].employee_id == 1
+
+
+def test_roster_group_by_department_extras_titled_without_department() -> None:
+    rows = [_row(department_id=None, department_name="")]
+    dept_columns = group_rows(
+        rows,
+        GroupBy.DEPARTMENT,
+        [ColumnSpec(10, "Финансы")],
+    )
+    assert dept_columns[-1].key == UNASSIGNED_COLUMN_ID
+    assert dept_columns[-1].title == "Без департамента"
+    assert dept_columns[-1].title != UNASSIGNED_COLUMN_TITLE
+    assert dept_columns[-1].rows[0].employee_id == 1
+
+    status_columns = group_rows(
+        [_row(status_id=None, status_name=None, needs_clarification=True)],
+        GroupBy.STATUS,
+        [ColumnSpec(1, "В офисе")],
+    )
+    assert status_columns[-1].title == UNASSIGNED_COLUMN_TITLE
 
 
 def test_group_by_branch() -> None:
