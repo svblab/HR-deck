@@ -163,27 +163,80 @@ def test_employee_card_save_without_department_branch_direct_division(
 
 
 @pytest.mark.acceptance
-def test_employee_card_branch_only_payload_allows_null_department_and_division(
-    qtbot, tmp_path: Path
+def test_employee_card_submit_branch_only_no_department_no_division(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """ADR-0008 branch-only: форма отдаёт NULL department/division; division ещё required в UI."""
+    """ADR-0008: branch-only employee saves through form submit."""
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Запад")
     pos_id = directories.create_position("Директор")
 
+    warnings = _capture_warnings(monkeypatch)
     dialog = EmployeeCardDialog(employees, directories, session)
     qtbot.addWidget(dialog)
     dialog._name.setText("Сидоров Сидор Сидорович")
     _select_combo(dialog._branch, branch_id)
     _select_combo(dialog._position, pos_id)
     _select_combo(dialog._employment, 1)
-    payload = dialog._payload()
-    assert payload.department_id is None
-    assert payload.division_id is None
-    emp_id = employees.create_employee(payload)
+    dialog._submit()
+    assert not warnings
+    assert dialog.result() == QDialog.DialogCode.Accepted
     row = conn.execute(
-        "SELECT department_id, division_id FROM employees WHERE id = ?",
-        (emp_id,),
+        "SELECT department_id, division_id FROM employees WHERE full_name = ?",
+        ("Сидоров Сидор Сидорович",),
     ).fetchone()
     assert row == (None, None)
     conn.close()
+
+
+@pytest.mark.acceptance
+def test_employee_card_submit_department_only_no_division(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0008: department without child divisions saves through form submit."""
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Центр")
+    dept_id = directories.create_department(branch_id, "Департамент без отделов")
+    pos_id = directories.create_position("Руководитель")
+
+    warnings = _capture_warnings(monkeypatch)
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    dialog._name.setText("Козлов Козел Козлович")
+    _select_combo(dialog._branch, branch_id)
+    _select_combo(dialog._department, dept_id)
+    _select_combo(dialog._position, pos_id)
+    _select_combo(dialog._employment, 1)
+    dialog._submit()
+    assert not warnings
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    row = conn.execute(
+        "SELECT department_id, division_id FROM employees WHERE full_name = ?",
+        ("Козлов Козел Козлович",),
+    ).fetchone()
+    assert row == (dept_id, None)
+    conn.close()
+
+
+def test_employee_card_submit_missing_division_no_longer_blocks(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Север")
+    pos_id = directories.create_position("Аналитик")
+
+    warnings = _capture_warnings(monkeypatch)
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    dialog._name.setText("Волков Волк Волкович")
+    _select_combo(dialog._branch, branch_id)
+    _select_combo(dialog._position, pos_id)
+    _select_combo(dialog._employment, 1)
+    assert dialog._missing_required() == []
+    dialog._submit()
+    assert not warnings
+    text = " ".join(str(item) for item in warnings)
+    assert "отдел" not in text
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    conn.close()
+

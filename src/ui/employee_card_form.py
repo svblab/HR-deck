@@ -35,7 +35,6 @@ _REQUIRED = (
     ("full_name", "ФИО"),
     ("position_id", "должность"),
     ("branch_id", "филиал"),
-    ("division_id", "отдел"),
     ("employment_type_id", "тип занятости"),
 )
 
