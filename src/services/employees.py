@@ -25,7 +25,7 @@ from domain.employee import (
     clean_full_name,
     validate_employee_org,
 )
-from domain.org_structure import DepartmentRef, DivisionRef
+from domain.org_structure import DepartmentRef, DivisionRef, validate_position_requirements
 from domain.permissions import Permission
 from domain.sensitive import mask_sensitive_value
 from services.authorization import AuthorizationError, AuthorizationService
@@ -95,14 +95,12 @@ class EmployeeService:
 
     def update_employee(self, employee_id: int, data: EmployeeUpdateInput) -> None:
         self._require(Permission.MANAGE_EMPLOYEES)
-        self._require_active_employee(employee_id)
+        record = self._require_active_employee(employee_id)
         payload = self._validate_input(data)
         now = self._clock()
-        self._mutate(
-            action="employee.update",
-            entity_type="employee",
-            entity_id=employee_id,
-            mutate=lambda: self._employees.update(
+
+        def mutate() -> None:
+            self._employees.update(
                 employee_id,
                 full_name=payload.full_name,
                 position_id=payload.position_id,
@@ -112,7 +110,15 @@ class EmployeeService:
                 division_id=payload.division_id,
                 note=payload.note,
                 updated_at=now,
-            ),
+            )
+            if record.needs_org_review:
+                self._employees.clear_needs_org_review(employee_id, updated_at=now)
+
+        self._mutate(
+            action="employee.update",
+            entity_type="employee",
+            entity_id=employee_id,
+            mutate=mutate,
             details=self._details(payload),
         )
 
@@ -179,7 +185,9 @@ class EmployeeService:
         self, data: EmployeeCreateInput | EmployeeUpdateInput
     ) -> EmployeeCreateInput:
         full_name = clean_full_name(data.full_name)
-        self._require_active_directory(self._positions.get, data.position_id, "position")
+        position = self._require_active_directory(
+            self._positions.get, data.position_id, "position"
+        )
         self._require_active_directory(self._branches.get, data.branch_id, "branch")
         department = None
         if data.department_id is not None:
@@ -213,6 +221,15 @@ class EmployeeService:
                     if division
                     else None
                 ),
+            )
+        except EmployeeValidationError as exc:
+            raise EmployeeError(str(exc)) from exc
+        try:
+            validate_position_requirements(
+                department_id=data.department_id,
+                division_id=data.division_id,
+                department_required=position.department_required,
+                division_required=position.division_required,
             )
         except EmployeeValidationError as exc:
             raise EmployeeError(str(exc)) from exc

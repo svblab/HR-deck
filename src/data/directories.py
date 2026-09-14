@@ -41,6 +41,8 @@ class DivisionRecord:
 class PositionRecord:
     id: int
     name: str
+    department_required: bool
+    division_required: bool
     is_archived: bool
     created_at: str
     updated_at: str
@@ -214,7 +216,10 @@ class PositionRepository:
         self._conn = conn
 
     def list(self, *, active_only: bool = False) -> list[PositionRecord]:
-        sql = "SELECT id, name, is_archived, created_at, updated_at FROM positions"
+        sql = (
+            "SELECT id, name, department_required, division_required, is_archived,"
+            " created_at, updated_at FROM positions"
+        )
         if active_only:
             sql += " WHERE is_archived = 0"
         sql += " ORDER BY name"
@@ -222,17 +227,47 @@ class PositionRepository:
 
     def get(self, position_id: int) -> PositionRecord | None:
         row = self._conn.execute(
-            "SELECT id, name, is_archived, created_at, updated_at FROM positions WHERE id = ?",
+            "SELECT id, name, department_required, division_required, is_archived,"
+            " created_at, updated_at FROM positions WHERE id = ?",
             (position_id,),
         ).fetchone()
         return _position_row(row) if row else None
 
-    def create(self, *, name: str, created_at: str) -> int:
+    def create(
+        self,
+        *,
+        name: str,
+        department_required: bool = False,
+        division_required: bool = False,
+        created_at: str,
+    ) -> int:
         cur = self._conn.execute(
-            "INSERT INTO positions (name, is_archived, created_at, updated_at) VALUES (?, 0, ?, ?)",
-            (name, created_at, created_at),
+            "INSERT INTO positions ("
+            " name, department_required, division_required, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, 0, ?, ?)",
+            (
+                name,
+                int(department_required),
+                int(division_required),
+                created_at,
+                created_at,
+            ),
         )
         return int(cur.lastrowid)
+
+    def set_org_requirements(
+        self,
+        position_id: int,
+        *,
+        department_required: bool,
+        division_required: bool,
+        updated_at: str,
+    ) -> None:
+        self._conn.execute(
+            "UPDATE positions SET department_required = ?, division_required = ?,"
+            " updated_at = ? WHERE id = ?",
+            (int(department_required), int(division_required), updated_at, position_id),
+        )
 
     def rename(self, position_id: int, *, name: str, updated_at: str) -> None:
         self._conn.execute(
@@ -332,9 +367,11 @@ def _position_row(row: tuple[object, ...]) -> PositionRecord:
     return PositionRecord(
         id=int(row[0]),
         name=str(row[1]),
-        is_archived=bool(int(row[2])),
-        created_at=str(row[3]),
-        updated_at=str(row[4]),
+        department_required=bool(int(row[2])),
+        division_required=bool(int(row[3])),
+        is_archived=bool(int(row[4])),
+        created_at=str(row[5]),
+        updated_at=str(row[6]),
     )
 
 

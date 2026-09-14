@@ -63,3 +63,18 @@ def validate_org_assignment(
         raise OrgConsistencyError("division does not belong to branch")
     if division.department_id != assignment.department_id:
         raise OrgConsistencyError("division department does not match assignment")
+
+
+def validate_position_requirements(
+    *,
+    department_id: int | None,
+    division_id: int | None,
+    department_required: bool,
+    division_required: bool,
+) -> None:
+    from domain.employee import EmployeeValidationError
+
+    if department_required and department_id is None:
+        raise EmployeeValidationError("department is required for this position")
+    if division_required and division_id is None:
+        raise EmployeeValidationError("division is required for this position")

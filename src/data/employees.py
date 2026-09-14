@@ -22,6 +22,7 @@ class EmployeeRecord:
     contacts: str | None
     home_address: str | None
     social_insurance_number: str | None
+    needs_org_review: bool
     is_archived: bool
     created_at: str
     updated_at: str
@@ -34,7 +35,7 @@ class EmployeeRepository:
     _SELECT = (
         "SELECT id, full_name, position_id, branch_id, department_id, division_id,"
         " employment_type_id, note, hire_date, contacts, home_address,"
-        " social_insurance_number, is_archived, created_at, updated_at"
+        " social_insurance_number, needs_org_review, is_archived, created_at, updated_at"
         " FROM employees"
     )
 
@@ -48,6 +49,16 @@ class EmployeeRepository:
             sql += " WHERE is_archived = 0"
         sql += " ORDER BY full_name, id"
         return [_row(r) for r in self._conn.execute(sql).fetchall()]
+
+    def list_by_position(
+        self, position_id: int, *, active_only: bool = True
+    ) -> builtins.list[EmployeeRecord]:
+        sql = f"{self._SELECT} WHERE position_id = ?"
+        params: list[object] = [position_id]
+        if active_only:
+            sql += " AND is_archived = 0"
+        sql += " ORDER BY full_name, id"
+        return [_row(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def search_by_name(self, prefix: str, *, limit: int = 50) -> builtins.list[EmployeeRecord]:
         pattern = f"{prefix}%"
@@ -141,6 +152,34 @@ class EmployeeRepository:
             (1 if archived else 0, updated_at, employee_id),
         )
 
+    def clear_org_assignment_for_review(
+        self,
+        employee_id: int,
+        *,
+        clear_department: bool,
+        clear_division: bool,
+        updated_at: str,
+    ) -> None:
+        self._conn.execute(
+            "UPDATE employees SET"
+            " department_id = CASE WHEN ? THEN NULL ELSE department_id END,"
+            " division_id = CASE WHEN ? THEN NULL ELSE division_id END,"
+            " needs_org_review = 1, updated_at = ?"
+            " WHERE id = ?",
+            (
+                int(clear_department),
+                int(clear_division),
+                updated_at,
+                employee_id,
+            ),
+        )
+
+    def clear_needs_org_review(self, employee_id: int, *, updated_at: str) -> None:
+        self._conn.execute(
+            "UPDATE employees SET needs_org_review = 0, updated_at = ? WHERE id = ?",
+            (updated_at, employee_id),
+        )
+
 
 def _row(row: tuple[object, ...]) -> EmployeeRecord:
     return EmployeeRecord(
@@ -156,7 +195,8 @@ def _row(row: tuple[object, ...]) -> EmployeeRecord:
         contacts=str(row[9]) if row[9] is not None else None,
         home_address=str(row[10]) if row[10] is not None else None,
         social_insurance_number=str(row[11]) if row[11] is not None else None,
-        is_archived=bool(int(row[12])),
-        created_at=str(row[13]),
-        updated_at=str(row[14]),
+        needs_org_review=bool(int(row[12])),
+        is_archived=bool(int(row[13])),
+        created_at=str(row[14]),
+        updated_at=str(row[15]),
     )

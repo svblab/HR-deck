@@ -13,6 +13,7 @@ from data.directories import (
     EmploymentTypeRepository,
     PositionRepository,
 )
+from data.employees import EmployeeRecord, EmployeeRepository
 from data.repositories import UserActionLogRepository
 from domain.permissions import Permission
 from services.authorization import AuthorizationError, AuthorizationService
@@ -50,6 +51,7 @@ class DirectoryService:
         self._divisions = DivisionRepository(conn)
         self._positions = PositionRepository(conn)
         self._employment_types = EmploymentTypeRepository(conn)
+        self._employees = EmployeeRepository(conn)
 
     # --- Branches ---
 
@@ -236,14 +238,25 @@ class DirectoryService:
         self._require(Permission.VIEW_DIRECTORIES)
         return self._positions.list(active_only=active_only)
 
-    def create_position(self, name: str) -> int:
+    def create_position(
+        self,
+        name: str,
+        *,
+        department_required: bool = False,
+        division_required: bool = False,
+    ) -> int:
         self._require(Permission.MANAGE_DIRECTORIES)
         clean = _clean_name(name)
         now = self._clock()
         return self._mutate(
             action="directory.position.create",
             entity_type="position",
-            mutate=lambda: self._positions.create(name=clean, created_at=now),
+            mutate=lambda: self._positions.create(
+                name=clean,
+                department_required=department_required,
+                division_required=division_required,
+                created_at=now,
+            ),
             details=f"name={clean}",
         )
 
@@ -279,6 +292,73 @@ class DirectoryService:
                 position_id, archived=archived, updated_at=now
             ),
         )
+
+    def preview_position_requirement_change(
+        self,
+        position_id: int,
+        *,
+        department_required: bool,
+        division_required: bool,
+    ) -> list[EmployeeRecord]:
+        self._require(Permission.VIEW_DIRECTORIES)
+        self._require_position(position_id)
+        violators: list[EmployeeRecord] = []
+        for emp in self._employees.list_by_position(position_id, active_only=True):
+            will_violate_department = department_required and emp.department_id is None
+            will_violate_division = division_required and emp.division_id is None
+            if will_violate_department or will_violate_division:
+                violators.append(emp)
+        return violators
+
+    def apply_position_requirement_change(
+        self,
+        position_id: int,
+        *,
+        department_required: bool,
+        division_required: bool,
+        reset_violations: bool = False,
+    ) -> None:
+        self._require(Permission.MANAGE_DIRECTORIES)
+        violators = self.preview_position_requirement_change(
+            position_id,
+            department_required=department_required,
+            division_required=division_required,
+        )
+        if violators and not reset_violations:
+            raise DirectoryError(
+                f"{len(violators)} employee(s) would violate the new "
+                "requirements; call again with reset_violations=True after "
+                "confirming with the user"
+            )
+        now = self._clock()
+        for emp in violators:
+            clear_department = department_required and emp.department_id is None
+            clear_division = division_required and emp.division_id is None
+            self._employees.clear_org_assignment_for_review(
+                emp.id,
+                clear_department=clear_department,
+                clear_division=clear_division,
+                updated_at=now,
+            )
+            self._audit.record(
+                account_id=self._session.account_id,
+                action_type="employee.org_review_reset",
+                result="success",
+                created_at=now,
+                entity_type="employee",
+                entity_id=emp.id,
+                details=(
+                    f"position_id={position_id} department_required="
+                    f"{department_required} division_required={division_required}"
+                ),
+            )
+        self._positions.set_org_requirements(
+            position_id,
+            department_required=department_required,
+            division_required=division_required,
+            updated_at=now,
+        )
+        self._conn.commit()
 
     # --- Employment types ---
 

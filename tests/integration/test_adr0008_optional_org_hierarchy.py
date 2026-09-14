@@ -141,8 +141,8 @@ def test_adr0008_migration_employees_allows_null_department_on_nonempty_db(
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [10, 11]
-    assert current_version(conn2) == 11
+    assert applied == [10, 11, 12]
+    assert current_version(conn2) == 12
     assert conn2.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == emp_count
     conn2.execute(
         "UPDATE employees SET department_id = NULL, division_id = NULL WHERE id = 1"
@@ -182,8 +182,8 @@ def test_adr0008_migration_employees_with_status_history_on_nonempty_db(
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [10, 11]
-    assert current_version(conn2) == 11
+    assert applied == [10, 11, 12]
+    assert current_version(conn2) == 12
     restored = conn2.execute(
         "SELECT employee_id, status_id, start_date, end_date, note, created_at, "
         "created_by_account_id FROM status_history WHERE employee_id = ?",
