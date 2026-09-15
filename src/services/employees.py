@@ -274,6 +274,7 @@ class EmployeeService:
                 record.home_address is not None or record.social_insurance_number is not None
             ),
             is_archived=record.is_archived,
+            needs_org_review=record.needs_org_review,
         )
 
     def _to_search_hit(self, record: EmployeeRecord) -> EmployeeSearchHit:

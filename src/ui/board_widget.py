@@ -71,6 +71,14 @@ class EmployeeCardWidget(QFrame):
             tag = QLabel(row.status_name)
             tag.setStyleSheet(status_chip_style(row.status_color_hex))
             layout.addWidget(tag)
+        if row.needs_org_review:
+            review = QLabel("Требует внимания")
+            review.setStyleSheet("font-size: 11px; font-weight: 600; color: #B8860B;")
+            review.setToolTip(
+                "После изменения требований к должности организационная "
+                "привязка была сброшена — проверьте департамент/отдел."
+            )
+            layout.addWidget(review)
         dates = date_line(row)
         if dates:
             date_lbl = QLabel(dates)

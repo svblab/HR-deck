@@ -161,6 +161,7 @@ class RosterService:
             start_date=start_date,
             end_date=end_date,
             needs_clarification=needs,
+            needs_org_review=emp.needs_org_review,
         )
 
     def _timeline(

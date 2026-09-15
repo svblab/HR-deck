@@ -11,6 +11,7 @@ from data.directories import (
     DepartmentRepository,
     DivisionRepository,
     EmploymentTypeRepository,
+    PositionRecord,
     PositionRepository,
 )
 from data.employees import EmployeeRecord, EmployeeRepository
@@ -237,6 +238,10 @@ class DirectoryService:
     def list_positions(self, *, active_only: bool = False):
         self._require(Permission.VIEW_DIRECTORIES)
         return self._positions.list(active_only=active_only)
+
+    def get_position(self, position_id: int) -> PositionRecord | None:
+        self._require(Permission.VIEW_DIRECTORIES)
+        return self._positions.get(position_id)
 
     def create_position(
         self,

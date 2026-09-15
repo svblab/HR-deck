@@ -184,6 +184,9 @@ class RosterPanel(QWidget):
         self._only_clarify = QCheckBox("Только требующие уточнения")
         self._only_clarify.setObjectName("clarifyFilter")
         self._only_clarify.toggled.connect(self._render)
+        self._only_org_review = QCheckBox("Только «Требует внимания»")
+        self._only_org_review.setObjectName("orgReviewFilter")
+        self._only_org_review.toggled.connect(self._render)
         self._show_archived = QCheckBox("Показать архив")
         self._show_archived.setObjectName("showArchivedFilter")
         self._show_archived.toggled.connect(self._on_show_archived_changed)
@@ -193,6 +196,7 @@ class RosterPanel(QWidget):
         row2.addWidget(reset)
         row2.addWidget(self._group_combo)
         row2.addWidget(self._only_clarify)
+        row2.addWidget(self._only_org_review)
         row2.addWidget(self._show_archived)
         row2.addStretch(1)
         outer.addLayout(row2)
@@ -201,6 +205,7 @@ class RosterPanel(QWidget):
     def reset_filters(self) -> None:
         self._name_query = ""
         self._only_clarify.setChecked(False)
+        self._only_org_review.setChecked(False)
         self._show_archived.setChecked(False)
         self._group_combo.setCurrentIndex(0)
         self._fill_branch_combo()
@@ -278,6 +283,7 @@ class RosterPanel(QWidget):
             department_id=self._combo_id(self._dept),
             division_id=self._combo_id(self._div),
             only_needing_clarification=self._only_clarify.isChecked(),
+            only_needing_org_review=self._only_org_review.isChecked(),
         )
 
     def _render(self) -> None:

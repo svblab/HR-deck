@@ -9,9 +9,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -372,6 +374,30 @@ class _DirectoryPanel(QWidget):
                 return
             self.reload()
             return
+        elif self._kind == "position":
+            dialog = _PositionRequirementsDialog(
+                self,
+                title="Новая должность",
+                name="",
+                department_required=False,
+                division_required=False,
+            )
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            name, dept_required, div_required = dialog.values()
+            if not name:
+                return
+            try:
+                self._directories.create_position(
+                    name,
+                    department_required=dept_required,
+                    division_required=div_required,
+                )
+            except (DirectoryError, AuthorizationError) as exc:
+                self._warn("Создание", exc)
+                return
+            self.reload()
+            return
         else:
             parent_id = None
 
@@ -390,8 +416,6 @@ class _DirectoryPanel(QWidget):
                 assert branch_id is not None
                 dept_id = None if parent_id == _NO_DEPARTMENT else parent_id
                 self._directories.create_division(branch_id, dept_id, name.strip())
-            elif self._kind == "position":
-                self._directories.create_position(name.strip())
         except (DirectoryError, AuthorizationError) as exc:
             self._warn("Создание", exc)
             return
@@ -400,6 +424,63 @@ class _DirectoryPanel(QWidget):
     def _rename(self) -> None:
         entity_id = self._selected_id()
         if entity_id is None:
+            return
+        if self._kind == "position":
+            current = self._directories.get_position(entity_id)
+            if current is None:
+                return
+            dialog = _PositionRequirementsDialog(
+                self,
+                title="Изменение должности",
+                name=current.name,
+                department_required=current.department_required,
+                division_required=current.division_required,
+            )
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            new_name, new_dept_required, new_div_required = dialog.values()
+            if not new_name:
+                return
+            try:
+                if new_name != current.name:
+                    self._directories.rename_position(entity_id, new_name)
+                if (new_dept_required, new_div_required) != (
+                    current.department_required,
+                    current.division_required,
+                ):
+                    violators = self._directories.preview_position_requirement_change(
+                        entity_id,
+                        department_required=new_dept_required,
+                        division_required=new_div_required,
+                    )
+                    if violators:
+                        names = "\n".join(f"— {e.full_name}" for e in violators[:20])
+                        more = (
+                            f"\n… и ещё {len(violators) - 20}"
+                            if len(violators) > 20
+                            else ""
+                        )
+                        proceed = QMessageBox.question(
+                            self,
+                            "Требования должности",
+                            f"{len(violators)} сотрудник(ов) перестанут соответствовать "
+                            f"новым требованиям и будут помечены «Требует внимания» "
+                            f"(департамент и/или отдел будут сброшены):\n{names}{more}\n\n"
+                            "Продолжить?",
+                        )
+                        if proceed != QMessageBox.StandardButton.Yes:
+                            self.reload()
+                            return
+                    self._directories.apply_position_requirement_change(
+                        entity_id,
+                        department_required=new_dept_required,
+                        division_required=new_div_required,
+                        reset_violations=bool(violators),
+                    )
+            except (DirectoryError, AuthorizationError) as exc:
+                self._warn("Изменение должности", exc)
+                return
+            self.reload()
             return
         row = self._table.currentRow()
         name_col = 1 if self._kind == "employment_type" else 0
@@ -415,8 +496,6 @@ class _DirectoryPanel(QWidget):
                 self._directories.rename_department(entity_id, name.strip())
             elif self._kind == "division":
                 self._directories.rename_division(entity_id, name.strip())
-            elif self._kind == "position":
-                self._directories.rename_position(entity_id, name.strip())
             elif self._kind == "employment_type":
                 self._directories.rename_employment_type(entity_id, name.strip())
         except (DirectoryError, AuthorizationError) as exc:
@@ -470,3 +549,40 @@ def _prompt_text(parent: QWidget, title: str, default: str) -> tuple[str, bool]:
 
     text, ok = QInputDialog.getText(parent, title, "Название:", text=default)
     return text, ok
+
+
+class _PositionRequirementsDialog(QDialog):
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        title: str,
+        name: str,
+        department_required: bool,
+        division_required: bool,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Название:"))
+        self._name = QLineEdit(name)
+        layout.addWidget(self._name)
+        self._dept_required = QCheckBox("Департамент обязателен")
+        self._dept_required.setChecked(department_required)
+        layout.addWidget(self._dept_required)
+        self._div_required = QCheckBox("Отдел обязателен")
+        self._div_required.setChecked(division_required)
+        layout.addWidget(self._div_required)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def values(self) -> tuple[str, bool, bool]:
+        return (
+            self._name.text().strip(),
+            self._dept_required.isChecked(),
+            self._div_required.isChecked(),
+        )

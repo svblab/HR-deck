@@ -32,6 +32,7 @@ class RosterRow:
     start_date: str | None
     end_date: str | None
     needs_clarification: bool
+    needs_org_review: bool
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class RosterFilters:
     department_id: int | None = None
     division_id: int | None = None
     only_needing_clarification: bool = False
+    only_needing_org_review: bool = False
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,8 @@ def apply_filters(rows: list[RosterRow], filters: RosterFilters) -> list[RosterR
         if filters.division_id is not None and row.division_id != filters.division_id:
             continue
         if filters.only_needing_clarification and not row.needs_clarification:
+            continue
+        if filters.only_needing_org_review and not row.needs_org_review:
             continue
         out.append(row)
     return out

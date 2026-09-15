@@ -64,6 +64,7 @@ class EmployeeCardDialog(QDialog):
         self.status_changed = False
         self._is_archived = False
         self._loading = False
+        self._position_requirements: tuple[bool, bool] = (False, False)
         self._original_sensitive: tuple[str | None, str | None] = (None, None)
         self._sensitive_masked = False
 
@@ -108,6 +109,11 @@ class EmployeeCardDialog(QDialog):
             self._home.hide()
             self._insurance.hide()
         layout.addLayout(form)
+        self._org_review = QLabel(objectName="orgReviewHint")
+        self._org_review.setWordWrap(True)
+        self._org_review.setStyleSheet("color: #B8860B; font-size: 12px; font-weight: 600;")
+        self._org_review.hide()
+        layout.addWidget(self._org_review)
         self._similar = QLabel(objectName="similarNamesHint")
         self._similar.setWordWrap(True)
         self._similar.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
@@ -142,7 +148,9 @@ class EmployeeCardDialog(QDialog):
         layout.addWidget(buttons)
         self._branch.currentIndexChanged.connect(self._on_branch_changed)
         self._department.currentIndexChanged.connect(self._on_dept_changed)
+        self._position.currentIndexChanged.connect(self._on_position_changed)
         self._fill_static_combos()
+        self._refresh_position_requirements()
         if employee_id is not None:
             self._load(employee_id)
         if not can_manage:
@@ -229,6 +237,23 @@ class EmployeeCardDialog(QDialog):
             return
         self._fill_divisions()
 
+    def _on_position_changed(self) -> None:
+        if self._loading:
+            return
+        self._refresh_position_requirements()
+
+    def _refresh_position_requirements(self) -> None:
+        pos_id = _combo_id(self._position)
+        if pos_id is None:
+            self._position_requirements = (False, False)
+            return
+        position = self._directories.get_position(pos_id)
+        self._position_requirements = (
+            (position.department_required, position.division_required)
+            if position is not None
+            else (False, False)
+        )
+
     def _fill_departments(self) -> None:
         branch_id = _combo_id(self._branch)
         items = (
@@ -299,6 +324,16 @@ class EmployeeCardDialog(QDialog):
             self._home.setText(card.home_address or "")
             self._insurance.setText(card.social_insurance_number or "")
         self._loading = False
+        self._refresh_position_requirements()
+        if card.needs_org_review:
+            self._org_review.setText(
+                "Требует внимания: после изменения требований к должности "
+                "данные организационной привязки были сброшены — "
+                "проверьте департамент/отдел."
+            )
+            self._org_review.show()
+        else:
+            self._org_review.hide()
         self._refresh_similar()
         self._apply_archived_state()
 
@@ -368,7 +403,13 @@ class EmployeeCardDialog(QDialog):
             "division_id": _combo_id(self._division),
             "employment_type_id": _combo_id(self._employment),
         }
-        return [label for key, label in _REQUIRED if values[key] is None]
+        missing = [label for key, label in _REQUIRED if values[key] is None]
+        dept_required, div_required = self._position_requirements
+        if dept_required and values["department_id"] is None and "департамент" not in missing:
+            missing.append("департамент")
+        if div_required and values["division_id"] is None and "отдел" not in missing:
+            missing.append("отдел")
+        return missing
 
     def _payload(self) -> EmployeeCreateInput:
         return EmployeeCreateInput(

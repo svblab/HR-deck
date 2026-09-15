@@ -61,6 +61,7 @@ class EmployeeCard:
     social_insurance_number: str | None
     sensitive_fields_masked: bool
     is_archived: bool
+    needs_org_review: bool = False
 
 
 @dataclass(frozen=True)

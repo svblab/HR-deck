@@ -240,3 +240,90 @@ def test_employee_card_submit_missing_division_no_longer_blocks(
     assert dialog.result() == QDialog.DialogCode.Accepted
     conn.close()
 
+
+@pytest.mark.acceptance
+def test_employee_card_position_department_required_blocks_submit(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Юг")
+    pos_id = directories.create_position("Бухгалтер", department_required=True)
+
+    warnings = _capture_warnings(monkeypatch)
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    dialog._name.setText("Смирнов Смирн Смирнович")
+    _select_combo(dialog._branch, branch_id)
+    _select_combo(dialog._position, pos_id)
+    _select_combo(dialog._employment, 1)
+    dialog._submit()
+    assert dialog.result() != QDialog.DialogCode.Accepted
+    text = " ".join(str(item) for item in warnings)
+    assert "департамент" in text
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_employee_card_shows_org_review_banner_for_flagged_employee(
+    qtbot, tmp_path: Path
+) -> None:
+    from domain.employee import EmployeeCreateInput
+
+    conn, session, employees, directories, ids, _db = _open(tmp_path)
+    pos_id = directories.create_position("Инженер", department_required=True)
+    emp_id = employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Орлов Орел Орлович",
+            position_id=pos_id,
+            branch_id=ids["branch_id"],
+            department_id=ids["department_id"],
+            division_id=ids["division_id"],
+            employment_type_id=1,
+        )
+    )
+    directories.apply_position_requirement_change(
+        pos_id,
+        department_required=True,
+        division_required=False,
+        reset_violations=True,
+    )
+    conn.execute(
+        "UPDATE employees SET needs_org_review = 1 WHERE id = ?",
+        (emp_id,),
+    )
+
+    dialog = EmployeeCardDialog(
+        employees, directories, session, employee_id=emp_id
+    )
+    qtbot.addWidget(dialog)
+    assert not dialog._org_review.isHidden()
+    assert "Требует внимания" in dialog._org_review.text()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_employee_card_position_without_requirements_unblocks_submit(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Запад")
+    strict_id = directories.create_position("Строгая", department_required=True)
+    loose_id = directories.create_position("Свободная")
+
+    warnings = _capture_warnings(monkeypatch)
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    dialog._name.setText("Медведев Медведь Медведевич")
+    _select_combo(dialog._branch, branch_id)
+    _select_combo(dialog._position, strict_id)
+    _select_combo(dialog._employment, 1)
+    dialog._submit()
+    assert dialog.result() != QDialog.DialogCode.Accepted
+
+    warnings.clear()
+    _select_combo(dialog._position, loose_id)
+    dialog._submit()
+    assert not warnings
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    conn.close()
+

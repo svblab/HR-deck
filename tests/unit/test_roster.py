@@ -33,6 +33,7 @@ def _row(**overrides: object) -> RosterRow:
         start_date="2026-08-13",
         end_date=None,
         needs_clarification=False,
+        needs_org_review=False,
     )
     base.update(overrides)
     return RosterRow(**base)  # type: ignore[arg-type]
@@ -75,6 +76,34 @@ def test_clarification_filter() -> None:
     rows = [_row(), _row(employee_id=2, needs_clarification=True, status_id=3)]
     got = apply_filters(rows, RosterFilters(only_needing_clarification=True))
     assert [r.employee_id for r in got] == [2]
+
+
+def test_org_review_filter() -> None:
+    rows = [
+        _row(),
+        _row(employee_id=2, needs_org_review=True),
+        _row(employee_id=3, needs_clarification=True, needs_org_review=True),
+    ]
+    got = apply_filters(rows, RosterFilters(only_needing_org_review=True))
+    assert [r.employee_id for r in got] == [2, 3]
+
+
+def test_clarification_and_org_review_filters_are_independent() -> None:
+    rows = [
+        _row(employee_id=1),
+        _row(employee_id=2, needs_clarification=True),
+        _row(employee_id=3, needs_org_review=True),
+        _row(employee_id=4, needs_clarification=True, needs_org_review=True),
+    ]
+    clarify = apply_filters(rows, RosterFilters(only_needing_clarification=True))
+    review = apply_filters(rows, RosterFilters(only_needing_org_review=True))
+    both = apply_filters(
+        rows,
+        RosterFilters(only_needing_clarification=True, only_needing_org_review=True),
+    )
+    assert [r.employee_id for r in clarify] == [2, 4]
+    assert [r.employee_id for r in review] == [3, 4]
+    assert [r.employee_id for r in both] == [4]
 
 
 def test_group_by_status_keeps_empty_columns() -> None:

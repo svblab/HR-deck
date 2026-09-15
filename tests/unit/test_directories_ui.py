@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -101,12 +102,34 @@ def _create_chain_via_dialog(
             "Филиал Альфа",
             "Департамент HR",
             "Отдел платформы",
-            "Инженер",
         ]
     )
     monkeypatch.setattr(
         "ui.directories_dialog._prompt_text",
         lambda *_a, **_k: (next(prompts), True),
+    )
+
+    class _PositionDialogStub:
+        def __init__(
+            self,
+            parent: object,
+            *,
+            title: str,
+            name: str,
+            department_required: bool,
+            division_required: bool,
+        ) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Инженер", False, False)
+
+    monkeypatch.setattr(
+        "ui.directories_dialog._PositionRequirementsDialog",
+        _PositionDialogStub,
     )
     monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
 
@@ -334,5 +357,209 @@ def test_directories_dialog_creates_branch_direct_division(
         ("Секретариат филиала",),
     ).fetchone()
     assert row == (branch_id, None)
+    dlg.close()
+    conn.close()
+
+
+def _open_directories(tmp_path: Path) -> tuple[object, SessionState, DirectoryService, Path]:
+    conn, admin, db = _open_empty_db(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    directories = DirectoryService(conn, admin, clock=clock)
+    return conn, admin, directories, db
+
+
+def _position_panel(dlg: DirectoriesDialog) -> None:
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Должности"))
+
+
+@pytest.mark.acceptance
+def test_directories_create_position_persists_requirement_checkboxes(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Бухгалтер", True, True)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+    _position_panel(dlg)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionCreateBtn"))
+
+    pos = next(p for p in directories.list_positions(active_only=True) if p.name == "Бухгалтер")
+    assert pos.department_required is True
+    assert pos.division_required is True
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_rename_position_requirements_without_violators_applies_silently(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    pos_id = directories.create_position("Секретарь")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    table = dlg.findChild(QTableWidget, "directoriesPositionTable")
+    assert table is not None and table.rowCount() == 1
+    questions: list[tuple[object, ...]] = []
+
+    def _question(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        questions.append(args)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", _question)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Секретарь", True, False)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+
+    pos = directories.get_position(pos_id)
+    assert pos is not None
+    assert pos.department_required is True
+    assert pos.division_required is False
+    assert not questions
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_rename_position_requirements_with_violators_confirms(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, db = _open_directories(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    employees = EmployeeService(conn, admin, clock=clock)
+    pos_id = directories.create_position("Бухгалтер")
+    branch_id = directories.create_branch("Филиал")
+    emp_id = employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Иванов Иван",
+            position_id=pos_id,
+            branch_id=branch_id,
+            department_id=None,
+            division_id=None,
+            employment_type_id=1,
+        )
+    )
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    table = dlg.findChild(QTableWidget, "directoriesPositionTable")
+    assert table is not None
+    table.selectRow(0)
+
+    answers: list[QMessageBox.StandardButton] = []
+
+    def _question(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        return answers.pop(0)
+
+    monkeypatch.setattr(QMessageBox, "question", _question)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Бухгалтер", True, False)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+
+    answers.append(QMessageBox.StandardButton.No)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+    pos = directories.get_position(pos_id)
+    assert pos is not None and not pos.department_required
+
+    answers.append(QMessageBox.StandardButton.Yes)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+    pos = directories.get_position(pos_id)
+    assert pos is not None and pos.department_required
+    row = conn.execute(
+        "SELECT department_id, needs_org_review FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    assert row == (None, 1)
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_rename_position_requirements_decline_leaves_data_unchanged(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    employees = EmployeeService(conn, admin, clock=clock)
+    pos_id = directories.create_position("Кладовщик")
+    branch_id = directories.create_branch("Склад")
+    dept_id = directories.create_department(branch_id, "Логистика")
+    emp_id = employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Петров Петр",
+            position_id=pos_id,
+            branch_id=branch_id,
+            department_id=dept_id,
+            division_id=None,
+            employment_type_id=1,
+        )
+    )
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_a, **_k: QMessageBox.StandardButton.No,
+    )
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Кладовщик", True, True)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+
+    pos = directories.get_position(pos_id)
+    assert pos is not None and not pos.division_required
+    row = conn.execute(
+        "SELECT department_id, needs_org_review FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    assert row == (dept_id, 0)
     dlg.close()
     conn.close()
