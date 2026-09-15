@@ -78,3 +78,14 @@ def validate_position_requirements(
         raise EmployeeValidationError("department is required for this position")
     if division_required and division_id is None:
         raise EmployeeValidationError("division is required for this position")
+
+
+def validate_position_branch(
+    *,
+    employee_branch_id: int,
+    position_branch_id: int,
+) -> None:
+    from domain.employee import EmployeeValidationError
+
+    if employee_branch_id != position_branch_id:
+        raise EmployeeValidationError("position does not belong to employee's branch")

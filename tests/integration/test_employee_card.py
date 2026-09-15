@@ -50,7 +50,7 @@ def _seed_directories(
     branch_id = ds.create_branch("Филиал Тест")
     dept_id = ds.create_department(branch_id, "Департамент QA")
     div_id = ds.create_division(branch_id, dept_id, "Отдел A")
-    pos_id = ds.create_position("Инженер")
+    pos_id = ds.create_position(branch_id, "Инженер")
     et_id = ds.create_employment_type("test_staff", "Тестовый штат")
     return {
         "branch_id": branch_id,
@@ -119,7 +119,7 @@ def test_search_disambiguates_same_full_name(tmp_path: Path) -> None:
     conn, session, _db = _open_db(tmp_path)
     refs = _seed_directories(conn, session)
     ds = DirectoryService(conn, session, clock=lambda: "2026-08-26T14:15:00Z")
-    pos2 = ds.create_position("Аналитик")
+    pos2 = ds.create_position(refs["branch_id"], "Аналитик")
     svc = EmployeeService(conn, session, clock=lambda: "2026-08-26T14:16:00Z")
     svc.create_employee(
         EmployeeCreateInput(

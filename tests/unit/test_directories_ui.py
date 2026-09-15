@@ -158,9 +158,8 @@ def _create_chain_via_dialog(
     div_id = directories.list_divisions(department_id=dept_id, active_only=True)[0].id
 
     tabs.setCurrentIndex(_tab_index(dlg, "Должности"))
-    pos_btn = dlg.findChild(QPushButton, "directoriesPositionCreateBtn")
-    _click(qtbot, pos_btn)
-    pos_id = directories.list_positions(active_only=True)[0].id
+    directories.create_position(branch_id, "Инженер")
+    pos_id = directories.list_positions(branch_id=branch_id, active_only=True)[0].id
 
     return {
         "branch_id": branch_id,
@@ -376,31 +375,18 @@ def _position_panel(dlg: DirectoriesDialog) -> None:
 
 @pytest.mark.acceptance
 def test_directories_create_position_persists_requirement_checkboxes(
-    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
+    """Phase 0: service-layer persistence until EPIC-026 UI adds branch picker."""
     conn, admin, directories, _db = _open_directories(tmp_path)
-    dlg = DirectoriesDialog(directories, admin)
-    qtbot.addWidget(dlg)
-    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
-
-    class _Dialog:
-        def __init__(self, *_a, **_k) -> None:
-            pass
-
-        def exec(self) -> QDialog.DialogCode:
-            return QDialog.DialogCode.Accepted
-
-        def values(self) -> tuple[str, bool, bool]:
-            return ("Бухгалтер", True, True)
-
-    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
-    _position_panel(dlg)
-    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionCreateBtn"))
-
-    pos = next(p for p in directories.list_positions(active_only=True) if p.name == "Бухгалтер")
+    branch_id = directories.create_branch("Филиал Центр")
+    pos_id = directories.create_position(
+        branch_id, "Бухгалтер", department_required=True, division_required=True
+    )
+    pos = directories.get_position(pos_id)
+    assert pos is not None
     assert pos.department_required is True
     assert pos.division_required is True
-    dlg.close()
     conn.close()
 
 
@@ -409,7 +395,8 @@ def test_directories_rename_position_requirements_without_violators_applies_sile
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     conn, admin, directories, _db = _open_directories(tmp_path)
-    pos_id = directories.create_position("Секретарь")
+    branch_id = directories.create_branch("Филиал Центр")
+    pos_id = directories.create_position(branch_id, "Секретарь")
     dlg = DirectoriesDialog(directories, admin)
     qtbot.addWidget(dlg)
     _position_panel(dlg)
@@ -453,8 +440,8 @@ def test_directories_rename_position_requirements_with_violators_confirms(
     conn, admin, directories, db = _open_directories(tmp_path)
     clock = lambda: _AS_OF  # noqa: E731
     employees = EmployeeService(conn, admin, clock=clock)
-    pos_id = directories.create_position("Бухгалтер")
     branch_id = directories.create_branch("Филиал")
+    pos_id = directories.create_position(branch_id, "Бухгалтер")
     emp_id = employees.create_employee(
         EmployeeCreateInput(
             full_name="Иванов Иван",
@@ -517,8 +504,8 @@ def test_directories_rename_position_requirements_decline_leaves_data_unchanged(
     conn, admin, directories, _db = _open_directories(tmp_path)
     clock = lambda: _AS_OF  # noqa: E731
     employees = EmployeeService(conn, admin, clock=clock)
-    pos_id = directories.create_position("Кладовщик")
     branch_id = directories.create_branch("Склад")
+    pos_id = directories.create_position(branch_id, "Кладовщик")
     dept_id = directories.create_department(branch_id, "Логистика")
     emp_id = employees.create_employee(
         EmployeeCreateInput(

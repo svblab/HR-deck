@@ -40,6 +40,7 @@ class DivisionRecord:
 @dataclass(frozen=True)
 class PositionRecord:
     id: int
+    branch_id: int
     name: str
     department_required: bool
     division_required: bool
@@ -215,20 +216,30 @@ class PositionRepository:
     def __init__(self, conn: Connection) -> None:
         self._conn = conn
 
-    def list(self, *, active_only: bool = False) -> list[PositionRecord]:
-        sql = (
-            "SELECT id, name, department_required, division_required, is_archived,"
-            " created_at, updated_at FROM positions"
-        )
+    def list(
+        self,
+        *,
+        branch_id: int | None = None,
+        active_only: bool = False,
+    ) -> list[PositionRecord]:
+        clauses: list[str] = []
+        params: list[object] = []
+        if branch_id is not None:
+            clauses.append("branch_id = ?")
+            params.append(branch_id)
         if active_only:
-            sql += " WHERE is_archived = 0"
-        sql += " ORDER BY name"
-        return [_position_row(r) for r in self._conn.execute(sql).fetchall()]
+            clauses.append("is_archived = 0")
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        sql = (
+            "SELECT id, branch_id, name, department_required, division_required,"
+            f" is_archived, created_at, updated_at FROM positions{where} ORDER BY name"
+        )
+        return [_position_row(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def get(self, position_id: int) -> PositionRecord | None:
         row = self._conn.execute(
-            "SELECT id, name, department_required, division_required, is_archived,"
-            " created_at, updated_at FROM positions WHERE id = ?",
+            "SELECT id, branch_id, name, department_required, division_required,"
+            " is_archived, created_at, updated_at FROM positions WHERE id = ?",
             (position_id,),
         ).fetchone()
         return _position_row(row) if row else None
@@ -236,6 +247,7 @@ class PositionRepository:
     def create(
         self,
         *,
+        branch_id: int,
         name: str,
         department_required: bool = False,
         division_required: bool = False,
@@ -243,9 +255,11 @@ class PositionRepository:
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO positions ("
-            " name, department_required, division_required, is_archived, created_at, updated_at"
-            ") VALUES (?, ?, ?, 0, ?, ?)",
+            " branch_id, name, department_required, division_required, is_archived,"
+            " created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, 0, ?, ?)",
             (
+                branch_id,
                 name,
                 int(department_required),
                 int(division_required),
@@ -366,12 +380,13 @@ def _division_row(row: tuple[object, ...]) -> DivisionRecord:
 def _position_row(row: tuple[object, ...]) -> PositionRecord:
     return PositionRecord(
         id=int(row[0]),
-        name=str(row[1]),
-        department_required=bool(int(row[2])),
-        division_required=bool(int(row[3])),
-        is_archived=bool(int(row[4])),
-        created_at=str(row[5]),
-        updated_at=str(row[6]),
+        branch_id=int(row[1]),
+        name=str(row[2]),
+        department_required=bool(int(row[3])),
+        division_required=bool(int(row[4])),
+        is_archived=bool(int(row[5])),
+        created_at=str(row[6]),
+        updated_at=str(row[7]),
     )
 
 

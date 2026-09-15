@@ -235,9 +235,11 @@ class DirectoryService:
 
     # --- Positions ---
 
-    def list_positions(self, *, active_only: bool = False):
+    def list_positions(
+        self, *, branch_id: int | None = None, active_only: bool = False
+    ):
         self._require(Permission.VIEW_DIRECTORIES)
-        return self._positions.list(active_only=active_only)
+        return self._positions.list(branch_id=branch_id, active_only=active_only)
 
     def get_position(self, position_id: int) -> PositionRecord | None:
         self._require(Permission.VIEW_DIRECTORIES)
@@ -245,24 +247,29 @@ class DirectoryService:
 
     def create_position(
         self,
+        branch_id: int,
         name: str,
         *,
         department_required: bool = False,
         division_required: bool = False,
     ) -> int:
         self._require(Permission.MANAGE_DIRECTORIES)
+        branch = self._require_branch(branch_id)
+        if branch.is_archived:
+            raise DirectoryError("cannot assign to archived branch")
         clean = _clean_name(name)
         now = self._clock()
         return self._mutate(
             action="directory.position.create",
             entity_type="position",
             mutate=lambda: self._positions.create(
+                branch_id=branch_id,
                 name=clean,
                 department_required=department_required,
                 division_required=division_required,
                 created_at=now,
             ),
-            details=f"name={clean}",
+            details=f"branch_id={branch_id};name={clean}",
         )
 
     def rename_position(self, position_id: int, name: str) -> None:

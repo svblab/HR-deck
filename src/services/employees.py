@@ -25,7 +25,12 @@ from domain.employee import (
     clean_full_name,
     validate_employee_org,
 )
-from domain.org_structure import DepartmentRef, DivisionRef, validate_position_requirements
+from domain.org_structure import (
+    DepartmentRef,
+    DivisionRef,
+    validate_position_branch,
+    validate_position_requirements,
+)
 from domain.permissions import Permission
 from domain.sensitive import mask_sensitive_value
 from services.authorization import AuthorizationError, AuthorizationService
@@ -230,6 +235,13 @@ class EmployeeService:
                 division_id=data.division_id,
                 department_required=position.department_required,
                 division_required=position.division_required,
+            )
+        except EmployeeValidationError as exc:
+            raise EmployeeError(str(exc)) from exc
+        try:
+            validate_position_branch(
+                employee_branch_id=data.branch_id,
+                position_branch_id=position.branch_id,
             )
         except EmployeeValidationError as exc:
             raise EmployeeError(str(exc)) from exc

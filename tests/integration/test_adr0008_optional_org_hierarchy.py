@@ -140,7 +140,8 @@ def test_adr0008_migration_employees_allows_null_department_on_nonempty_db(
     conn.close()
 
     conn2 = connect(path, key)
-    applied = apply_pending_migrations(conn2)
+    mig_through_12 = _migrations_through(12, tmp_path / "through12")
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_through_12)
     assert applied == [10, 11, 12]
     assert current_version(conn2) == 12
     assert conn2.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == emp_count
@@ -181,7 +182,8 @@ def test_adr0008_migration_employees_with_status_history_on_nonempty_db(
     conn.close()
 
     conn2 = connect(path, key)
-    applied = apply_pending_migrations(conn2)
+    mig_through_12 = _migrations_through(12, tmp_path / "through12")
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_through_12)
     assert applied == [10, 11, 12]
     assert current_version(conn2) == 12
     restored = conn2.execute(
@@ -246,7 +248,7 @@ def test_adr0008_cannot_rebranch_division_referenced_by_employees(
     branch_a = svc.create_branch("Филиал A")
     branch_b = svc.create_branch("Филиал B")
     div_id = svc.create_division(branch_a, None, "Секретариат")
-    pos_id = svc.create_position("Сотрудник")
+    pos_id = svc.create_position(branch_a, "Сотрудник")
     et_id = svc.list_employment_types(active_only=True)[0].id
     repo = EmployeeRepository(conn)
     repo.create(
@@ -272,7 +274,7 @@ def test_adr0008_create_employee_branch_only(tmp_path: Path) -> None:
     conn, session = _open_db(tmp_path)
     svc = DirectoryService(conn, session, clock=lambda: _NOW)
     branch_id = svc.create_branch("Филиал A")
-    pos_id = svc.create_position("Директор")
+    pos_id = svc.create_position(branch_id, "Директор")
     et_id = svc.list_employment_types(active_only=True)[0].id
     validate_employee_org(
         branch_id=branch_id,
@@ -304,7 +306,7 @@ def test_adr0008_create_employee_in_branch_direct_division(tmp_path: Path) -> No
     conn, session = _open_db(tmp_path)
     svc = DirectoryService(conn, session, clock=lambda: _NOW)
     branch_id = svc.create_branch("Филиал A")
-    pos_id = svc.create_position("Секретарь")
+    pos_id = svc.create_position(branch_id, "Секретарь")
     et_id = svc.list_employment_types(active_only=True)[0].id
     div_id = svc.create_division(branch_id, None, "Секретариат")
     div_row = conn.execute(
@@ -399,7 +401,7 @@ def test_adr0008_import_empty_department_nonempty_division_matches_branch_divisi
     svc = DirectoryService(conn, session, clock=lambda: _NOW)
     branch_id = svc.create_branch("Филиал A")
     svc.create_division(branch_id, None, "Секретариат")
-    pos_id = svc.create_position("Секретарь")
+    pos_id = svc.create_position(branch_id, "Секретарь")
     et_name = svc.list_employment_types(active_only=True)[0].name
     employees = EmployeeService(conn, session, clock=lambda: _NOW)
     importer = EmployeeImportService(employees, svc, session)
@@ -438,8 +440,8 @@ def test_adr0008_import_empty_department_unknown_division_name_errors(
 ) -> None:
     conn, session = _open_db(tmp_path)
     svc = DirectoryService(conn, session, clock=lambda: _NOW)
-    svc.create_branch("Филиал A")
-    svc.create_position("Секретарь")
+    branch_id = svc.create_branch("Филиал A")
+    svc.create_position(branch_id, "Секретарь")
     et_name = svc.list_employment_types(active_only=True)[0].name
     employees = EmployeeService(conn, session, clock=lambda: _NOW)
     importer = EmployeeImportService(employees, svc, session)
@@ -474,8 +476,8 @@ def test_adr0008_import_both_department_and_division_empty_is_valid(
 ) -> None:
     conn, session = _open_db(tmp_path)
     svc = DirectoryService(conn, session, clock=lambda: _NOW)
-    svc.create_branch("Филиал A")
-    svc.create_position("Директор")
+    branch_id = svc.create_branch("Филиал A")
+    svc.create_position(branch_id, "Директор")
     et_name = svc.list_employment_types(active_only=True)[0].name
     employees = EmployeeService(conn, session, clock=lambda: _NOW)
     importer = EmployeeImportService(employees, svc, session)

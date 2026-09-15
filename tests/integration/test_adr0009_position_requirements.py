@@ -113,7 +113,8 @@ def test_adr0009_migration_position_org_requirements_on_nonempty_db(
     conn.close()
 
     conn2 = connect(path, key)
-    applied = apply_pending_migrations(conn2)
+    mig_through_12 = _migrations_through(12, tmp_path / "through12")
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_through_12)
     assert applied == [12]
     assert current_version(conn2) == 12
     assert conn2.execute("SELECT COUNT(*) FROM positions").fetchone()[0] == pos_count
@@ -135,7 +136,8 @@ def test_adr0009_migration_position_org_requirements_on_nonempty_db(
 def test_adr0009_position_requirements_default_to_false(tmp_path: Path) -> None:
     conn, session = _open_db(tmp_path)
     directories, _employees = _services(conn, session)
-    pos_id = directories.create_position("Аналитик")
+    branch_id = directories.create_branch("Филиал T")
+    pos_id = directories.create_position(branch_id, "Аналитик")
     pos = directories._positions.get(pos_id)
     assert pos is not None
     assert pos.department_required is False
@@ -150,7 +152,7 @@ def test_adr0009_employee_service_requires_department_when_position_demands_it(
     conn, session = _open_db(tmp_path)
     directories, employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал A")
-    pos_id = directories.create_position("Директор")
+    pos_id = directories.create_position(branch_id, "Директор")
     PositionRepository(conn).set_org_requirements(
         pos_id,
         department_required=True,
@@ -178,7 +180,7 @@ def test_adr0009_employee_service_requires_division_when_position_demands_it(
     directories, employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал B")
     dept_id = directories.create_department(branch_id, "Департамент B")
-    pos_id = directories.create_position("Менеджер")
+    pos_id = directories.create_position(branch_id, "Менеджер")
     div_id = directories.create_division(branch_id, dept_id, "Отдел B")
     PositionRepository(conn).set_org_requirements(
         pos_id,
@@ -220,7 +222,7 @@ def test_adr0009_division_required_without_department_forces_branch_direct_divis
     dept_id = directories.create_department(branch_id, "Департамент C")
     dept_div_id = directories.create_division(branch_id, dept_id, "Отдел C")
     branch_div_id = directories.create_division(branch_id, None, "Секретариат")
-    pos_id = directories.create_position("Секретарь")
+    pos_id = directories.create_position(branch_id, "Секретарь")
     PositionRepository(conn).set_org_requirements(
         pos_id,
         department_required=False,
@@ -258,7 +260,7 @@ def test_adr0009_preview_returns_empty_when_loosening_requirements(
     conn, session = _open_db(tmp_path)
     directories, _employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал D")
-    pos_id = directories.create_position("Руководитель")
+    pos_id = directories.create_position(branch_id, "Руководитель")
     EmployeeRepository(conn).create(
         full_name="Без департамента",
         position_id=pos_id,
@@ -288,7 +290,7 @@ def test_adr0009_preview_lists_violating_active_employees_only(
     conn, session = _open_db(tmp_path)
     directories, employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал E")
-    pos_id = directories.create_position("Исполнитель")
+    pos_id = directories.create_position(branch_id, "Исполнитель")
     active_id = employees.create_employee(
         _employee_input(
             directories=directories,
@@ -320,7 +322,7 @@ def test_adr0009_apply_without_confirmation_raises_when_violators_exist(
     conn, session = _open_db(tmp_path)
     directories, employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал F")
-    pos_id = directories.create_position("Специалист")
+    pos_id = directories.create_position(branch_id, "Специалист")
     employees.create_employee(
         _employee_input(
             directories=directories,
@@ -350,7 +352,7 @@ def test_adr0009_apply_with_confirmation_resets_only_violating_fields(
     directories, employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал G")
     dept_id = directories.create_department(branch_id, "Департамент G")
-    pos_id = directories.create_position("Координатор")
+    pos_id = directories.create_position(branch_id, "Координатор")
     emp_id = employees.create_employee(
         _employee_input(
             directories=directories,
@@ -382,7 +384,7 @@ def test_adr0009_apply_sets_needs_org_review_and_writes_audit_log(
     conn, session = _open_db(tmp_path)
     directories, employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал H")
-    pos_id = directories.create_position("Оператор")
+    pos_id = directories.create_position(branch_id, "Оператор")
     emp_id = employees.create_employee(
         _employee_input(
             directories=directories,
@@ -419,7 +421,7 @@ def test_adr0009_needs_org_review_cleared_on_next_compliant_save(
     directories, employees = _services(conn, session)
     branch_id = directories.create_branch("Филиал I")
     dept_id = directories.create_department(branch_id, "Департамент I")
-    pos_id = directories.create_position("Инженер I")
+    pos_id = directories.create_position(branch_id, "Инженер I")
     emp_id = employees.create_employee(
         _employee_input(
             directories=directories,
@@ -461,7 +463,7 @@ def test_adr0009_employee_import_also_enforces_position_requirements(
     directories, employees = _services(conn, session)
     importer = EmployeeImportService(employees, directories, session)
     branch_id = directories.create_branch("Филиал J")
-    pos_id = directories.create_position("Импортёр")
+    pos_id = directories.create_position(branch_id, "Импортёр")
     et_name = directories.list_employment_types(active_only=True)[0].name
     PositionRepository(conn).set_org_requirements(
         pos_id,

@@ -31,6 +31,28 @@ def _insert_division(
         )
 
 
+def _insert_position(
+    conn: Connection,
+    *,
+    position_id: int,
+    branch_id: int,
+    name: str,
+) -> None:
+    if "branch_id" in table_columns(conn, "positions"):
+        conn.execute(
+            "INSERT INTO positions ("
+            " id, branch_id, name, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, 0, ?, ?)",
+            (position_id, branch_id, name, _NOW, _NOW),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO positions (id, name, is_archived, created_at, updated_at) "
+            "VALUES (?, ?, 0, ?, ?)",
+            (position_id, name, _NOW, _NOW),
+        )
+
+
 def seed_synthetic_org(conn: Connection) -> dict[str, int]:
     """
     Заполнить справочники и двух сотрудников с одинаковым ФИО (разные ID).
@@ -54,16 +76,8 @@ def seed_synthetic_org(conn: Connection) -> dict[str, int]:
         department_id=1,
         name="Отдел платформы",
     )
-    conn.execute(
-        "INSERT INTO positions (id, name, is_archived, created_at, updated_at) "
-        "VALUES (1, ?, 0, ?, ?)",
-        ("Инженер", _NOW, _NOW),
-    )
-    conn.execute(
-        "INSERT INTO positions (id, name, is_archived, created_at, updated_at) "
-        "VALUES (2, ?, 0, ?, ?)",
-        ("Аналитик", _NOW, _NOW),
-    )
+    _insert_position(conn, position_id=1, branch_id=1, name="Инженер")
+    _insert_position(conn, position_id=2, branch_id=1, name="Аналитик")
 
     # Два сотрудника с одним ФИО — идентификация по ID (ТЗ §3.1 / TESTING 2.6).
     conn.execute(

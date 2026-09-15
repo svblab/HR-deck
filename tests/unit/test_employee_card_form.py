@@ -139,7 +139,7 @@ def test_employee_card_save_without_department_branch_direct_division(
     """ADR-0008: карточка сохраняется без департамента с отделом филиала."""
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Восток")
-    pos_id = directories.create_position("Менеджер")
+    pos_id = directories.create_position(branch_id, "Менеджер")
     div_id = directories.create_division(branch_id, None, "Секретариат")
 
     warnings = _capture_warnings(monkeypatch)
@@ -169,7 +169,7 @@ def test_employee_card_submit_branch_only_no_department_no_division(
     """ADR-0008: branch-only employee saves through form submit."""
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Запад")
-    pos_id = directories.create_position("Директор")
+    pos_id = directories.create_position(branch_id, "Директор")
 
     warnings = _capture_warnings(monkeypatch)
     dialog = EmployeeCardDialog(employees, directories, session)
@@ -197,7 +197,7 @@ def test_employee_card_submit_department_only_no_division(
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Центр")
     dept_id = directories.create_department(branch_id, "Департамент без отделов")
-    pos_id = directories.create_position("Руководитель")
+    pos_id = directories.create_position(branch_id, "Руководитель")
 
     warnings = _capture_warnings(monkeypatch)
     dialog = EmployeeCardDialog(employees, directories, session)
@@ -223,7 +223,7 @@ def test_employee_card_submit_missing_division_no_longer_blocks(
 ) -> None:
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Север")
-    pos_id = directories.create_position("Аналитик")
+    pos_id = directories.create_position(branch_id, "Аналитик")
 
     warnings = _capture_warnings(monkeypatch)
     dialog = EmployeeCardDialog(employees, directories, session)
@@ -247,7 +247,7 @@ def test_employee_card_position_department_required_blocks_submit(
 ) -> None:
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Юг")
-    pos_id = directories.create_position("Бухгалтер", department_required=True)
+    pos_id = directories.create_position(branch_id, "Бухгалтер", department_required=True)
 
     warnings = _capture_warnings(monkeypatch)
     dialog = EmployeeCardDialog(employees, directories, session)
@@ -270,7 +270,7 @@ def test_employee_card_shows_org_review_banner_for_flagged_employee(
     from domain.employee import EmployeeCreateInput
 
     conn, session, employees, directories, ids, _db = _open(tmp_path)
-    pos_id = directories.create_position("Инженер", department_required=True)
+    pos_id = directories.create_position(ids["branch_id"], "Инженер", department_required=True)
     emp_id = employees.create_employee(
         EmployeeCreateInput(
             full_name="Орлов Орел Орлович",
@@ -307,8 +307,8 @@ def test_employee_card_position_without_requirements_unblocks_submit(
 ) -> None:
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Запад")
-    strict_id = directories.create_position("Строгая", department_required=True)
-    loose_id = directories.create_position("Свободная")
+    strict_id = directories.create_position(branch_id, "Строгая", department_required=True)
+    loose_id = directories.create_position(branch_id, "Свободная")
 
     warnings = _capture_warnings(monkeypatch)
     dialog = EmployeeCardDialog(employees, directories, session)

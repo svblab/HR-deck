@@ -31,13 +31,15 @@ def seed_perf_org(conn) -> dict[str, int]:
         ("Отдел синтетики", _NOW, _NOW),
     )
     conn.execute(
-        "INSERT INTO positions (id, name, is_archived, created_at, updated_at) "
-        "VALUES (1, ?, 0, ?, ?)",
+        "INSERT INTO positions ("
+        " id, branch_id, name, is_archived, created_at, updated_at"
+        ") VALUES (1, 1, ?, 0, ?, ?)",
         ("Инженер", _NOW, _NOW),
     )
     conn.execute(
-        "INSERT INTO positions (id, name, is_archived, created_at, updated_at) "
-        "VALUES (2, ?, 0, ?, ?)",
+        "INSERT INTO positions ("
+        " id, branch_id, name, is_archived, created_at, updated_at"
+        ") VALUES (2, 1, ?, 0, ?, ?)",
         ("Аналитик", _NOW, _NOW),
     )
     return {
