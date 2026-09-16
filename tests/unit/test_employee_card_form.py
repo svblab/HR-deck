@@ -327,3 +327,84 @@ def test_employee_card_position_without_requirements_unblocks_submit(
     assert dialog.result() == QDialog.DialogCode.Accepted
     conn.close()
 
+
+def _position_names(dialog: EmployeeCardDialog) -> list[str]:
+    combo = dialog._position
+    return [
+        combo.itemText(i)
+        for i in range(combo.count())
+        if combo.itemData(i) is not None
+    ]
+
+
+@pytest.mark.acceptance
+def test_employee_card_position_list_filtered_by_branch(qtbot, tmp_path: Path) -> None:
+    """ADR-0010: должности в карточке фильтруются по выбранному филиалу."""
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_a = directories.create_branch("Филиал Альфа")
+    branch_b = directories.create_branch("Филиал Бета")
+    directories.create_position(branch_a, "Инженер Альфа")
+    directories.create_position(branch_b, "Инженер Бета")
+
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    assert _position_names(dialog) == []
+
+    _select_combo(dialog._branch, branch_a)
+    assert _position_names(dialog) == ["Инженер Альфа"]
+
+    _select_combo(dialog._branch, branch_b)
+    assert _position_names(dialog) == ["Инженер Бета"]
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_employee_card_branch_change_clears_position(qtbot, tmp_path: Path) -> None:
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_a = directories.create_branch("Филиал 1")
+    branch_b = directories.create_branch("Филиал 2")
+    pos_a = directories.create_position(branch_a, "Должность 1")
+    directories.create_position(branch_b, "Должность 2")
+
+    dialog = EmployeeCardDialog(employees, directories, session)
+    qtbot.addWidget(dialog)
+    _select_combo(dialog._branch, branch_a)
+    _select_combo(dialog._position, pos_a)
+    assert dialog._position.currentData() == pos_a
+
+    _select_combo(dialog._branch, branch_b)
+    assert dialog._position.currentData() is None
+    assert dialog._position.currentText() == "Должность"
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_employee_card_existing_employee_position_loads_correctly_before_branch_select(
+    qtbot, tmp_path: Path
+) -> None:
+    """Load still shows saved position even though `_fill_positions` runs before branch select."""
+    from domain.employee import EmployeeCreateInput
+
+    conn, session, employees, directories, _ids, _db = _open(tmp_path)
+    branch_id = directories.create_branch("Филиал Восток")
+    pos_id = directories.create_position(branch_id, "Архивариус")
+    emp_id = employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Сидоров Сидор Сидорович",
+            position_id=pos_id,
+            branch_id=branch_id,
+            department_id=None,
+            division_id=None,
+            employment_type_id=1,
+        )
+    )
+
+    dialog = EmployeeCardDialog(
+        employees, directories, session, employee_id=emp_id
+    )
+    qtbot.addWidget(dialog)
+    assert dialog._branch.currentData() == branch_id
+    assert dialog._position.currentData() == pos_id
+    assert dialog._position.currentText() == "Архивариус"
+    conn.close()
+

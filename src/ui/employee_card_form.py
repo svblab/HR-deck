@@ -214,21 +214,24 @@ class EmployeeCardDialog(QDialog):
             self.accept()
 
     def _fill_static_combos(self) -> None:
+        previous_loading = self._loading
         self._loading = True
-        _fill_combo(self._position, self._directories.list_positions(active_only=True), "Должность")
         _fill_combo(self._branch, self._directories.list_branches(active_only=True), "Филиал")
         _fill_combo(
             self._employment,
             self._directories.list_employment_types(active_only=True),
             "Тип занятости",
         )
+        self._fill_positions()
         self._fill_departments()
         self._fill_divisions()
-        self._loading = False
+        self._loading = previous_loading
 
     def _on_branch_changed(self) -> None:
         if self._loading:
             return
+        self._fill_positions()
+        self._refresh_position_requirements()
         self._fill_departments()
         self._fill_divisions()
 
@@ -253,6 +256,15 @@ class EmployeeCardDialog(QDialog):
             if position is not None
             else (False, False)
         )
+
+    def _fill_positions(self) -> None:
+        branch_id = _combo_id(self._branch)
+        items = (
+            self._directories.list_positions(branch_id=branch_id, active_only=True)
+            if branch_id is not None
+            else []
+        )
+        _fill_combo(self._position, items, "Должность")
 
     def _fill_departments(self) -> None:
         branch_id = _combo_id(self._branch)

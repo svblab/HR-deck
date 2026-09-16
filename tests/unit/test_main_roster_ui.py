@@ -131,8 +131,8 @@ def test_add_button_opens_form_save_reloads_roster(qtbot, tmp_path: Path) -> Non
         for widget in QApplication.topLevelWidgets():
             if isinstance(widget, EmployeeCardDialog) and widget.isVisible():
                 widget._name.setText("Сидорова Анна")
-                widget._position.setCurrentIndex(1)
                 widget._branch.setCurrentIndex(1)
+                widget._position.setCurrentIndex(1)
                 widget._department.setCurrentIndex(1)
                 widget._division.setCurrentIndex(1)
                 widget._employment.setCurrentIndex(1)

@@ -77,17 +77,19 @@ class DirectoriesDialog(QDialog):
             extra_parent_changed=self._on_div_branch_changed,
             include_no_parent_option=True,
         )
+        self._pos_panel = _DirectoryPanel(
+            directories,
+            self._can_manage,
+            kind="position",
+            title="Должности",
+            object_prefix="directoriesPosition",
+            parent_label="Филиал",
+        )
         self._panels = [
             self._branch_panel,
             self._dept_panel,
             self._div_panel,
-            _DirectoryPanel(
-                directories,
-                self._can_manage,
-                kind="position",
-                title="Должности",
-                object_prefix="directoriesPosition",
-            ),
+            self._pos_panel,
             _DirectoryPanel(
                 directories,
                 self._can_manage,
@@ -98,6 +100,7 @@ class DirectoriesDialog(QDialog):
             ),
         ]
         self._dept_panel.set_parent_items(self._branch_panel.items_for_combo())
+        self._pos_panel.set_parent_items(self._branch_panel.items_for_combo())
         self._div_panel.set_extra_parent_items(self._branch_panel.items_for_combo())
         for panel in self._panels:
             self._tabs.addTab(panel, panel.title)
@@ -114,6 +117,7 @@ class DirectoriesDialog(QDialog):
 
     def _reload_branch_dependents(self) -> None:
         self._dept_panel.set_parent_items(self._branch_panel.items_for_combo())
+        self._pos_panel.set_parent_items(self._branch_panel.items_for_combo())
         self._div_panel.set_extra_parent_items(self._branch_panel.items_for_combo())
         self._on_div_branch_changed()
 
@@ -316,7 +320,10 @@ class _DirectoryPanel(QWidget):
                 active_only=active_only,
             )
         if self._kind == "position":
-            return self._directories.list_positions(active_only=active_only)
+            return self._directories.list_positions(
+                branch_id=self._parent_id(),
+                active_only=active_only,
+            )
         if self._kind == "employment_type":
             return self._directories.list_employment_types(active_only=active_only)
         return []
@@ -375,6 +382,10 @@ class _DirectoryPanel(QWidget):
             self.reload()
             return
         elif self._kind == "position":
+            parent_id = self._parent_id()
+            if parent_id is None:
+                QMessageBox.information(self, "Создание", "Выберите филиал.")
+                return
             dialog = _PositionRequirementsDialog(
                 self,
                 title="Новая должность",
@@ -389,6 +400,7 @@ class _DirectoryPanel(QWidget):
                 return
             try:
                 self._directories.create_position(
+                    parent_id,
                     name,
                     department_required=dept_required,
                     division_required=div_required,
