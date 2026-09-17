@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import uuid
 from pathlib import Path
 
 import pytest
@@ -252,6 +253,7 @@ def test_adr0008_cannot_rebranch_division_referenced_by_employees(
     et_id = svc.list_employment_types(active_only=True)[0].id
     repo = EmployeeRepository(conn)
     repo.create(
+        external_id=str(uuid.uuid4()),
         full_name="Директор",
         position_id=pos_id,
         branch_id=branch_a,
@@ -285,6 +287,7 @@ def test_adr0008_create_employee_branch_only(tmp_path: Path) -> None:
     )
     repo = EmployeeRepository(conn)
     emp_id = repo.create(
+        external_id=str(uuid.uuid4()),
         full_name="Директор филиала",
         position_id=pos_id,
         branch_id=branch_id,
@@ -327,6 +330,7 @@ def test_adr0008_create_employee_in_branch_direct_division(tmp_path: Path) -> No
     )
     repo = EmployeeRepository(conn)
     emp_id = repo.create(
+        external_id=str(uuid.uuid4()),
         full_name="Секретарь",
         position_id=pos_id,
         branch_id=branch_id,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import uuid
 from pathlib import Path
 
 import pytest
@@ -262,6 +263,7 @@ def test_adr0009_preview_returns_empty_when_loosening_requirements(
     branch_id = directories.create_branch("Филиал D")
     pos_id = directories.create_position(branch_id, "Руководитель")
     EmployeeRepository(conn).create(
+        external_id=str(uuid.uuid4()),
         full_name="Без департамента",
         position_id=pos_id,
         branch_id=branch_id,

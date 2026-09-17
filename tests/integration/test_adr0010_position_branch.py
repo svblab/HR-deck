@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import uuid
 from pathlib import Path
 
 import pytest
@@ -88,8 +89,8 @@ def test_adr0010_migration_succeeds_on_empty_positions_table(tmp_path: Path) -> 
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [13]
-    assert current_version(conn2) == 13
+    assert applied == [13, 14]
+    assert current_version(conn2) == 14
     cols = {row[1] for row in conn2.execute("PRAGMA table_info(positions)").fetchall()}
     assert "branch_id" in cols
     conn2.close()
@@ -108,6 +109,7 @@ def test_adr0010_employee_position_must_belong_to_employee_branch(
     repo = EmployeeRepository(conn)
 
     emp_id = repo.create(
+        external_id=str(uuid.uuid4()),
         full_name="Сотрудник A",
         position_id=pos_id,
         branch_id=branch_a,
@@ -123,6 +125,7 @@ def test_adr0010_employee_position_must_belong_to_employee_branch(
         match="employee position does not belong to branch",
     ):
         repo.create(
+            external_id=str(uuid.uuid4()),
             full_name="Сотрудник B",
             position_id=pos_id,
             branch_id=branch_b,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -64,10 +65,13 @@ class DirectoryService:
         self._require(Permission.MANAGE_DIRECTORIES)
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.branch.create",
             entity_type="branch",
-            mutate=lambda: self._branches.create(name=clean, created_at=now),
+            mutate=lambda: self._branches.create(
+                external_id=external_id, name=clean, created_at=now
+            ),
             details=f"name={clean}",
         )
 
@@ -117,11 +121,12 @@ class DirectoryService:
             raise DirectoryError("cannot assign to archived branch")
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.department.create",
             entity_type="department",
             mutate=lambda: self._departments.create(
-                branch_id=branch_id, name=clean, created_at=now
+                external_id=external_id, branch_id=branch_id, name=clean, created_at=now
             ),
             details=f"branch_id={branch_id};name={clean}",
         )
@@ -188,10 +193,12 @@ class DirectoryService:
                 raise DirectoryError("cannot assign to archived department")
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.division.create",
             entity_type="division",
             mutate=lambda: self._divisions.create(
+                external_id=external_id,
                 branch_id=branch_id,
                 department_id=department_id,
                 name=clean,
@@ -259,10 +266,12 @@ class DirectoryService:
             raise DirectoryError("cannot assign to archived branch")
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.position.create",
             entity_type="position",
             mutate=lambda: self._positions.create(
+                external_id=external_id,
                 branch_id=branch_id,
                 name=clean,
                 department_required=department_required,

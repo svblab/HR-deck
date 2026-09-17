@@ -10,6 +10,7 @@ from data.db import Connection
 @dataclass(frozen=True)
 class BranchRecord:
     id: int
+    external_id: str
     name: str
     is_archived: bool
     created_at: str
@@ -19,6 +20,7 @@ class BranchRecord:
 @dataclass(frozen=True)
 class DepartmentRecord:
     id: int
+    external_id: str
     branch_id: int
     name: str
     is_archived: bool
@@ -29,6 +31,7 @@ class DepartmentRecord:
 @dataclass(frozen=True)
 class DivisionRecord:
     id: int
+    external_id: str
     branch_id: int
     department_id: int | None
     name: str
@@ -40,6 +43,7 @@ class DivisionRecord:
 @dataclass(frozen=True)
 class PositionRecord:
     id: int
+    external_id: str
     branch_id: int
     name: str
     department_required: bool
@@ -66,7 +70,10 @@ class BranchRepository:
         self._conn = conn
 
     def list(self, *, active_only: bool = False) -> list[BranchRecord]:
-        sql = "SELECT id, name, is_archived, created_at, updated_at FROM branches"
+        sql = (
+            "SELECT id, external_id, name, is_archived, created_at, updated_at"
+            " FROM branches"
+        )
         if active_only:
             sql += " WHERE is_archived = 0"
         sql += " ORDER BY name"
@@ -74,15 +81,17 @@ class BranchRepository:
 
     def get(self, branch_id: int) -> BranchRecord | None:
         row = self._conn.execute(
-            "SELECT id, name, is_archived, created_at, updated_at FROM branches WHERE id = ?",
+            "SELECT id, external_id, name, is_archived, created_at, updated_at"
+            " FROM branches WHERE id = ?",
             (branch_id,),
         ).fetchone()
         return _branch_row(row) if row else None
 
-    def create(self, *, name: str, created_at: str) -> int:
+    def create(self, *, external_id: str, name: str, created_at: str) -> int:
         cur = self._conn.execute(
-            "INSERT INTO branches (name, is_archived, created_at, updated_at) VALUES (?, 0, ?, ?)",
-            (name, created_at, created_at),
+            "INSERT INTO branches (external_id, name, is_archived, created_at, updated_at)"
+            " VALUES (?, ?, 0, ?, ?)",
+            (external_id, name, created_at, created_at),
         )
         return int(cur.lastrowid)
 
@@ -118,24 +127,25 @@ class DepartmentRepository:
             clauses.append("is_archived = 0")
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = (
-            "SELECT id, branch_id, name, is_archived, created_at, updated_at "
+            "SELECT id, external_id, branch_id, name, is_archived, created_at, updated_at "
             f"FROM departments{where} ORDER BY name"
         )
         return [_department_row(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def get(self, department_id: int) -> DepartmentRecord | None:
         row = self._conn.execute(
-            "SELECT id, branch_id, name, is_archived, created_at, updated_at "
+            "SELECT id, external_id, branch_id, name, is_archived, created_at, updated_at "
             "FROM departments WHERE id = ?",
             (department_id,),
         ).fetchone()
         return _department_row(row) if row else None
 
-    def create(self, *, branch_id: int, name: str, created_at: str) -> int:
+    def create(self, *, external_id: str, branch_id: int, name: str, created_at: str) -> int:
         cur = self._conn.execute(
-            "INSERT INTO departments (branch_id, name, is_archived, created_at, updated_at) "
-            "VALUES (?, ?, 0, ?, ?)",
-            (branch_id, name, created_at, created_at),
+            "INSERT INTO departments ("
+            " external_id, branch_id, name, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, 0, ?, ?)",
+            (external_id, branch_id, name, created_at, created_at),
         )
         return int(cur.lastrowid)
 
@@ -175,27 +185,33 @@ class DivisionRepository:
             clauses.append("is_archived = 0")
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = (
-            "SELECT id, branch_id, department_id, name, is_archived, created_at, updated_at "
-            f"FROM divisions{where} ORDER BY name"
+            "SELECT id, external_id, branch_id, department_id, name, is_archived,"
+            f" created_at, updated_at FROM divisions{where} ORDER BY name"
         )
         return [_division_row(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def get(self, division_id: int) -> DivisionRecord | None:
         row = self._conn.execute(
-            "SELECT id, branch_id, department_id, name, is_archived, created_at, updated_at "
-            "FROM divisions WHERE id = ?",
+            "SELECT id, external_id, branch_id, department_id, name, is_archived,"
+            " created_at, updated_at FROM divisions WHERE id = ?",
             (division_id,),
         ).fetchone()
         return _division_row(row) if row else None
 
     def create(
-        self, *, branch_id: int, department_id: int | None, name: str, created_at: str
+        self,
+        *,
+        external_id: str,
+        branch_id: int,
+        department_id: int | None,
+        name: str,
+        created_at: str,
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO divisions ("
-            " branch_id, department_id, name, is_archived, created_at, updated_at"
-            ") VALUES (?, ?, ?, 0, ?, ?)",
-            (branch_id, department_id, name, created_at, created_at),
+            " external_id, branch_id, department_id, name, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, 0, ?, ?)",
+            (external_id, branch_id, department_id, name, created_at, created_at),
         )
         return int(cur.lastrowid)
 
@@ -231,14 +247,14 @@ class PositionRepository:
             clauses.append("is_archived = 0")
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         sql = (
-            "SELECT id, branch_id, name, department_required, division_required,"
+            "SELECT id, external_id, branch_id, name, department_required, division_required,"
             f" is_archived, created_at, updated_at FROM positions{where} ORDER BY name"
         )
         return [_position_row(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def get(self, position_id: int) -> PositionRecord | None:
         row = self._conn.execute(
-            "SELECT id, branch_id, name, department_required, division_required,"
+            "SELECT id, external_id, branch_id, name, department_required, division_required,"
             " is_archived, created_at, updated_at FROM positions WHERE id = ?",
             (position_id,),
         ).fetchone()
@@ -247,6 +263,7 @@ class PositionRepository:
     def create(
         self,
         *,
+        external_id: str,
         branch_id: int,
         name: str,
         department_required: bool = False,
@@ -255,10 +272,11 @@ class PositionRepository:
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO positions ("
-            " branch_id, name, department_required, division_required, is_archived,"
-            " created_at, updated_at"
-            ") VALUES (?, ?, ?, ?, 0, ?, ?)",
+            " external_id, branch_id, name, department_required, division_required,"
+            " is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
             (
+                external_id,
                 branch_id,
                 name,
                 int(department_required),
@@ -347,17 +365,7 @@ class EmploymentTypeRepository:
 def _branch_row(row: tuple[object, ...]) -> BranchRecord:
     return BranchRecord(
         id=int(row[0]),
-        name=str(row[1]),
-        is_archived=bool(int(row[2])),
-        created_at=str(row[3]),
-        updated_at=str(row[4]),
-    )
-
-
-def _department_row(row: tuple[object, ...]) -> DepartmentRecord:
-    return DepartmentRecord(
-        id=int(row[0]),
-        branch_id=int(row[1]),
+        external_id=str(row[1]),
         name=str(row[2]),
         is_archived=bool(int(row[3])),
         created_at=str(row[4]),
@@ -365,11 +373,11 @@ def _department_row(row: tuple[object, ...]) -> DepartmentRecord:
     )
 
 
-def _division_row(row: tuple[object, ...]) -> DivisionRecord:
-    return DivisionRecord(
+def _department_row(row: tuple[object, ...]) -> DepartmentRecord:
+    return DepartmentRecord(
         id=int(row[0]),
-        branch_id=int(row[1]),
-        department_id=int(row[2]) if row[2] is not None else None,
+        external_id=str(row[1]),
+        branch_id=int(row[2]),
         name=str(row[3]),
         is_archived=bool(int(row[4])),
         created_at=str(row[5]),
@@ -377,16 +385,30 @@ def _division_row(row: tuple[object, ...]) -> DivisionRecord:
     )
 
 
-def _position_row(row: tuple[object, ...]) -> PositionRecord:
-    return PositionRecord(
+def _division_row(row: tuple[object, ...]) -> DivisionRecord:
+    return DivisionRecord(
         id=int(row[0]),
-        branch_id=int(row[1]),
-        name=str(row[2]),
-        department_required=bool(int(row[3])),
-        division_required=bool(int(row[4])),
+        external_id=str(row[1]),
+        branch_id=int(row[2]),
+        department_id=int(row[3]) if row[3] is not None else None,
+        name=str(row[4]),
         is_archived=bool(int(row[5])),
         created_at=str(row[6]),
         updated_at=str(row[7]),
+    )
+
+
+def _position_row(row: tuple[object, ...]) -> PositionRecord:
+    return PositionRecord(
+        id=int(row[0]),
+        external_id=str(row[1]),
+        branch_id=int(row[2]),
+        name=str(row[3]),
+        department_required=bool(int(row[4])),
+        division_required=bool(int(row[5])),
+        is_archived=bool(int(row[6])),
+        created_at=str(row[7]),
+        updated_at=str(row[8]),
     )
 
 

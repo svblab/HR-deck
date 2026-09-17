@@ -11,6 +11,7 @@ from data.db import Connection
 @dataclass(frozen=True)
 class EmployeeRecord:
     id: int
+    external_id: str
     full_name: str
     position_id: int
     branch_id: int
@@ -33,7 +34,7 @@ class EmployeeRepository:
         self._conn = conn
 
     _SELECT = (
-        "SELECT id, full_name, position_id, branch_id, department_id, division_id,"
+        "SELECT id, external_id, full_name, position_id, branch_id, department_id, division_id,"
         " employment_type_id, note, hire_date, contacts, home_address,"
         " social_insurance_number, needs_org_review, is_archived, created_at, updated_at"
         " FROM employees"
@@ -72,6 +73,7 @@ class EmployeeRepository:
     def create(
         self,
         *,
+        external_id: str,
         full_name: str,
         position_id: int,
         branch_id: int,
@@ -83,11 +85,12 @@ class EmployeeRepository:
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO employees ("
-            " full_name, position_id, branch_id, department_id, division_id,"
+            " external_id, full_name, position_id, branch_id, department_id, division_id,"
             " employment_type_id, note, hire_date, contacts, home_address,"
             " social_insurance_number, is_archived, created_at, updated_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)",
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)",
             (
+                external_id,
                 full_name,
                 position_id,
                 branch_id,
@@ -184,19 +187,20 @@ class EmployeeRepository:
 def _row(row: tuple[object, ...]) -> EmployeeRecord:
     return EmployeeRecord(
         id=int(row[0]),
-        full_name=str(row[1]),
-        position_id=int(row[2]),
-        branch_id=int(row[3]),
-        department_id=int(row[4]) if row[4] is not None else None,
-        division_id=int(row[5]) if row[5] is not None else None,
-        employment_type_id=int(row[6]),
-        note=str(row[7]) if row[7] is not None else None,
-        hire_date=str(row[8]) if row[8] is not None else None,
-        contacts=str(row[9]) if row[9] is not None else None,
-        home_address=str(row[10]) if row[10] is not None else None,
-        social_insurance_number=str(row[11]) if row[11] is not None else None,
-        needs_org_review=bool(int(row[12])),
-        is_archived=bool(int(row[13])),
-        created_at=str(row[14]),
-        updated_at=str(row[15]),
+        external_id=str(row[1]),
+        full_name=str(row[2]),
+        position_id=int(row[3]),
+        branch_id=int(row[4]),
+        department_id=int(row[5]) if row[5] is not None else None,
+        division_id=int(row[6]) if row[6] is not None else None,
+        employment_type_id=int(row[7]),
+        note=str(row[8]) if row[8] is not None else None,
+        hire_date=str(row[9]) if row[9] is not None else None,
+        contacts=str(row[10]) if row[10] is not None else None,
+        home_address=str(row[11]) if row[11] is not None else None,
+        social_insurance_number=str(row[12]) if row[12] is not None else None,
+        needs_org_review=bool(int(row[13])),
+        is_archived=bool(int(row[14])),
+        created_at=str(row[15]),
+        updated_at=str(row[16]),
     )

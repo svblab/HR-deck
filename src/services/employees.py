@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -72,10 +73,12 @@ class EmployeeService:
         self._require(Permission.MANAGE_EMPLOYEES)
         payload = self._validate_input(data)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="employee.create",
             entity_type="employee",
             mutate=lambda: self._employees.create(
+                external_id=external_id,
                 full_name=payload.full_name,
                 position_id=payload.position_id,
                 branch_id=payload.branch_id,

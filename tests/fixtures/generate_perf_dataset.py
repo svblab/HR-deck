@@ -6,41 +6,48 @@
 from __future__ import annotations
 
 import argparse
+import uuid
 from pathlib import Path
 
 _NOW = "2026-08-01T10:00:00Z"
 _DEFAULT_COUNT = 400
 
 
+def _new_external_id() -> str:
+    return str(uuid.uuid4())
+
+
 def seed_perf_org(conn) -> dict[str, int]:
     """Справочники оргструктуры для нагрузочной фикстуры."""
     conn.execute(
-        "INSERT INTO branches (id, name, is_archived, created_at, updated_at) "
-        "VALUES (1, ?, 0, ?, ?)",
-        ("Филиал Нагрузка (тест)", _NOW, _NOW),
+        "INSERT INTO branches ("
+        " id, external_id, name, is_archived, created_at, updated_at"
+        ") VALUES (1, ?, ?, 0, ?, ?)",
+        (_new_external_id(), "Филиал Нагрузка (тест)", _NOW, _NOW),
     )
     conn.execute(
-        "INSERT INTO departments (id, branch_id, name, is_archived, created_at, updated_at) "
-        "VALUES (1, 1, ?, 0, ?, ?)",
-        ("Департамент нагрузочного теста", _NOW, _NOW),
+        "INSERT INTO departments ("
+        " id, external_id, branch_id, name, is_archived, created_at, updated_at"
+        ") VALUES (1, ?, 1, ?, 0, ?, ?)",
+        (_new_external_id(), "Департамент нагрузочного теста", _NOW, _NOW),
     )
     conn.execute(
         "INSERT INTO divisions ("
-        " id, branch_id, department_id, name, is_archived, created_at, updated_at"
-        ") VALUES (1, 1, 1, ?, 0, ?, ?)",
-        ("Отдел синтетики", _NOW, _NOW),
+        " id, external_id, branch_id, department_id, name, is_archived, created_at, updated_at"
+        ") VALUES (1, ?, 1, 1, ?, 0, ?, ?)",
+        (_new_external_id(), "Отдел синтетики", _NOW, _NOW),
     )
     conn.execute(
         "INSERT INTO positions ("
-        " id, branch_id, name, is_archived, created_at, updated_at"
-        ") VALUES (1, 1, ?, 0, ?, ?)",
-        ("Инженер", _NOW, _NOW),
+        " id, external_id, branch_id, name, is_archived, created_at, updated_at"
+        ") VALUES (1, ?, 1, ?, 0, ?, ?)",
+        (_new_external_id(), "Инженер", _NOW, _NOW),
     )
     conn.execute(
         "INSERT INTO positions ("
-        " id, branch_id, name, is_archived, created_at, updated_at"
-        ") VALUES (2, 1, ?, 0, ?, ?)",
-        ("Аналитик", _NOW, _NOW),
+        " id, external_id, branch_id, name, is_archived, created_at, updated_at"
+        ") VALUES (2, ?, 1, ?, 0, ?, ?)",
+        (_new_external_id(), "Аналитик", _NOW, _NOW),
     )
     return {
         "branch_id": 1,
@@ -72,6 +79,7 @@ def seed_perf_dataset(
         rows.append(
             (
                 i,
+                _new_external_id(),
                 f"Тестов Тест Т{i:03d}",
                 1 if i % 2 else 2,
                 org["branch_id"],
@@ -90,10 +98,10 @@ def seed_perf_dataset(
         )
     conn.executemany(
         "INSERT INTO employees ("
-        " id, full_name, position_id, branch_id, department_id, division_id,"
+        " id, external_id, full_name, position_id, branch_id, department_id, division_id,"
         " employment_type_id, note, hire_date, contacts, home_address,"
         " social_insurance_number, is_archived, created_at, updated_at"
-        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
 
