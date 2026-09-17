@@ -87,6 +87,14 @@ class BranchRepository:
         ).fetchone()
         return _branch_row(row) if row else None
 
+    def get_by_external_id(self, external_id: str) -> BranchRecord | None:
+        row = self._conn.execute(
+            "SELECT id, external_id, name, is_archived, created_at, updated_at"
+            " FROM branches WHERE external_id = ?",
+            (external_id,),
+        ).fetchone()
+        return _branch_row(row) if row else None
+
     def create(self, *, external_id: str, name: str, created_at: str) -> int:
         cur = self._conn.execute(
             "INSERT INTO branches (external_id, name, is_archived, created_at, updated_at)"
@@ -140,6 +148,14 @@ class DepartmentRepository:
         ).fetchone()
         return _department_row(row) if row else None
 
+    def get_by_external_id(self, external_id: str) -> DepartmentRecord | None:
+        row = self._conn.execute(
+            "SELECT id, external_id, branch_id, name, is_archived, created_at, updated_at "
+            "FROM departments WHERE external_id = ?",
+            (external_id,),
+        ).fetchone()
+        return _department_row(row) if row else None
+
     def create(self, *, external_id: str, branch_id: int, name: str, created_at: str) -> int:
         cur = self._conn.execute(
             "INSERT INTO departments ("
@@ -159,6 +175,12 @@ class DepartmentRepository:
         self._conn.execute(
             "UPDATE departments SET is_archived = ?, updated_at = ? WHERE id = ?",
             (1 if archived else 0, updated_at, department_id),
+        )
+
+    def set_branch(self, department_id: int, *, branch_id: int, updated_at: str) -> None:
+        self._conn.execute(
+            "UPDATE departments SET branch_id = ?, updated_at = ? WHERE id = ?",
+            (branch_id, updated_at, department_id),
         )
 
 
@@ -198,6 +220,14 @@ class DivisionRepository:
         ).fetchone()
         return _division_row(row) if row else None
 
+    def get_by_external_id(self, external_id: str) -> DivisionRecord | None:
+        row = self._conn.execute(
+            "SELECT id, external_id, branch_id, department_id, name, is_archived,"
+            " created_at, updated_at FROM divisions WHERE external_id = ?",
+            (external_id,),
+        ).fetchone()
+        return _division_row(row) if row else None
+
     def create(
         self,
         *,
@@ -225,6 +255,20 @@ class DivisionRepository:
         self._conn.execute(
             "UPDATE divisions SET is_archived = ?, updated_at = ? WHERE id = ?",
             (1 if archived else 0, updated_at, division_id),
+        )
+
+    def set_parentage(
+        self,
+        division_id: int,
+        *,
+        branch_id: int,
+        department_id: int | None,
+        updated_at: str,
+    ) -> None:
+        self._conn.execute(
+            "UPDATE divisions SET branch_id = ?, department_id = ?, updated_at = ?"
+            " WHERE id = ?",
+            (branch_id, department_id, updated_at, division_id),
         )
 
 
@@ -257,6 +301,14 @@ class PositionRepository:
             "SELECT id, external_id, branch_id, name, department_required, division_required,"
             " is_archived, created_at, updated_at FROM positions WHERE id = ?",
             (position_id,),
+        ).fetchone()
+        return _position_row(row) if row else None
+
+    def get_by_external_id(self, external_id: str) -> PositionRecord | None:
+        row = self._conn.execute(
+            "SELECT id, external_id, branch_id, name, department_required, division_required,"
+            " is_archived, created_at, updated_at FROM positions WHERE external_id = ?",
+            (external_id,),
         ).fetchone()
         return _position_row(row) if row else None
 
@@ -311,6 +363,12 @@ class PositionRepository:
         self._conn.execute(
             "UPDATE positions SET is_archived = ?, updated_at = ? WHERE id = ?",
             (1 if archived else 0, updated_at, position_id),
+        )
+
+    def set_branch(self, position_id: int, *, branch_id: int, updated_at: str) -> None:
+        self._conn.execute(
+            "UPDATE positions SET branch_id = ?, updated_at = ? WHERE id = ?",
+            (branch_id, updated_at, position_id),
         )
 
 

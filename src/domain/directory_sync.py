@@ -1,4 +1,4 @@
-"""Directory sync package content model (ADR-0010 Part 3)."""
+"""Directory sync package content model (ADR-0010 Part 3/4)."""
 
 from __future__ import annotations
 
@@ -21,3 +21,14 @@ class DirectorySyncPackage:
 
     def is_empty(self) -> bool:
         return not self.tables
+
+
+class DirectorySyncConflictError(Exception):
+    """Package would leave active employees inconsistent — nothing applied."""
+
+    def __init__(self, affected_employees: list[tuple[int, str]]) -> None:
+        self.affected_employees = affected_employees
+        super().__init__(
+            f"{len(affected_employees)} employee(s) would become "
+            "invalid; package rejected"
+        )
