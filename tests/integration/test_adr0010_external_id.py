@@ -115,8 +115,8 @@ def test_adr0010_migration_backfills_external_id_on_nonempty_db(tmp_path: Path) 
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [14]
-    assert current_version(conn2) == 14
+    assert applied == [14, 15]
+    assert current_version(conn2) == 15
 
     all_ids: list[str] = []
     for table in _EXTERNAL_ID_TABLES:
