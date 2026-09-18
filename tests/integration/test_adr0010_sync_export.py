@@ -180,8 +180,7 @@ def test_adr0010_record_export_only_bumps_watermark_for_tables_actually_exported
     rows = {
         str(r[0]): str(r[1])
         for r in conn.execute(
-            "SELECT table_name, last_exported_at FROM sync_watermarks"
-            " WHERE direction_id = ?",
+            "SELECT table_name, last_exported_at FROM sync_watermarks WHERE direction_id = ?",
             (direction_id,),
         ).fetchall()
     }
@@ -196,6 +195,8 @@ def test_adr0010_package_rows_are_json_serializable(tmp_path: Path) -> None:
     direction_id = _direction_id(conn)
     directories, employees, sync = _services(conn, session, clock=_T0)
     branch_id = directories.create_branch("Филиал")
+    dept_id = directories.create_department(branch_id, "Департамент")
+    directories.create_division(branch_id, dept_id, "Отдел")
     pos_id = directories.create_position(branch_id, "Инженер")
     employees.create_employee(
         EmployeeCreateInput(
@@ -211,4 +212,18 @@ def test_adr0010_package_rows_are_json_serializable(tmp_path: Path) -> None:
     payload = json.dumps(pkg.tables, ensure_ascii=False)
     assert isinstance(payload, str)
     assert "Филиал" in payload
+
+    # Child rows carry parent external_id strings, never sender-local integer FKs.
+    branch_ext = pkg.tables["branches"][0]["external_id"]
+    dept_row = pkg.tables["departments"][0]
+    assert dept_row["branch_external_id"] == branch_ext
+    assert "branch_id" not in dept_row
+    div_row = pkg.tables["divisions"][0]
+    assert div_row["branch_external_id"] == branch_ext
+    assert div_row["department_external_id"] == dept_row["external_id"]
+    assert "branch_id" not in div_row
+    assert "department_id" not in div_row
+    pos_row = pkg.tables["positions"][0]
+    assert pos_row["branch_external_id"] == branch_ext
+    assert "branch_id" not in pos_row
     conn.close()

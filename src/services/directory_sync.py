@@ -12,8 +12,11 @@ from typing import Any
 from data.db import Connection
 from data.directories import (
     BranchRepository,
+    DepartmentRecord,
     DepartmentRepository,
+    DivisionRecord,
     DivisionRepository,
+    PositionRecord,
     PositionRepository,
 )
 from data.employees import EmployeeRepository
@@ -52,7 +55,14 @@ class DirectorySyncService:
             # Whole-table granularity: if any row changed since the watermark,
             # include *all* current rows for that table (not a row-level diff).
             if any(row.updated_at > watermark for row in rows):
-                tables[table_name] = [dataclasses.asdict(row) for row in rows]
+                if table_name == "departments":
+                    tables[table_name] = [self._department_export_row(row) for row in rows]
+                elif table_name == "divisions":
+                    tables[table_name] = [self._division_export_row(row) for row in rows]
+                elif table_name == "positions":
+                    tables[table_name] = [self._position_export_row(row) for row in rows]
+                else:
+                    tables[table_name] = [dataclasses.asdict(row) for row in rows]
 
         # active_only=False deliberately: archived rows must be in every dump so
         # the receiving side (Part 4 reconciliation) sees complete current state,
@@ -64,6 +74,58 @@ class DirectorySyncService:
         include_if_changed("employees", self._employees.list(active_only=False))
         assert set(tables).issubset(SYNCED_TABLES)
         return DirectorySyncPackage(tables=tables)
+
+    def _department_export_row(self, row: DepartmentRecord) -> dict[str, object]:
+        branch = self._branches.get(row.branch_id)
+        assert branch is not None  # every department has a valid local branch
+        return {
+            # sender-local id; must never be used to resolve anything on the receiver
+            "id": row.id,
+            "external_id": row.external_id,
+            "branch_external_id": branch.external_id,
+            "name": row.name,
+            "is_archived": row.is_archived,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    def _division_export_row(self, row: DivisionRecord) -> dict[str, object]:
+        branch = self._branches.get(row.branch_id)
+        assert branch is not None  # every division has a valid local branch
+        department_external_id: str | None
+        if row.department_id is None:
+            department_external_id = None
+        else:
+            department = self._departments.get(row.department_id)
+            assert department is not None
+            department_external_id = department.external_id
+        return {
+            # sender-local id; must never be used to resolve anything on the receiver
+            "id": row.id,
+            "external_id": row.external_id,
+            "branch_external_id": branch.external_id,
+            "department_external_id": department_external_id,
+            "name": row.name,
+            "is_archived": row.is_archived,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    def _position_export_row(self, row: PositionRecord) -> dict[str, object]:
+        branch = self._branches.get(row.branch_id)
+        assert branch is not None  # every position has a valid local branch
+        return {
+            # sender-local id; must never be used to resolve anything on the receiver
+            "id": row.id,
+            "external_id": row.external_id,
+            "branch_external_id": branch.external_id,
+            "name": row.name,
+            "department_required": row.department_required,
+            "division_required": row.division_required,
+            "is_archived": row.is_archived,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
 
     def record_export(
         self,
@@ -93,8 +155,7 @@ class DirectorySyncService:
 
     def _load_watermarks(self, direction_id: int) -> dict[str, str]:
         rows = self._conn.execute(
-            "SELECT table_name, last_exported_at FROM sync_watermarks"
-            " WHERE direction_id = ?",
+            "SELECT table_name, last_exported_at FROM sync_watermarks WHERE direction_id = ?",
             (direction_id,),
         ).fetchall()
         return {str(r[0]): str(r[1]) for r in rows}

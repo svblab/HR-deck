@@ -72,14 +72,14 @@ def _dept_row(
     *,
     package_id: int,
     external_id: str,
-    branch_package_id: int,
+    branch_external_id: str,
     name: str,
     is_archived: bool = False,
 ) -> dict[str, object]:
     return {
         "id": package_id,
         "external_id": external_id,
-        "branch_id": branch_package_id,
+        "branch_external_id": branch_external_id,
         "name": name,
         "is_archived": is_archived,
         "created_at": _T0,
@@ -91,16 +91,16 @@ def _div_row(
     *,
     package_id: int,
     external_id: str,
-    branch_package_id: int,
-    department_package_id: int | None,
+    branch_external_id: str,
+    department_external_id: str | None,
     name: str,
     is_archived: bool = False,
 ) -> dict[str, object]:
     return {
         "id": package_id,
         "external_id": external_id,
-        "branch_id": branch_package_id,
-        "department_id": department_package_id,
+        "branch_external_id": branch_external_id,
+        "department_external_id": department_external_id,
         "name": name,
         "is_archived": is_archived,
         "created_at": _T0,
@@ -112,7 +112,7 @@ def _pos_row(
     *,
     package_id: int,
     external_id: str,
-    branch_package_id: int,
+    branch_external_id: str,
     name: str,
     department_required: bool = False,
     division_required: bool = False,
@@ -121,7 +121,7 @@ def _pos_row(
     return {
         "id": package_id,
         "external_id": external_id,
-        "branch_id": branch_package_id,
+        "branch_external_id": branch_external_id,
         "name": name,
         "department_required": department_required,
         "division_required": division_required,
@@ -138,9 +138,7 @@ def test_adr0010_apply_creates_new_branch_from_package(tmp_path: Path) -> None:
     ext = str(uuid.uuid4())
     package = DirectorySyncPackage(
         tables={
-            "branches": [
-                _branch_row(package_id=9001, external_id=ext, name="Филиал Удалённый")
-            ]
+            "branches": [_branch_row(package_id=9001, external_id=ext, name="Филиал Удалённый")]
         }
     )
     importer.apply_package(package)
@@ -226,7 +224,7 @@ def test_adr0010_apply_processes_parents_before_children(tmp_path: Path) -> None
                 _dept_row(
                     package_id=20,
                     external_id=dept_ext,
-                    branch_package_id=10,
+                    branch_external_id=branch.external_id,
                     name="Новый департамент",
                 )
             ],
@@ -234,8 +232,8 @@ def test_adr0010_apply_processes_parents_before_children(tmp_path: Path) -> None
                 _div_row(
                     package_id=30,
                     external_id=div_ext,
-                    branch_package_id=10,
-                    department_package_id=20,
+                    branch_external_id=branch.external_id,
+                    department_external_id=dept_ext,
                     name="Новый отдел",
                 )
             ],
@@ -286,7 +284,7 @@ def test_adr0010_apply_rejects_whole_package_when_position_policy_change_breaks_
                 _pos_row(
                     package_id=pos_id,
                     external_id=pos.external_id,
-                    branch_package_id=branch_id,
+                    branch_external_id=branch.external_id,
                     name=pos.name,
                     department_required=True,
                 )
@@ -344,13 +342,13 @@ def test_adr0010_apply_rejects_when_division_reparenting_breaks_employee(
                 _dept_row(
                     package_id=10,
                     external_id=da.external_id,
-                    branch_package_id=1,
+                    branch_external_id=branch.external_id,
                     name=da.name,
                 ),
                 _dept_row(
                     package_id=11,
                     external_id=db.external_id,
-                    branch_package_id=1,
+                    branch_external_id=branch.external_id,
                     name=db.name,
                 ),
             ],
@@ -358,8 +356,8 @@ def test_adr0010_apply_rejects_when_division_reparenting_breaks_employee(
                 _div_row(
                     package_id=20,
                     external_id=div.external_id,
-                    branch_package_id=1,
-                    department_package_id=11,  # reparent to B
+                    branch_external_id=branch.external_id,
+                    department_external_id=db.external_id,  # reparent to B
                     name=div.name,
                 )
             ],
@@ -409,7 +407,7 @@ def test_adr0010_apply_ignores_archived_employees_when_checking_for_breakage(
                 _pos_row(
                     package_id=pos_id,
                     external_id=pos.external_id,
-                    branch_package_id=branch_id,
+                    branch_external_id=branch.external_id,
                     name=pos.name,
                     department_required=True,
                 )
@@ -458,7 +456,7 @@ def test_adr0010_apply_is_all_or_nothing_across_multiple_tables(
                 _pos_row(
                     package_id=pos_id,
                     external_id=pos.external_id,
-                    branch_package_id=branch_id,
+                    branch_external_id=branch.external_id,
                     name=pos.name,
                     department_required=True,
                 )
@@ -472,4 +470,74 @@ def test_adr0010_apply_is_all_or_nothing_across_multiple_tables(
     still_pos = PositionRepository(conn).get(pos_id)
     assert still_branch is not None and still_branch.name == "Старое имя филиала"
     assert still_pos is not None and still_pos.department_required is False
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_apply_resolves_parent_by_external_id_when_parent_table_omitted_from_package(
+    tmp_path: Path,
+) -> None:
+    """Sender local ids must never be used when the parent table is omitted.
+
+    Receiver already has: local id 1 = unrelated own branch, local id 2 =
+    previously-synced sender branch (matched by external_id). Package contains
+    only a new department whose branch_external_id points at the second branch.
+    """
+    conn, session = _open(tmp_path)
+    directories, _employees, importer = _services(conn, session)
+    own_id = directories.create_branch("Receiver's own unrelated branch")
+    synced_id = directories.create_branch("Previously synced sender branch")
+    own = BranchRepository(conn).get(own_id)
+    synced = BranchRepository(conn).get(synced_id)
+    assert own is not None and synced is not None
+    assert own.id == 1
+    assert synced.id == 2
+    assert own.external_id != synced.external_id
+
+    dept_ext = str(uuid.uuid4())
+    package = DirectorySyncPackage(
+        tables={
+            "departments": [
+                _dept_row(
+                    package_id=1,  # sender-local; must be ignored for FK resolution
+                    external_id=dept_ext,
+                    branch_external_id=synced.external_id,
+                    name="New department from sender",
+                )
+            ]
+        }
+    )
+    assert "branches" not in package.tables
+    importer.apply_package(package)
+
+    dept = DepartmentRepository(conn).get_by_external_id(dept_ext)
+    assert dept is not None
+    assert dept.branch_id == synced.id
+    assert dept.branch_id != own.id
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_apply_rejects_package_when_referenced_parent_is_missing_locally(
+    tmp_path: Path,
+) -> None:
+    conn, session = _open(tmp_path)
+    _directories, _employees, importer = _services(conn, session)
+    before = _dump_directories(conn)
+    missing_branch_ext = str(uuid.uuid4())
+    package = DirectorySyncPackage(
+        tables={
+            "departments": [
+                _dept_row(
+                    package_id=1,
+                    external_id=str(uuid.uuid4()),
+                    branch_external_id=missing_branch_ext,
+                    name="Orphan department",
+                )
+            ]
+        }
+    )
+    with pytest.raises(ValueError, match="cannot resolve branch external_id"):
+        importer.apply_package(package)
+    assert _dump_directories(conn) == before
     conn.close()

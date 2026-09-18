@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
 
 from data.db import Connection
 from data.directories import (
@@ -87,24 +86,10 @@ class DirectorySyncImportService:
         self._require_transport_admin()
         self._conn.execute(f"SAVEPOINT {_SAVEPOINT}")
         try:
-            branch_map = self._reconcile_branches(package.tables.get("branches", []))
-            dept_map = self._reconcile_departments(
-                package.tables.get("departments", []),
-                branch_map,
-                package.tables.get("branches", []),
-            )
-            self._reconcile_divisions(
-                package.tables.get("divisions", []),
-                branch_map,
-                dept_map,
-                package.tables.get("branches", []),
-                package.tables.get("departments", []),
-            )
-            self._reconcile_positions(
-                package.tables.get("positions", []),
-                branch_map,
-                package.tables.get("branches", []),
-            )
+            self._reconcile_branches(package.tables.get("branches", []))
+            self._reconcile_departments(package.tables.get("departments", []))
+            self._reconcile_divisions(package.tables.get("divisions", []))
+            self._reconcile_positions(package.tables.get("positions", []))
 
             broken = self._find_broken_active_employees()
             if broken:
@@ -129,57 +114,53 @@ class DirectorySyncImportService:
         rows = self._conn.execute(_BROKEN_EMPLOYEES_SQL).fetchall()
         return [(int(r[0]), str(r[1])) for r in rows]
 
-    def _reconcile_branches(
-        self, rows: list[dict[str, object]]
-    ) -> dict[int, int]:
+    def _resolve_branch(self, external_id: str) -> int:
+        record = self._branches.get_by_external_id(external_id)
+        if record is None:
+            raise ValueError(
+                f"cannot resolve branch external_id {external_id}: "
+                "not present locally (package is missing a required "
+                "branch, or was applied out of order)"
+            )
+        return record.id
+
+    def _resolve_department(self, external_id: str | None) -> int | None:
+        if external_id is None:
+            return None
+        record = self._departments.get_by_external_id(external_id)
+        if record is None:
+            raise ValueError(
+                f"cannot resolve department external_id {external_id}: "
+                "not present locally (package is missing a required "
+                "department, or was applied out of order)"
+            )
+        return record.id
+
+    def _reconcile_branches(self, rows: list[dict[str, object]]) -> None:
         now = self._clock()
-        id_map: dict[int, int] = {}
         for row in rows:
-            package_id = int(row["id"])
             external_id = str(row["external_id"])
             name = str(row["name"])
             is_archived = bool(row["is_archived"])
             local = self._branches.get_by_external_id(external_id)
             if local is None:
-                local_id = self._branches.create(
-                    external_id=external_id, name=name, created_at=now
-                )
+                local_id = self._branches.create(external_id=external_id, name=name, created_at=now)
                 if is_archived:
-                    self._branches.set_archived(
-                        local_id, archived=True, updated_at=now
-                    )
+                    self._branches.set_archived(local_id, archived=True, updated_at=now)
             else:
                 local_id = local.id
                 if local.name != name:
                     self._branches.rename(local_id, name=name, updated_at=now)
                 if local.is_archived != is_archived:
-                    self._branches.set_archived(
-                        local_id, archived=is_archived, updated_at=now
-                    )
-            id_map[package_id] = local_id
-        return id_map
+                    self._branches.set_archived(local_id, archived=is_archived, updated_at=now)
 
-    def _reconcile_departments(
-        self,
-        rows: list[dict[str, object]],
-        branch_map: dict[int, int],
-        package_branches: list[dict[str, object]],
-    ) -> dict[int, int]:
+    def _reconcile_departments(self, rows: list[dict[str, object]]) -> None:
         now = self._clock()
-        id_map: dict[int, int] = {}
         for row in rows:
-            package_id = int(row["id"])
             external_id = str(row["external_id"])
             name = str(row["name"])
             is_archived = bool(row["is_archived"])
-            local_branch_id = self._resolve_fk(
-                int(row["branch_id"]),
-                branch_map,
-                package_branches,
-                self._branches.get_by_external_id,
-                self._branches.get,
-                "branch",
-            )
+            local_branch_id = self._resolve_branch(str(row["branch_external_id"]))
             local = self._departments.get_by_external_id(external_id)
             if local is None:
                 local_id = self._departments.create(
@@ -189,9 +170,7 @@ class DirectorySyncImportService:
                     created_at=now,
                 )
                 if is_archived:
-                    self._departments.set_archived(
-                        local_id, archived=True, updated_at=now
-                    )
+                    self._departments.set_archived(local_id, archived=True, updated_at=now)
             else:
                 local_id = local.id
                 if local.name != name:
@@ -201,48 +180,17 @@ class DirectorySyncImportService:
                         local_id, branch_id=local_branch_id, updated_at=now
                     )
                 if local.is_archived != is_archived:
-                    self._departments.set_archived(
-                        local_id, archived=is_archived, updated_at=now
-                    )
-            id_map[package_id] = local_id
-        return id_map
+                    self._departments.set_archived(local_id, archived=is_archived, updated_at=now)
 
-    def _reconcile_divisions(
-        self,
-        rows: list[dict[str, object]],
-        branch_map: dict[int, int],
-        dept_map: dict[int, int],
-        package_branches: list[dict[str, object]],
-        package_departments: list[dict[str, object]],
-    ) -> dict[int, int]:
+    def _reconcile_divisions(self, rows: list[dict[str, object]]) -> None:
         now = self._clock()
-        id_map: dict[int, int] = {}
         for row in rows:
-            package_id = int(row["id"])
             external_id = str(row["external_id"])
             name = str(row["name"])
             is_archived = bool(row["is_archived"])
-            local_branch_id = self._resolve_fk(
-                int(row["branch_id"]),
-                branch_map,
-                package_branches,
-                self._branches.get_by_external_id,
-                self._branches.get,
-                "branch",
-            )
-            pkg_dept = row["department_id"]
-            local_dept_id: int | None
-            if pkg_dept is None:
-                local_dept_id = None
-            else:
-                local_dept_id = self._resolve_fk(
-                    int(pkg_dept),
-                    dept_map,
-                    package_departments,
-                    self._departments.get_by_external_id,
-                    self._departments.get,
-                    "department",
-                )
+            local_branch_id = self._resolve_branch(str(row["branch_external_id"]))
+            pkg_dept = row["department_external_id"]
+            local_dept_id = self._resolve_department(None if pkg_dept is None else str(pkg_dept))
             local = self._divisions.get_by_external_id(external_id)
             if local is None:
                 local_id = self._divisions.create(
@@ -253,17 +201,12 @@ class DirectorySyncImportService:
                     created_at=now,
                 )
                 if is_archived:
-                    self._divisions.set_archived(
-                        local_id, archived=True, updated_at=now
-                    )
+                    self._divisions.set_archived(local_id, archived=True, updated_at=now)
             else:
                 local_id = local.id
                 if local.name != name:
                     self._divisions.rename(local_id, name=name, updated_at=now)
-                if (
-                    local.branch_id != local_branch_id
-                    or local.department_id != local_dept_id
-                ):
+                if local.branch_id != local_branch_id or local.department_id != local_dept_id:
                     self._divisions.set_parentage(
                         local_id,
                         branch_id=local_branch_id,
@@ -271,35 +214,17 @@ class DirectorySyncImportService:
                         updated_at=now,
                     )
                 if local.is_archived != is_archived:
-                    self._divisions.set_archived(
-                        local_id, archived=is_archived, updated_at=now
-                    )
-            id_map[package_id] = local_id
-        return id_map
+                    self._divisions.set_archived(local_id, archived=is_archived, updated_at=now)
 
-    def _reconcile_positions(
-        self,
-        rows: list[dict[str, object]],
-        branch_map: dict[int, int],
-        package_branches: list[dict[str, object]],
-    ) -> dict[int, int]:
+    def _reconcile_positions(self, rows: list[dict[str, object]]) -> None:
         now = self._clock()
-        id_map: dict[int, int] = {}
         for row in rows:
-            package_id = int(row["id"])
             external_id = str(row["external_id"])
             name = str(row["name"])
             is_archived = bool(row["is_archived"])
             dept_req = bool(row["department_required"])
             div_req = bool(row["division_required"])
-            local_branch_id = self._resolve_fk(
-                int(row["branch_id"]),
-                branch_map,
-                package_branches,
-                self._branches.get_by_external_id,
-                self._branches.get,
-                "branch",
-            )
+            local_branch_id = self._resolve_branch(str(row["branch_external_id"]))
             local = self._positions.get_by_external_id(external_id)
             if local is None:
                 local_id = self._positions.create(
@@ -311,21 +236,14 @@ class DirectorySyncImportService:
                     created_at=now,
                 )
                 if is_archived:
-                    self._positions.set_archived(
-                        local_id, archived=True, updated_at=now
-                    )
+                    self._positions.set_archived(local_id, archived=True, updated_at=now)
             else:
                 local_id = local.id
                 if local.name != name:
                     self._positions.rename(local_id, name=name, updated_at=now)
                 if local.branch_id != local_branch_id:
-                    self._positions.set_branch(
-                        local_id, branch_id=local_branch_id, updated_at=now
-                    )
-                if (
-                    local.department_required != dept_req
-                    or local.division_required != div_req
-                ):
+                    self._positions.set_branch(local_id, branch_id=local_branch_id, updated_at=now)
+                if local.department_required != dept_req or local.division_required != div_req:
                     self._positions.set_org_requirements(
                         local_id,
                         department_required=dept_req,
@@ -333,33 +251,4 @@ class DirectorySyncImportService:
                         updated_at=now,
                     )
                 if local.is_archived != is_archived:
-                    self._positions.set_archived(
-                        local_id, archived=is_archived, updated_at=now
-                    )
-            id_map[package_id] = local_id
-        return id_map
-
-    def _resolve_fk(
-        self,
-        package_fk: int,
-        id_map: dict[int, int],
-        package_parent_rows: list[dict[str, object]],
-        get_by_external_id: Callable[[str], Any],
-        get_by_id: Callable[[int], Any],
-        label: str,
-    ) -> int:
-        if package_fk in id_map:
-            return id_map[package_fk]
-        for parent in package_parent_rows:
-            if int(parent["id"]) == package_fk:
-                record = get_by_external_id(str(parent["external_id"]))
-                if record is None:
-                    raise ValueError(
-                        f"cannot resolve {label} package id {package_fk}: "
-                        "external_id not present locally"
-                    )
-                return int(record.id)
-        record = get_by_id(package_fk)
-        if record is not None:
-            return int(record.id)
-        raise ValueError(f"cannot resolve {label} package id {package_fk}")
+                    self._positions.set_archived(local_id, archived=is_archived, updated_at=now)
