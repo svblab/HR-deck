@@ -115,6 +115,9 @@ class BoardWidget(QScrollArea):
                 break
             widget = item.widget()
             if widget is not None:
+                # takeAt() снимает виджет с layout, но не скрывает его — без
+                # отвязки от родителя старые колонки остаются на экране.
+                widget.setParent(None)
                 widget.deleteLater()
         for column in columns:
             self._layout.insertWidget(self._layout.count() - 1, self._build_column(column))
