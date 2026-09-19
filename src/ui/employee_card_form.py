@@ -296,10 +296,25 @@ class EmployeeCardDialog(QDialog):
         self._is_archived = card.is_archived
         self._loading = True
         self._name.setText(card.full_name)
-        self._fill_static_combos()
-        self._include_archived_directory_values(card)
-        _select(self._position, card.position_id)
+        _fill_combo(self._branch, self._directories.list_branches(active_only=True), "Филиал")
+        _fill_combo(
+            self._employment,
+            self._directories.list_employment_types(active_only=True),
+            "Тип занятости",
+        )
+        _include_if_missing(
+            self._branch,
+            self._directories.list_branches(active_only=False),
+            card.branch_id,
+        )
         _select(self._branch, card.branch_id)
+        self._fill_positions()
+        _include_if_missing(
+            self._position,
+            self._directories.list_positions(active_only=False),
+            card.position_id,
+        )
+        _select(self._position, card.position_id)
         self._fill_departments()
         _include_if_missing(
             self._department,
@@ -348,18 +363,6 @@ class EmployeeCardDialog(QDialog):
             self._org_review.hide()
         self._refresh_similar()
         self._apply_archived_state()
-
-    def _include_archived_directory_values(self, card) -> None:
-        _include_if_missing(
-            self._position,
-            self._directories.list_positions(active_only=False),
-            card.position_id,
-        )
-        _include_if_missing(
-            self._branch,
-            self._directories.list_branches(active_only=False),
-            card.branch_id,
-        )
 
     def _toggle_archive(self) -> None:
         if self._employee_id is None:
