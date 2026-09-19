@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from time import monotonic
+from unittest.mock import patch
 
 import pytest
 from PySide6.QtCore import QTimer
@@ -186,7 +187,36 @@ def test_switch_user_then_login_as_different_role(qtbot, tmp_path: Path) -> None
 
 
 @pytest.mark.acceptance
-def test_switch_user_cancel_login_exits_application(qtbot, tmp_path: Path) -> None:
+def test_switch_user_cancel_preserves_session_and_roster(qtbot, tmp_path: Path) -> None:
+    window, _auth = _open_window(qtbot, tmp_path, login="admin", password="AdminPass-1")
+    old_conn = window._conn
+    old_session = window._session
+    roster = window.findChild(RosterPanel)
+    assert roster is not None
+    assert old_conn is not None and old_session is not None
+
+    def _cancel() -> None:
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, LoginDialog) and widget.isVisible():
+                widget.reject()
+                return
+        raise AssertionError("LoginDialog not visible")
+
+    QTimer.singleShot(0, _cancel)
+    window._switch_user()
+
+    assert window.isVisible()
+    assert window._conn is old_conn
+    assert window._session is old_session
+    assert window._session.login == "admin"
+    assert window.findChild(RosterPanel) is roster
+    assert _switch_btn(window).isEnabled()
+    window.close()
+    window._conn.close()
+
+
+@pytest.mark.acceptance
+def test_switch_user_cancel_does_not_call_logout(qtbot, tmp_path: Path) -> None:
     window, _auth = _open_window(qtbot, tmp_path, login="admin", password="AdminPass-1")
 
     def _cancel() -> None:
@@ -194,11 +224,42 @@ def test_switch_user_cancel_login_exits_application(qtbot, tmp_path: Path) -> No
             if isinstance(widget, LoginDialog) and widget.isVisible():
                 widget.reject()
                 return
+        raise AssertionError("LoginDialog not visible")
 
-    QTimer.singleShot(0, _cancel)
-    window._switch_user()
+    with patch.object(window._auth, "logout") as logout_mock:
+        QTimer.singleShot(0, _cancel)
+        assert window.switch_user() is False
+        logout_mock.assert_not_called()
 
-    assert window.isHidden() or not window.isVisible()
+    window.close()
+    if window._conn is not None:
+        window._conn.close()
+
+
+@pytest.mark.acceptance
+def test_login_dialog_second_connection_while_main_window_connection_open(
+    qtbot, tmp_path: Path
+) -> None:
+    """LoginDialog.login() opens its own SQLCipher connection; must not lock the DB."""
+    window, auth = _open_window(qtbot, tmp_path, login="admin", password="AdminPass-1")
+    assert window._conn is not None
+    db = window._db_path
+    assert db is not None
+
+    login = LoginDialog(db, window)
+    qtbot.addWidget(login)
+    login._auth = auth
+    login._login.setText("hr1")
+    login._password.setText("HrPass-1")
+    login._submit()
+
+    assert login.conn is not None
+    assert login.session is not None
+    assert login.session.login == "hr1"
+    assert window._conn is not None
+    login.conn.close()
+    window.close()
+    window._conn.close()
 
 
 @pytest.mark.acceptance

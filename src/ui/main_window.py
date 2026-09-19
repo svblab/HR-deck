@@ -331,23 +331,26 @@ class MainWindow(QMainWindow):
         self._update_session_controls()
 
     def switch_user(self) -> bool:
-        """Выйти из текущей сессии и показать вход. False — если вход отменён."""
+        """Показать вход для другого пользователя. False — если вход отменён."""
         if self._db_path is None:
             return False
-        self._teardown_session()
+        dismiss_open_modal_dialogs(self, exclude=LoginDialog)
+        self._show_lock_overlay()
         login = LoginDialog(self._db_path, self)
         login.raise_()
         login.activateWindow()
-        if login.exec() != LoginDialog.DialogCode.Accepted:
+        accepted = login.exec() == LoginDialog.DialogCode.Accepted
+        self._hide_lock_overlay()
+        if not accepted:
             return False
         if login.conn is None or login.session is None:
             return False
+        self._teardown_session()
         self._bind_session(login.conn, login.session)
         return True
 
     def _switch_user(self) -> None:
-        if not self.switch_user():
-            self.close()
+        self.switch_user()
 
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget(objectName="toolbar")

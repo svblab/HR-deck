@@ -141,6 +141,12 @@ class LoginDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
+        ok_btn = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        cancel_btn = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        if ok_btn is not None:
+            ok_btn.setText("Войти")
+        if cancel_btn is not None:
+            cancel_btn.setText("Отмена")
         buttons.accepted.connect(self._submit)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
