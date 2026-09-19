@@ -379,19 +379,19 @@ def test_employee_card_branch_change_clears_position(qtbot, tmp_path: Path) -> N
 
 
 @pytest.mark.acceptance
-def test_employee_card_existing_employee_position_loads_correctly_before_branch_select(
+def test_employee_card_existing_employee_lists_all_branch_positions(
     qtbot, tmp_path: Path
 ) -> None:
-    """Load still shows saved position even though `_fill_positions` runs before branch select."""
     from domain.employee import EmployeeCreateInput
 
     conn, session, employees, directories, _ids, _db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал Восток")
-    pos_id = directories.create_position(branch_id, "Архивариус")
+    pos_a = directories.create_position(branch_id, "Архивариус")
+    directories.create_position(branch_id, "Секретарь")
     emp_id = employees.create_employee(
         EmployeeCreateInput(
             full_name="Сидоров Сидор Сидорович",
-            position_id=pos_id,
+            position_id=pos_a,
             branch_id=branch_id,
             department_id=None,
             division_id=None,
@@ -404,7 +404,10 @@ def test_employee_card_existing_employee_position_loads_correctly_before_branch_
     )
     qtbot.addWidget(dialog)
     assert dialog._branch.currentData() == branch_id
-    assert dialog._position.currentData() == pos_id
-    assert dialog._position.currentText() == "Архивариус"
+    assert dialog._position.currentData() == pos_a
+    position_names = {
+        dialog._position.itemText(i) for i in range(dialog._position.count())
+    }
+    assert position_names == {"Должность", "Архивариус", "Секретарь"}
     conn.close()
 
