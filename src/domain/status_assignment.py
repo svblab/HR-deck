@@ -89,8 +89,16 @@ def _find_auto_close(
     new_start: str,
 ) -> StatusCorrectionProposal | None:
     for row in effective:
-        if row.end_date is not None or row.start_date >= new_start:
+        if row.end_date is not None or row.start_date > new_start:
             continue
+        if row.start_date == new_start:
+            return StatusCorrectionProposal(
+                status_history_id=row.id,
+                field_name="end_date",
+                old_value=None,
+                new_value=new_start,
+                reason="replace_same_day",
+            )
         close_at = day_before(new_start)
         if close_at < row.start_date:
             continue
@@ -183,12 +191,23 @@ def _validate_final_timeline(
     plan: StatusAssignmentPlan,
 ) -> None:
     effective = build_effective_timeline(existing, list(plan.corrections))
+    replaced_same_day = {
+        corr.status_history_id
+        for corr in plan.corrections
+        if corr.reason == "replace_same_day"
+    }
     candidate_periods = [
         StatusPeriod(p.start_date, p.end_date) for p in plan.inserts
     ]
     for period in candidate_periods:
         validate_date_order(period)
         for row in effective:
+            if (
+                row.id in replaced_same_day
+                and row.end_date is not None
+                and period.start_date == row.end_date
+            ):
+                continue
             if periods_overlap(StatusPeriod(row.start_date, row.end_date), period):
                 raise StatusPeriodError("plan leaves overlapping periods")
     for i, a in enumerate(candidate_periods):

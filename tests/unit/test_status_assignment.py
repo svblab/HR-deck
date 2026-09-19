@@ -10,6 +10,20 @@ from domain.status_assignment import (
 )
 
 
+def test_same_day_open_status_replaces_without_confirmation() -> None:
+    existing = [StatusHistoryEntry(1, 2, "2026-09-19", None)]
+    plan = plan_status_assignment(
+        existing,
+        status_id=1,
+        start_date="2026-09-19",
+    )
+    assert plan.requires_confirmation is False
+    assert len(plan.corrections) == 1
+    assert plan.corrections[0].reason == "replace_same_day"
+    assert plan.corrections[0].new_value == "2026-09-19"
+    assert plan.inserts[0].start_date == "2026-09-19"
+
+
 def test_auto_close_open_period_before_new_start() -> None:
     existing = [StatusHistoryEntry(1, 2, "2026-01-01", None)]
     plan = plan_status_assignment(
