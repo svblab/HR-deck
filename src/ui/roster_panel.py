@@ -186,7 +186,7 @@ class RosterPanel(QWidget):
         self._branch.currentIndexChanged.connect(self._on_branch_changed)
         self._dept.currentIndexChanged.connect(self._on_dept_changed)
         self._div.currentIndexChanged.connect(self._on_div_changed)
-        reset = QPushButton("Показать всех", objectName="filterReset")
+        reset = QPushButton("Сброс фильтрации", objectName="filterReset")
         reset.clicked.connect(self.reset_filters)
         self._group_combo = QComboBox()
         self._group_combo.setObjectName("groupByCombo")

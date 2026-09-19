@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QHeaderView,
     QTableWidget,
     QTableWidgetItem,
     QWidget,
@@ -28,12 +27,12 @@ class TableWidget(QTableWidget):
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.setAlternatingRowColors(True)
-        header = self.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.cellDoubleClicked.connect(self._on_cell)
         self.cellClicked.connect(self._on_cell)
 
     def set_rows(self, rows: list[RosterRow]) -> None:
+        sorting_enabled = self.isSortingEnabled()
+        self.setSortingEnabled(False)
         self.setRowCount(len(rows))
         for i, row in enumerate(rows):
             values = [
@@ -57,6 +56,8 @@ class TableWidget(QTableWidget):
                         "изменения требований к должности."
                     )
                 self.setItem(i, col, item)
+        self.resizeColumnsToContents()
+        self.setSortingEnabled(sorting_enabled or True)
 
     def _on_cell(self, row: int, _column: int) -> None:
         item = self.item(row, 0)
