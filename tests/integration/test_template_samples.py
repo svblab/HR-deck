@@ -15,6 +15,7 @@ from reports.pdf_template import archive_pdf_upload, generate_pdf_report, valida
 
 _SAMPLES = Path(__file__).resolve().parents[2] / "templates_samples"
 _EXCEL = _SAMPLES / "sample_report.xlsx"
+_BRANCH_SUMMARY = _SAMPLES / "branch_summary_report.xlsx"
 _PDF = _SAMPLES / "sample_report.pdf"
 _MANIFEST = _SAMPLES / "sample_report.regions.json"
 _GUIDE = Path(__file__).resolve().parents[2] / "docs" / "report-templates-guide.md"
@@ -83,6 +84,54 @@ def test_sample_pdf_validate_generate_pipeline(tmp_path: Path) -> None:
     )
     assert hashlib.sha256(_PDF.read_bytes()).hexdigest() == before
     assert pdf_contains_text(out, "Сидоров")
+
+
+@pytest.mark.acceptance
+def test_branch_summary_sample_validates() -> None:
+    validate_archived(_BRANCH_SUMMARY)
+
+
+@pytest.mark.acceptance
+def test_branch_summary_sample_generate_pipeline(tmp_path: Path) -> None:
+    archive = tmp_path / "archive.xlsx"
+    archived = archive_upload(_BRANCH_SUMMARY, archive)
+    out = tmp_path / "out.xlsx"
+    generate_excel_report(
+        archived,
+        out,
+        scalars={
+            "report.title": "Сводка по филиалу",
+            "report.date": "19.09.2026",
+            "employee.branch": "Центральный",
+            "report.branch_total": "37",
+            "report.branch_absent": "7",
+        },
+        row_records=[
+            {
+                "employee.division": "Продажи",
+                "report.department_total": "25",
+                "report.department_absent": "5",
+                "report.vacation_employees": "Иванов И.И.; Петров П.П.",
+                "report.sick_leave_employees": "Сидоров С.С.",
+                "report.business_trip_employees": "Смирнов А.А.; Кузнецов К.К.",
+            },
+            {
+                "employee.division": "Бухгалтерия",
+                "report.department_total": "12",
+                "report.department_absent": "2",
+                "report.vacation_employees": "Орлова О.О.",
+                "report.sick_leave_employees": "Волкова В.В.",
+                "report.business_trip_employees": "",
+            },
+        ],
+    )
+    book = load_workbook(out)
+    sheet = book.active
+    assert sheet is not None
+    assert sheet["A6"].value == "Продажи"
+    assert sheet["A7"].value == "Бухгалтерия"
+    assert sheet["B9"].value == "37"
+    book.close()
 
 
 def test_report_templates_guide_marker_catalog_in_sync() -> None:
