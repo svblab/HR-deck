@@ -264,6 +264,9 @@ class AccountManagementService:
             self._conn.rollback()
             raise
 
+    def can(self, permission: Permission) -> bool:
+        return self._authz.check(self._session.role, permission)
+
     def get_security_settings(self) -> dict[str, int | bool]:
         self._guard(Permission.MANAGE_SECURITY_SETTINGS)
         settings = SettingsRepository(self._conn)
