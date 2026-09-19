@@ -30,6 +30,13 @@ _ALIASES: dict[str, tuple[str, ...]] = {
     "employee.status_from": ("статус_с",),
     "employee.status_to": ("статус_по",),
     "employee.employment_type": ("тип_занятости",),
+    "report.department_total": ("отдел_всего",),
+    "report.department_absent": ("отдел_отсутствуют",),
+    "report.vacation_employees": ("отпуск_ФИО",),
+    "report.sick_leave_employees": ("больничный_ФИО",),
+    "report.business_trip_employees": ("командировка_ФИО",),
+    "report.branch_total": ("филиал_всего",),
+    "report.branch_absent": ("филиал_отсутствуют",),
 }
 
 CANONICAL_KEYS: frozenset[str] = frozenset(_ALIASES)
