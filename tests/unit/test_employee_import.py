@@ -12,7 +12,7 @@ from domain.employee_import import (
 )
 
 _CATALOG = ImportCatalog(
-    positions={"инженер": 1},
+    positions_by_branch={(2, "инженер"): 1},
     branches={"филиал север": 2},
     departments={(2, "департамент qa"): 3},
     divisions_by_department={(3, "отдел a"): 4},
@@ -56,6 +56,49 @@ def test_evaluate_unknown_directory() -> None:
     payload, issues = evaluate_row(_values(branch="Нет такого"), 4, _CATALOG)
     assert payload is None
     assert any("unknown branch" in i.message for i in issues)
+
+
+def test_evaluate_same_position_name_in_different_branches() -> None:
+    catalog = ImportCatalog(
+        positions_by_branch={(2, "кандидат"): 10, (3, "кандидат"): 20},
+        branches={"центральный офис": 2, "региональный офис": 3},
+        departments={},
+        divisions_by_department={},
+        divisions_by_branch={},
+        employment_types={"штатный": 1},
+    )
+    central, issues_c = evaluate_row(
+        _values(branch="Центральный офис", position="Кандидат", department="", division=""),
+        2,
+        catalog,
+    )
+    regional, issues_r = evaluate_row(
+        _values(branch="Региональный офис", position="Кандидат", department="", division=""),
+        3,
+        catalog,
+    )
+    assert not issues_c and central is not None
+    assert not issues_r and regional is not None
+    assert central.position_id == 10
+    assert regional.position_id == 20
+
+
+def test_evaluate_position_must_exist_in_selected_branch() -> None:
+    catalog = ImportCatalog(
+        positions_by_branch={(2, "кандидат"): 10},
+        branches={"центральный офис": 2, "региональный офис": 3},
+        departments={},
+        divisions_by_department={},
+        divisions_by_branch={},
+        employment_types={"штатный": 1},
+    )
+    payload, issues = evaluate_row(
+        _values(branch="Региональный офис", position="Кандидат", department="", division=""),
+        4,
+        catalog,
+    )
+    assert payload is None
+    assert any("unknown position" in i.message for i in issues)
 
 
 def test_evaluate_malformed_hire_date() -> None:

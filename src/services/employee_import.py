@@ -144,11 +144,13 @@ class EmployeeImportService:
                 del out[key]
             return out
 
-        positions = index(self._directories.list_positions(active_only=True))
         branches = index(self._directories.list_branches(active_only=True))
         employment = index(self._directories.list_employment_types(active_only=True))
         for item in self._directories.list_employment_types(active_only=True):
             employment.setdefault(item.code.strip().casefold(), item.id)
+        positions_by_branch: dict[tuple[int, str], int] = {}
+        for pos in self._directories.list_positions(active_only=True):
+            positions_by_branch[(pos.branch_id, pos.name.strip().casefold())] = pos.id
         departments: dict[tuple[int, str], int] = {}
         for dept in self._directories.list_departments(active_only=True):
             departments[(dept.branch_id, dept.name.strip().casefold())] = dept.id
@@ -161,7 +163,7 @@ class EmployeeImportService:
             else:
                 divisions_by_branch[(div.branch_id, key_name)] = div.id
         return ImportCatalog(
-            positions=positions,
+            positions_by_branch=positions_by_branch,
             branches=branches,
             departments=departments,
             divisions_by_department=divisions_by_department,
