@@ -232,16 +232,19 @@ class MainWindow(QMainWindow):
             self._roster = None
         data_dir = self._db_path.parent if self._db_path is not None else None
         roster_service = RosterService(self._conn, self._session)
+        status_history = StatusHistoryService(self._conn, self._session)
         self._roster = RosterPanel(
             roster_service,
-            employees=EmployeeService(self._conn, self._session),
+            employees=EmployeeService(
+                self._conn, self._session, status_history=status_history
+            ),
             directories=DirectoryService(self._conn, self._session),
             session=self._session,
             reports=StandardReportService(self._conn, self._session),
             templates=TemplateLibraryService(
                 self._conn, self._session, data_dir=data_dir
             ),
-            status_history=StatusHistoryService(self._conn, self._session),
+            status_history=status_history,
             availability_statuses=AvailabilityStatusService(
                 self._conn, self._session
             ),
@@ -458,16 +461,17 @@ class MainWindow(QMainWindow):
         if self._roster is not None and self._session is not None:
             data_dir = self._db_path.parent if self._db_path is not None else None
             roster_service = RosterService(self._conn, self._session)
+            status_history = StatusHistoryService(self._conn, self._session)
             self._roster._service = roster_service
-            self._roster._employees = EmployeeService(self._conn, self._session)
+            self._roster._employees = EmployeeService(
+                self._conn, self._session, status_history=status_history
+            )
             self._roster._directories = DirectoryService(self._conn, self._session)
             self._roster._reports = StandardReportService(self._conn, self._session)
             self._roster._templates = TemplateLibraryService(
                 self._conn, self._session, data_dir=data_dir
             )
-            self._roster._status_history = StatusHistoryService(
-                self._conn, self._session
-            )
+            self._roster._status_history = status_history
             self._roster._availability_statuses = AvailabilityStatusService(
                 self._conn, self._session
             )
