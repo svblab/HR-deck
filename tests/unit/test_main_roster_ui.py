@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QTableWidget, QToolButton
+from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton, QTableWidget, QToolButton
 
 from data.db import Connection
 from domain.permissions import RoleCode
@@ -45,6 +45,32 @@ def test_search_enabled_and_filters_roster(qtbot, tmp_path: Path) -> None:
     qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 0)
     window.findChild(QPushButton, "filterReset").click()
     qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 2)
+    window.close()
+    conn.close()
+
+
+def test_clarification_filter_does_not_leave_stale_board_cards(qtbot, tmp_path: Path) -> None:
+    window, conn, _session, _ids = _window(tmp_path)
+    qtbot.addWidget(window)
+    panel = window.findChild(RosterPanel)
+    assert panel is not None
+    window.show()
+    clarify = window.findChild(QCheckBox, "clarifyFilter")
+    assert clarify is not None
+
+    def visible_board_cards() -> int:
+        return sum(
+            1
+            for card in panel.findChildren(EmployeeCardWidget)
+            if card.isVisible()
+        )
+
+    qtbot.waitUntil(lambda: visible_board_cards() == 2)
+    for _ in range(4):
+        clarify.click()
+        qtbot.waitUntil(
+            lambda: visible_board_cards() == (1 if clarify.isChecked() else 2)
+        )
     window.close()
     conn.close()
 
