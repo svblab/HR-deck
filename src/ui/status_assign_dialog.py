@@ -31,6 +31,32 @@ from services.status_history import (
 from ui.theme import TEXT_MUTED
 
 
+def _status_error_message(exc: Exception) -> str:
+    text = str(exc)
+    messages = {
+        "start_date must be <= end_date": (
+            "Дата начала не может быть позже даты окончания."
+        ),
+        "end_date required for this status": (
+            "Для выбранного статуса нужно указать дату окончания."
+        ),
+        "open-ended insert overlaps existing period": (
+            "Новый период пересекается с уже открытым статусом. "
+            "Измените дату начала или укажите дату окончания."
+        ),
+        "overlapping status period for employee": (
+            "Период пересекается с уже существующим статусом."
+        ),
+        "plan leaves overlapping periods": (
+            "После назначения периоды статуса всё ещё пересекаются."
+        ),
+        "duplicate open-ended status for employee": (
+            "У сотрудника уже есть статус без даты окончания."
+        ),
+    }
+    return messages.get(text, text)
+
+
 def _plan_summary(plan: StatusAssignmentPlan) -> str:
     lines = ["Назначение затронет существующие периоды:", ""]
     for corr in plan.corrections:
@@ -220,9 +246,9 @@ class StatusAssignDialog(QDialog):
                 StatusHistoryError,
                 StatusPeriodError,
             ) as err:
-                QMessageBox.warning(self, "Статус", str(err))
+                QMessageBox.warning(self, "Статус", _status_error_message(err))
                 return
         except (AuthorizationError, StatusHistoryError, StatusPeriodError) as exc:
-            QMessageBox.warning(self, "Статус", str(exc))
+            QMessageBox.warning(self, "Статус", _status_error_message(exc))
             return
         self.accept()
