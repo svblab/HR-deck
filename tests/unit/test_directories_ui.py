@@ -482,6 +482,108 @@ def test_directories_position_list_filtered_by_branch(
 
 
 @pytest.mark.acceptance
+def test_directories_department_table_empty_until_branch_selected(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_a = directories.create_branch("Филиал A")
+    branch_b = directories.create_branch("Филиал B")
+    directories.create_department(branch_a, "Департамент A")
+    directories.create_department(branch_b, "Департамент B")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Департаменты"))
+    table = dlg.findChild(QTableWidget, "directoriesDepartmentTable")
+    dept_parent = dlg.findChild(QComboBox, "directoriesDepartmentParent")
+    assert table is not None and dept_parent is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    assert table.rowCount() == 0
+    _select_combo(dept_parent, branch_a)
+    assert _names() == ["Департамент A"]
+    _select_combo(dept_parent, branch_b)
+    assert _names() == ["Департамент B"]
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_division_table_empty_until_branch_selected(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_a = directories.create_branch("Филиал A")
+    branch_b = directories.create_branch("Филиал B")
+    directories.create_division(branch_a, None, "Отдел A")
+    directories.create_division(branch_b, None, "Отдел B")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Отделы"))
+    table = dlg.findChild(QTableWidget, "directoriesDivisionTable")
+    div_branch = dlg.findChild(QComboBox, "directoriesDivisionExtraParent")
+    assert table is not None and div_branch is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    assert table.rowCount() == 0
+    _select_combo(div_branch, branch_a)
+    assert _names() == ["Отдел A"]
+    _select_combo(div_branch, branch_b)
+    assert _names() == ["Отдел B"]
+    div_branch.setCurrentIndex(0)
+    assert table.rowCount() == 0
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_position_table_empty_until_branch_selected(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_a = directories.create_branch("Филиал A")
+    branch_b = directories.create_branch("Филиал B")
+    directories.create_position(branch_a, "Инженер A")
+    directories.create_position(branch_b, "Инженер B")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    table = dlg.findChild(QTableWidget, "directoriesPositionTable")
+    pos_parent = dlg.findChild(QComboBox, "directoriesPositionParent")
+    assert table is not None and pos_parent is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    assert table.rowCount() == 0
+    _select_combo(pos_parent, branch_a)
+    assert _names() == ["Инженер A"]
+    _select_combo(pos_parent, branch_b)
+    assert _names() == ["Инженер B"]
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
 def test_directories_rename_position_requirements_without_violators_applies_silently(
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
