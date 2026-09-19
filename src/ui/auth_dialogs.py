@@ -21,12 +21,13 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from data.db import Connection
-from domain.permissions import RoleCode
+from domain.permissions import Permission, RoleCode
 from services.account_management import AccountManagementService, AccountView
 from services.authentication import AuthenticationError, AuthenticationService
 from services.bootstrap import BootstrapError, BootstrapService
@@ -298,6 +299,9 @@ class AccountsDialog(QDialog):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self._table)
 
+        tabs = QTabWidget(objectName="accountsTabs")
+        accounts_tab = QWidget()
+        accounts_layout = QVBoxLayout(accounts_tab)
         form = QFormLayout()
         self._login = QLineEdit()
         self._password = QLineEdit()
@@ -308,27 +312,34 @@ class AccountsDialog(QDialog):
         form.addRow("Логин", self._login)
         form.addRow("Пароль", self._password)
         form.addRow("Роль", self._role)
-        layout.addLayout(form)
-
+        accounts_layout.addLayout(form)
         create_btn = QPushButton("Создать")
         create_btn.clicked.connect(self._create)
-        layout.addWidget(create_btn)
+        accounts_layout.addWidget(create_btn)
+        tabs.addTab(accounts_tab, "Учётные записи")
 
-        settings_box = QFormLayout()
-        self._timeout = QSpinBox()
-        self._timeout.setRange(0, 86_400)
-        self._timeout_enabled = QCheckBox("Включена")
-        self._delay = QSpinBox()
-        self._delay.setRange(0, 300)
-        self._delay_enabled = QCheckBox("Включена")
-        settings_box.addRow("Таймаут бездействия (сек)", self._timeout)
-        settings_box.addRow("Автоблокировка", self._timeout_enabled)
-        settings_box.addRow("Задержка после ошибки входа (сек)", self._delay)
-        settings_box.addRow("Задержка", self._delay_enabled)
-        layout.addLayout(settings_box)
-        save_settings = QPushButton("Сохранить настройки безопасности")
-        save_settings.clicked.connect(self._save_settings)
-        layout.addWidget(save_settings)
+        self._can_manage_security = service.can(Permission.MANAGE_SECURITY_SETTINGS)
+        if self._can_manage_security:
+            security_tab = QWidget()
+            security_layout = QVBoxLayout(security_tab)
+            settings_box = QFormLayout()
+            self._timeout = QSpinBox()
+            self._timeout.setRange(0, 86_400)
+            self._timeout_enabled = QCheckBox("Включена")
+            self._delay = QSpinBox()
+            self._delay.setRange(0, 300)
+            self._delay_enabled = QCheckBox("Включена")
+            settings_box.addRow("Таймаут бездействия (сек)", self._timeout)
+            settings_box.addRow("Автоблокировка", self._timeout_enabled)
+            settings_box.addRow("Задержка после ошибки входа (сек)", self._delay)
+            settings_box.addRow("Задержка", self._delay_enabled)
+            security_layout.addLayout(settings_box)
+            save_settings = QPushButton("Сохранить настройки безопасности")
+            save_settings.clicked.connect(self._save_settings)
+            security_layout.addWidget(save_settings)
+            tabs.addTab(security_tab, "Настройки безопасности")
+
+        layout.addWidget(tabs)
 
         close_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close_btn.rejected.connect(self.reject)
@@ -346,11 +357,12 @@ class AccountsDialog(QDialog):
             self._table.setItem(i, 2, QTableWidgetItem(row.role_code))
             self._table.setItem(i, 3, QTableWidgetItem("да" if row.is_active else "нет"))
             self._table.setCellWidget(i, 4, self._actions_widget(row))
-        settings = self._service.get_security_settings()
-        self._timeout.setValue(int(settings["inactivity_timeout_seconds"]))
-        self._timeout_enabled.setChecked(bool(settings["inactivity_timeout_enabled"]))
-        self._delay.setValue(int(settings["login_failure_delay_seconds"]))
-        self._delay_enabled.setChecked(bool(settings["login_failure_delay_enabled"]))
+        if self._can_manage_security:
+            settings = self._service.get_security_settings()
+            self._timeout.setValue(int(settings["inactivity_timeout_seconds"]))
+            self._timeout_enabled.setChecked(bool(settings["inactivity_timeout_enabled"]))
+            self._delay.setValue(int(settings["login_failure_delay_seconds"]))
+            self._delay_enabled.setChecked(bool(settings["login_failure_delay_enabled"]))
 
     def _actions_widget(self, row: AccountView) -> QWidget:
         box = QWidget()
