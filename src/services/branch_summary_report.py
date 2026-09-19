@@ -55,7 +55,10 @@ class BranchSummaryReportService:
             if row.branch_id == branch_id
         ]
         branch_name = rows[0].branch_name if rows else ""
-        codes = {status.id: status.code for status in self._statuses.list_statuses(active_only=False)}
+        codes = {
+            status.id: status.code
+            for status in self._statuses.list_statuses(active_only=False)
+        }
         return build_branch_summary_context(
             rows,
             codes,
