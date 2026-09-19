@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
+from data.availability_statuses import AvailabilityStatusRepository
 from data.db import Connection
 from data.directories import (
     BranchRepository,
@@ -36,6 +37,7 @@ from domain.permissions import Permission
 from domain.sensitive import mask_sensitive_value
 from services.authorization import AuthorizationError, AuthorizationService
 from services.session import SessionState
+from services.status_history import StatusHistoryService
 
 Clock = Callable[[], str]
 
@@ -56,13 +58,16 @@ class EmployeeService:
         *,
         authz: AuthorizationService | None = None,
         clock: Clock | None = None,
+        status_history: StatusHistoryService | None = None,
     ) -> None:
         self._conn = conn
         self._session = session
         self._authz = authz or AuthorizationService()
         self._clock: Clock = clock or _utc_now
+        self._status_history = status_history
         self._audit = UserActionLogRepository(conn)
         self._employees = EmployeeRepository(conn)
+        self._availability_statuses = AvailabilityStatusRepository(conn)
         self._branches = BranchRepository(conn)
         self._departments = DepartmentRepository(conn)
         self._divisions = DivisionRepository(conn)
@@ -168,25 +173,52 @@ class EmployeeService:
         ]
 
     def archive_employee(self, employee_id: int) -> None:
-        self._set_archived(employee_id, archived=True)
-
-    def restore_employee(self, employee_id: int) -> None:
-        self._set_archived(employee_id, archived=False)
-
-    def _set_archived(self, employee_id: int, *, archived: bool) -> None:
         self._require(Permission.MANAGE_EMPLOYEES)
         record = self._require_employee(employee_id)
-        if record.is_archived == archived:
+        if record.is_archived:
             return
         now = self._clock()
-        verb = "archive" if archived else "restore"
+        today = now[:10]
+
+        def mutate() -> None:
+            if self._status_history is not None:
+                status = self._availability_statuses.get_by_code("inactive")
+                if status is not None:
+                    self._status_history.assign_status(
+                        employee_id,
+                        status_id=status.id,
+                        start_date=today,
+                        confirmed=True,
+                    )
+            employee = self._employees.get(employee_id)
+            if employee is not None and not employee.is_archived:
+                self._employees.set_archived(
+                    employee_id, archived=True, updated_at=now
+                )
+
         self._mutate(
-            action=f"employee.{verb}",
+            action="employee.archive",
             entity_type="employee",
             entity_id=employee_id,
-            mutate=lambda: self._employees.set_archived(
-                employee_id, archived=archived, updated_at=now
-            ),
+            mutate=mutate,
+        )
+
+    def restore_employee(self, employee_id: int) -> None:
+        self._require(Permission.MANAGE_EMPLOYEES)
+        record = self._require_employee(employee_id)
+        if not record.is_archived:
+            return
+        now = self._clock()
+
+        def mutate() -> None:
+            self._employees.set_archived(employee_id, archived=False, updated_at=now)
+            self._employees.mark_needs_org_review(employee_id, updated_at=now)
+
+        self._mutate(
+            action="employee.restore",
+            entity_type="employee",
+            entity_id=employee_id,
+            mutate=mutate,
         )
 
     def _validate_input(

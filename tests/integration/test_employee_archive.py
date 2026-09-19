@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from data.db import Connection
+from data.employees import EmployeeRepository
 from domain.permissions import RoleCode
+from domain.roster import RosterFilters, apply_filters
 from services.account_management import AccountManagementService
 from services.authorization import AuthorizationError
 from services.bootstrap import BootstrapService
@@ -44,6 +46,14 @@ def _observer_session(conn: Connection, admin: SessionState, db: Path) -> Sessio
     )
 
 
+def _employees_with_history(
+    conn: Connection, session: SessionState, *, clock: str = "2026-08-30T10:10:00Z"
+) -> tuple[EmployeeService, StatusHistoryService]:
+    history = StatusHistoryService(conn, session, clock=lambda: clock)
+    employees = EmployeeService(conn, session, clock=lambda: clock, status_history=history)
+    return employees, history
+
+
 def _history_rows(conn: Connection, employee_id: int) -> list[tuple]:
     return conn.execute(
         "SELECT id, status_id, start_date, end_date, note, created_at,"
@@ -77,17 +87,93 @@ def test_status_history_survives_archive_restore(tmp_path: Path) -> None:
     conn, session, _db = _open_db(tmp_path)
     ids = seed_synthetic_org(conn)
     emp_id = ids["employee_a_id"]
-    history = StatusHistoryService(conn, session, clock=lambda: "2026-08-30T10:20:00Z")
+    employees, history = _employees_with_history(
+        conn, session, clock="2026-08-30T10:20:00Z"
+    )
     history.assign_status(emp_id, status_id=1, start_date="2026-08-01")
     history.assign_status(emp_id, status_id=2, start_date="2026-08-10", end_date="2026-08-14")
-    before = _history_rows(conn, emp_id)
+    before_archive = _history_rows(conn, emp_id)
 
-    employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T10:21:00Z")
+    employees.archive_employee(emp_id)
+    after_archive = _history_rows(conn, emp_id)
+    employees.restore_employee(emp_id)
+    after_restore = _history_rows(conn, emp_id)
+
+    assert len(after_archive) > len(before_archive)
+    assert after_restore == after_archive
+    review = conn.execute(
+        "SELECT is_archived, needs_org_review FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    assert review == (0, 1)
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_archive_employee_assigns_inactive_status_and_archives(tmp_path: Path) -> None:
+    conn, session, _db = _open_db(tmp_path)
+    ids = seed_synthetic_org(conn)
+    emp_id = ids["employee_a_id"]
+    employees, history = _employees_with_history(
+        conn, session, clock="2026-08-30T10:15:00Z"
+    )
+    history.assign_status(emp_id, status_id=1, start_date="2026-08-01")
+    before = _history_rows(conn, emp_id)
+    inactive_id = conn.execute(
+        "SELECT id FROM availability_statuses WHERE code = 'inactive'"
+    ).fetchone()[0]
+
+    employees.archive_employee(emp_id)
+
+    archived = conn.execute(
+        "SELECT is_archived FROM employees WHERE id = ?", (emp_id,)
+    ).fetchone()[0]
+    assert archived == 1
+    after = _history_rows(conn, emp_id)
+    assert len(after) > len(before)
+    assert after[-1][1] == inactive_id
+    conn.close()
+
+
+def test_mark_needs_org_review_preserves_department_and_division(
+    tmp_path: Path,
+) -> None:
+    conn, _session, _db = _open_db(tmp_path)
+    ids = seed_synthetic_org(conn)
+    emp_id = ids["employee_a_id"]
+    before = conn.execute(
+        "SELECT department_id, division_id FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    EmployeeRepository(conn).mark_needs_org_review(
+        emp_id, updated_at="2026-08-30T10:16:00Z"
+    )
+    conn.commit()
+    after = conn.execute(
+        "SELECT department_id, division_id, needs_org_review FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    assert after[0] == before[0]
+    assert after[1] == before[1]
+    assert after[2] == 1
+    conn.close()
+
+
+def test_restored_employee_appears_in_org_review_roster_filter(tmp_path: Path) -> None:
+    conn, session, _db = _open_db(tmp_path)
+    ids = seed_synthetic_org(conn)
+    emp_id = ids["employee_a_id"]
+    employees, _history = _employees_with_history(
+        conn, session, clock="2026-08-30T10:17:00Z"
+    )
+    roster = RosterService(conn, session, clock=lambda: "2026-08-30T10:17:00Z")
+
     employees.archive_employee(emp_id)
     employees.restore_employee(emp_id)
-    after = _history_rows(conn, emp_id)
 
-    assert after == before
+    rows = roster.list_rows()
+    filtered = apply_filters(rows, RosterFilters(only_needing_org_review=True))
+    assert any(row.employee_id == emp_id for row in filtered)
     conn.close()
 
 

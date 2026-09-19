@@ -190,6 +190,12 @@ class EmployeeRepository:
             (updated_at, employee_id),
         )
 
+    def mark_needs_org_review(self, employee_id: int, *, updated_at: str) -> None:
+        self._conn.execute(
+            "UPDATE employees SET needs_org_review = 1, updated_at = ? WHERE id = ?",
+            (updated_at, employee_id),
+        )
+
 
 def _row(row: tuple[object, ...]) -> EmployeeRecord:
     return EmployeeRecord(
