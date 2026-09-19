@@ -69,13 +69,15 @@
 
 ## 4. Библиотека шаблонов
 
-**Шаблоны** на главном экране (`Permission.MANAGE_REPORT_TEMPLATES`).
+**Шаблоны** на главном экране: у Администратора — `MANAGE_REPORT_TEMPLATES`
+(загрузка, архив, восстановление, генерация); у HR и Наблюдателя — только
+`USE_ACTIVE_REPORT_TEMPLATES` (просмотр активных шаблонов и генерация).
 
-| Операция | Журнал |
-|---|---|
-| Загрузка новой версии | `template.upload` |
-| Архив / восстановление шаблона | `template.archive` / `template.restore` |
-| Генерация отчёта | `template.generate` |
+| Операция | Кто | Журнал |
+|---|---|---|
+| Загрузка новой версии | Администратор | `template.upload` |
+| Архив / восстановление шаблона | Администратор | `template.archive` / `template.restore` |
+| Генерация отчёта | Все с доступом к **Шаблоны** | `template.generate` |
 
 Подготовка файлов — [`report-templates-guide.md`](../report-templates-guide.md).
 
