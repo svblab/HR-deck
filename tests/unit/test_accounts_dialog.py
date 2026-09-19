@@ -8,14 +8,16 @@ import pytest
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTabWidget,
     QToolButton,
 )
 
-from domain.permissions import Permission, RoleCode
+from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationError, AuthenticationService
 from services.authorization import AuthorizationError
@@ -51,37 +53,16 @@ def _account_id(service: AccountManagementService, login: str) -> int:
     return next(row.id for row in service.list_accounts() if row.login == login)
 
 
-def test_accounts_dialog_shows_both_tabs_for_administrator(qtbot, tmp_path: Path) -> None:
+def test_accounts_dialog_has_no_security_settings_section(qtbot, tmp_path: Path) -> None:
     _db, conn, service, _auth = _admin_service(tmp_path)
     dlg = AccountsDialog(service)
     qtbot.addWidget(dlg)
 
-    tabs = dlg.findChild(QTabWidget, "accountsTabs")
-    assert tabs is not None
-    assert tabs.count() == 2
-    assert tabs.tabText(0) == "Учётные записи"
-    assert tabs.tabText(1) == "Настройки безопасности"
-
-    conn.close()  # type: ignore[union-attr]
-
-
-def test_accounts_dialog_hides_security_tab_without_permission(
-    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _db, conn, service, _auth = _admin_service(tmp_path)
-
-    def _can(permission: Permission) -> bool:
-        return permission != Permission.MANAGE_SECURITY_SETTINGS
-
-    monkeypatch.setattr(service, "can", _can)
-
-    dlg = AccountsDialog(service)
-    qtbot.addWidget(dlg)
-
-    tabs = dlg.findChild(QTabWidget, "accountsTabs")
-    assert tabs is not None
-    assert tabs.count() == 1
-    assert tabs.tabText(0) == "Учётные записи"
+    assert dlg.findChild(QTabWidget, "accountsTabs") is None
+    assert dlg.findChild(QSpinBox, "settingsTimeout") is None
+    assert dlg.findChild(QCheckBox, "settingsTimeoutEnabled") is None
+    assert dlg.findChild(QSpinBox, "settingsLoginDelay") is None
+    assert dlg.findChild(QCheckBox, "settingsLoginDelayEnabled") is None
 
     conn.close()  # type: ignore[union-attr]
 

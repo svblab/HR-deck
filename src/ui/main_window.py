@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -37,7 +37,7 @@ from services.status_history import StatusHistoryService
 from services.template_library import TemplateLibraryService
 from services.user_action_log import UserActionLogService
 from ui.action_log_dialog import ActionLogDialog
-from ui.auth_dialogs import AccountsDialog, LoginDialog, UnlockDialog
+from ui.auth_dialogs import AccountsDialog, LoginDialog, SettingsDialog, UnlockDialog
 from ui.backup_dialog import BackupDialog
 from ui.roster_panel import RosterPanel
 from ui.session_activity import install_session_activity_filter
@@ -74,9 +74,7 @@ def format_clock(now: datetime | None = None) -> tuple[str, str]:
     """Вернуть (время HH:MM:SS, дата «день недели, DD месяц YYYY») как в прототипе."""
     now = now or datetime.now()
     time_text = now.strftime("%H:%M:%S")
-    date_text = (
-        f"{_WEEKDAYS_RU[now.weekday()]}, {now.day:02d} {_MONTHS_RU[now.month]} {now.year}"
-    )
+    date_text = f"{_WEEKDAYS_RU[now.weekday()]}, {now.day:02d} {_MONTHS_RU[now.month]} {now.year}"
     return time_text, date_text
 
 
@@ -106,6 +104,9 @@ class MainWindow(QMainWindow):
         self._accounts_btn: QToolButton | None = None
         self._log_btn: QToolButton | None = None
         self._settings_btn: QToolButton | None = None
+        self._program_settings_btn: QToolButton | None = None
+        self._brand_logo: QLabel | None = None
+        self._brand_company: QLabel | None = None
         self._search_signal_connected = False
 
         root = QWidget(objectName="centralRoot")
@@ -143,9 +144,11 @@ class MainWindow(QMainWindow):
         brand.setSpacing(12)
         logo = QLabel("ЛОГО", objectName="logoBadge")
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._brand_logo = logo
         brand_text = QVBoxLayout()
         brand_text.setSpacing(0)
         company = QLabel("Название компании", objectName="brandCompany")
+        self._brand_company = company
         app_name = QLabel("Учёт доступности персонала", objectName="brandApp")
         brand_text.addWidget(company)
         brand_text.addWidget(app_name)
@@ -196,6 +199,11 @@ class MainWindow(QMainWindow):
         self._log_btn.setToolTip("Журнал действий")
         self._log_btn.clicked.connect(self._open_action_log)
 
+        self._program_settings_btn = QToolButton(objectName="titleIconBtn")
+        self._program_settings_btn.setText("⚙")
+        self._program_settings_btn.setToolTip("Настройки программы")
+        self._program_settings_btn.clicked.connect(self._open_settings)
+
         settings_btn = QToolButton(objectName="titleIconBtn")
         settings_btn.setText("💾")
         settings_btn.setToolTip("Резервное копирование")
@@ -211,6 +219,7 @@ class MainWindow(QMainWindow):
         exit_btn.clicked.connect(self._logout_and_close)
         right.addWidget(self._accounts_btn)
         right.addWidget(self._log_btn)
+        right.addWidget(self._program_settings_btn)
         right.addWidget(settings_btn)
         right.addWidget(self._switch_user_btn)
         right.addWidget(exit_btn)
@@ -235,19 +244,13 @@ class MainWindow(QMainWindow):
         status_history = StatusHistoryService(self._conn, self._session)
         self._roster = RosterPanel(
             roster_service,
-            employees=EmployeeService(
-                self._conn, self._session, status_history=status_history
-            ),
+            employees=EmployeeService(self._conn, self._session, status_history=status_history),
             directories=DirectoryService(self._conn, self._session),
             session=self._session,
             reports=StandardReportService(self._conn, self._session),
-            templates=TemplateLibraryService(
-                self._conn, self._session, data_dir=data_dir
-            ),
+            templates=TemplateLibraryService(self._conn, self._session, data_dir=data_dir),
             status_history=status_history,
-            availability_statuses=AvailabilityStatusService(
-                self._conn, self._session
-            ),
+            availability_statuses=AvailabilityStatusService(self._conn, self._session),
         )
         self._roster.filters_reset.connect(self._clear_search)
         self._clear_search()
@@ -259,14 +262,13 @@ class MainWindow(QMainWindow):
         self._root_layout.addWidget(self._roster, stretch=1)
         if not self._idle_timer.isActive():
             self._idle_timer.start()
+        self._refresh_branding()
 
     def _update_session_controls(self) -> None:
         has_session = self._conn is not None and self._session is not None
         if self._user_label is not None:
             if has_session and self._session is not None:
-                self._user_label.setText(
-                    f"{self._session.login} ({self._session.role.value})"
-                )
+                self._user_label.setText(f"{self._session.login} ({self._session.role.value})")
             else:
                 self._user_label.setText("")
         if self._switch_user_btn is not None:
@@ -295,6 +297,45 @@ class MainWindow(QMainWindow):
             )
             self._settings_btn.setVisible(can_backup)
             self._settings_btn.setEnabled(can_backup)
+        if self._program_settings_btn is not None:
+            can_program_settings = bool(
+                has_session
+                and self._session is not None
+                and self._authz.check(self._session.role, Permission.MANAGE_SECURITY_SETTINGS)
+            )
+            self._program_settings_btn.setVisible(can_program_settings)
+            self._program_settings_btn.setEnabled(can_program_settings)
+
+    def _refresh_branding(self) -> None:
+        if (
+            self._conn is None
+            or self._session is None
+            or self._db_path is None
+            or self._brand_logo is None
+            or self._brand_company is None
+        ):
+            return
+        try:
+            service = AccountManagementService(self._conn, self._session, db_path=self._db_path)
+            profile = service.get_company_profile()
+        except Exception:  # noqa: BLE001
+            return
+        company_name = profile.get("company_name", "").strip()
+        self._brand_company.setText(company_name if company_name else "Название компании")
+        logo_path = profile.get("logo_path", "").strip()
+        if logo_path:
+            pixmap = QPixmap(logo_path)
+            if not pixmap.isNull():
+                scaled = pixmap.scaled(
+                    self._brand_logo.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+                self._brand_logo.setPixmap(scaled)
+                self._brand_logo.setText("")
+                return
+        self._brand_logo.setPixmap(QPixmap())
+        self._brand_logo.setText("ЛОГО")
 
     def _close_child_dialogs(self) -> None:
         app = QApplication.instance()
@@ -439,6 +480,18 @@ class MainWindow(QMainWindow):
         service = AccountManagementService(self._conn, self._session, db_path=self._db_path)
         AccountsDialog(service, self).exec()
 
+    def _open_settings(self) -> None:
+        if not self._require_unlocked() or self._db_path is None:
+            return
+        assert self._conn is not None
+        assert self._session is not None
+        service = AccountManagementService(self._conn, self._session, db_path=self._db_path)
+        if not service.can(Permission.MANAGE_SECURITY_SETTINGS):
+            return
+        dialog = SettingsDialog(service, self)
+        dialog.profile_saved.connect(self._refresh_branding)
+        dialog.exec()
+
     def _open_action_log(self) -> None:
         if not self._require_unlocked():
             return
@@ -479,6 +532,7 @@ class MainWindow(QMainWindow):
                 self._conn, self._session
             )
             self._roster.reload()
+        self._refresh_branding()
 
     def _logout_and_close(self) -> None:
         if self._session is not None and self._conn is not None:

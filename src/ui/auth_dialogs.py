@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -21,13 +23,12 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from data.db import Connection
-from domain.permissions import Permission, RoleCode
+from domain.permissions import RoleCode
 from services.account_management import AccountManagementService, AccountView
 from services.authentication import AuthenticationError, AuthenticationService
 from services.bootstrap import BootstrapError, BootstrapService
@@ -95,9 +96,7 @@ class RecoveryCodeDialog(QDialog):
         self.setModal(True)
         layout = QVBoxLayout(self)
         layout.addWidget(
-            QLabel(
-                "Сохраните код вне программы. Он больше не будет показан в обычном интерфейсе."
-            )
+            QLabel("Сохраните код вне программы. Он больше не будет показан в обычном интерфейсе.")
         )
         code_label = QLabel(code)
         code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -299,9 +298,6 @@ class AccountsDialog(QDialog):
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self._table)
 
-        tabs = QTabWidget(objectName="accountsTabs")
-        accounts_tab = QWidget()
-        accounts_layout = QVBoxLayout(accounts_tab)
         form = QFormLayout()
         self._login = QLineEdit()
         self._password = QLineEdit()
@@ -312,34 +308,11 @@ class AccountsDialog(QDialog):
         form.addRow("Логин", self._login)
         form.addRow("Пароль", self._password)
         form.addRow("Роль", self._role)
-        accounts_layout.addLayout(form)
+        layout.addLayout(form)
+
         create_btn = QPushButton("Создать")
         create_btn.clicked.connect(self._create)
-        accounts_layout.addWidget(create_btn)
-        tabs.addTab(accounts_tab, "Учётные записи")
-
-        self._can_manage_security = service.can(Permission.MANAGE_SECURITY_SETTINGS)
-        if self._can_manage_security:
-            security_tab = QWidget()
-            security_layout = QVBoxLayout(security_tab)
-            settings_box = QFormLayout()
-            self._timeout = QSpinBox()
-            self._timeout.setRange(0, 86_400)
-            self._timeout_enabled = QCheckBox("Включена")
-            self._delay = QSpinBox()
-            self._delay.setRange(0, 300)
-            self._delay_enabled = QCheckBox("Включена")
-            settings_box.addRow("Таймаут бездействия (сек)", self._timeout)
-            settings_box.addRow("Автоблокировка", self._timeout_enabled)
-            settings_box.addRow("Задержка после ошибки входа (сек)", self._delay)
-            settings_box.addRow("Задержка", self._delay_enabled)
-            security_layout.addLayout(settings_box)
-            save_settings = QPushButton("Сохранить настройки безопасности")
-            save_settings.clicked.connect(self._save_settings)
-            security_layout.addWidget(save_settings)
-            tabs.addTab(security_tab, "Настройки безопасности")
-
-        layout.addWidget(tabs)
+        layout.addWidget(create_btn)
 
         close_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close_btn.rejected.connect(self.reject)
@@ -357,12 +330,6 @@ class AccountsDialog(QDialog):
             self._table.setItem(i, 2, QTableWidgetItem(row.role_code))
             self._table.setItem(i, 3, QTableWidgetItem("да" if row.is_active else "нет"))
             self._table.setCellWidget(i, 4, self._actions_widget(row))
-        if self._can_manage_security:
-            settings = self._service.get_security_settings()
-            self._timeout.setValue(int(settings["inactivity_timeout_seconds"]))
-            self._timeout_enabled.setChecked(bool(settings["inactivity_timeout_enabled"]))
-            self._delay.setValue(int(settings["login_failure_delay_seconds"]))
-            self._delay_enabled.setChecked(bool(settings["login_failure_delay_enabled"]))
 
     def _actions_widget(self, row: AccountView) -> QWidget:
         box = QWidget()
@@ -393,9 +360,7 @@ class AccountsDialog(QDialog):
         archive_btn.clicked.connect(
             lambda _checked=False, account_id=row.id: self._toggle_active(account_id)
         )
-        reset_btn = QPushButton(
-            "Сбросить пароль", objectName=f"accountResetPasswordBtn_{row.id}"
-        )
+        reset_btn = QPushButton("Сбросить пароль", objectName=f"accountResetPasswordBtn_{row.id}")
         reset_btn.clicked.connect(
             lambda _checked=False, account_id=row.id, login=row.login: self._reset_password(
                 account_id, login
@@ -452,7 +417,88 @@ class AccountsDialog(QDialog):
         self._password.clear()
         self._reload()
 
-    def _save_settings(self) -> None:
+
+class SettingsDialog(QDialog):
+    profile_saved = Signal()
+
+    def __init__(
+        self,
+        service: AccountManagementService,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Настройки программы")
+        self._service = service
+        layout = QVBoxLayout(self)
+
+        security_box = QGroupBox("Настройки безопасности")
+        security_layout = QVBoxLayout(security_box)
+        settings_form = QFormLayout()
+        self._timeout = QSpinBox(objectName="settingsTimeout")
+        self._timeout.setRange(0, 86_400)
+        self._timeout_enabled = QCheckBox("Включена", objectName="settingsTimeoutEnabled")
+        self._delay = QSpinBox(objectName="settingsLoginDelay")
+        self._delay.setRange(0, 300)
+        self._delay_enabled = QCheckBox("Включена", objectName="settingsLoginDelayEnabled")
+        settings_form.addRow("Таймаут бездействия (сек)", self._timeout)
+        settings_form.addRow("Автоблокировка", self._timeout_enabled)
+        settings_form.addRow("Задержка после ошибки входа (сек)", self._delay)
+        settings_form.addRow("Задержка", self._delay_enabled)
+        security_layout.addLayout(settings_form)
+        save_security = QPushButton(
+            "Сохранить настройки безопасности", objectName="settingsSecuritySaveBtn"
+        )
+        save_security.clicked.connect(self._save_security_settings)
+        security_layout.addWidget(save_security)
+        layout.addWidget(security_box)
+
+        profile_box = QGroupBox("Профиль компании")
+        profile_layout = QVBoxLayout(profile_box)
+        profile_form = QFormLayout()
+        self._company_name = QLineEdit(objectName="settingsCompanyName")
+        self._logo_path = QLineEdit(objectName="settingsLogoPath")
+        self._logo_path.setReadOnly(True)
+        browse = QPushButton("Обзор…", objectName="settingsLogoBrowseBtn")
+        browse.clicked.connect(self._browse_logo)
+        logo_row = QHBoxLayout()
+        logo_row.addWidget(self._logo_path, stretch=1)
+        logo_row.addWidget(browse)
+        profile_form.addRow("Название компании", self._company_name)
+        profile_form.addRow("Логотип", logo_row)
+        profile_layout.addLayout(profile_form)
+        save_profile = QPushButton("Сохранить", objectName="settingsProfileSaveBtn")
+        save_profile.clicked.connect(self._save_company_profile)
+        profile_layout.addWidget(save_profile)
+        layout.addWidget(profile_box)
+
+        close_btn = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        close_btn.rejected.connect(self.reject)
+        close_btn.accepted.connect(self.accept)
+        layout.addWidget(close_btn)
+
+        self._reload()
+
+    def _reload(self) -> None:
+        settings = self._service.get_security_settings()
+        self._timeout.setValue(int(settings["inactivity_timeout_seconds"]))
+        self._timeout_enabled.setChecked(bool(settings["inactivity_timeout_enabled"]))
+        self._delay.setValue(int(settings["login_failure_delay_seconds"]))
+        self._delay_enabled.setChecked(bool(settings["login_failure_delay_enabled"]))
+        profile = self._service.get_company_profile()
+        self._company_name.setText(profile["company_name"])
+        self._logo_path.setText(profile["logo_path"])
+
+    def _browse_logo(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выберите логотип",
+            "",
+            "Изображения (*.png *.jpg *.jpeg)",
+        )
+        if path:
+            self._logo_path.setText(path)
+
+    def _save_security_settings(self) -> None:
         try:
             self._service.update_security_settings(
                 inactivity_timeout_seconds=self._timeout.value(),
@@ -463,4 +509,16 @@ class AccountsDialog(QDialog):
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "Настройки", str(exc))
             return
+        QMessageBox.information(self, "Настройки", "Сохранено.")
+
+    def _save_company_profile(self) -> None:
+        try:
+            self._service.update_company_profile(
+                company_name=self._company_name.text().strip(),
+                logo_path=self._logo_path.text().strip(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Настройки", str(exc))
+            return
+        self.profile_saved.emit()
         QMessageBox.information(self, "Настройки", "Сохранено.")

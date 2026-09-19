@@ -164,11 +164,7 @@ class AccountManagementService:
     def set_active(self, account_id: int, is_active: bool) -> None:
         self._guard(Permission.MANAGE_ACCOUNTS)
         target = self._require_account(account_id)
-        if (
-            is_active
-            and target.role_code == RoleCode.ADMINISTRATOR.value
-            and not target.is_active
-        ):
+        if is_active and target.role_code == RoleCode.ADMINISTRATOR.value and not target.is_active:
             self._reject_second_active_administrator()
         if (
             not is_active
@@ -276,6 +272,40 @@ class AccountManagementService:
             "login_failure_delay_seconds": settings.get_int("login_failure_delay_seconds", 2),
             "login_failure_delay_enabled": settings.get_bool("login_failure_delay_enabled", True),
         }
+
+    def get_company_profile(self) -> dict[str, str]:
+        self._guard(Permission.MANAGE_SECURITY_SETTINGS)
+        settings = SettingsRepository(self._conn)
+        return {
+            "company_name": settings.get("company_name", "") or "",
+            "logo_path": settings.get("logo_path", "") or "",
+        }
+
+    def update_company_profile(
+        self,
+        *,
+        company_name: str | None = None,
+        logo_path: str | None = None,
+    ) -> None:
+        self._guard(Permission.MANAGE_SECURITY_SETTINGS)
+        settings = SettingsRepository(self._conn)
+        now = self._clock()
+        try:
+            if company_name is not None:
+                settings.set("company_name", company_name)
+            if logo_path is not None:
+                settings.set("logo_path", logo_path)
+            self._audit.record(
+                account_id=self._session.account_id,
+                action_type="company_profile.update",
+                result="success",
+                created_at=now,
+                entity_type="app_settings",
+            )
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
 
     def _guard(self, permission: Permission) -> None:
         self._session.require_unlocked()
