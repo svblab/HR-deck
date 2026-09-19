@@ -53,9 +53,7 @@ def _hr_session(conn: object, session: SessionState, hr_id: int) -> SessionState
 
 def test_reset_password_happy_path(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T17:00:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T17:00:00Z")
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
     before = AccountRepository(conn).get_by_id(hr_id)
     assert before is not None
@@ -90,9 +88,7 @@ def test_reset_password_happy_path(tmp_path: Path) -> None:
 
 def test_reset_password_forbidden_for_non_admin(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T17:10:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T17:10:00Z")
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
     hr_mgr = AccountManagementService(
         conn, _hr_session(conn, session, hr_id), db_path=db, clock=lambda: "2026-08-26T17:11:00Z"
@@ -104,9 +100,7 @@ def test_reset_password_forbidden_for_non_admin(tmp_path: Path) -> None:
 
 def test_reset_password_empty_rejected(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T17:20:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T17:20:00Z")
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
     with pytest.raises(AccountManagementError, match="password is required"):
         mgr.reset_password(hr_id, "")
@@ -115,9 +109,7 @@ def test_reset_password_empty_rejected(tmp_path: Path) -> None:
 
 def test_reset_password_missing_account(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T17:30:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T17:30:00Z")
     with pytest.raises(AccountManagementError, match="account not found"):
         mgr.reset_password(9_999, "Whatever-1")
     conn.close()  # type: ignore[union-attr]
@@ -125,9 +117,7 @@ def test_reset_password_missing_account(tmp_path: Path) -> None:
 
 def test_security_settings_round_trip_and_audit(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T18:00:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T18:00:00Z")
     mgr.update_security_settings(
         inactivity_timeout_seconds=120,
         inactivity_timeout_enabled=False,
@@ -144,8 +134,7 @@ def test_security_settings_round_trip_and_audit(tmp_path: Path) -> None:
     assert session.inactivity_timeout_seconds == 120
     assert session.inactivity_timeout_enabled is False
     rows = conn.execute(  # type: ignore[union-attr]
-        "SELECT action_type, result, entity_type FROM user_action_log "
-        "WHERE action_type = ?",
+        "SELECT action_type, result, entity_type FROM user_action_log WHERE action_type = ?",
         ("security.settings_update",),
     ).fetchall()
     assert ("security.settings_update", "success", "app_settings") in {
@@ -156,9 +145,7 @@ def test_security_settings_round_trip_and_audit(tmp_path: Path) -> None:
 
 def test_security_settings_reject_negative_values(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T18:10:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T18:10:00Z")
     with pytest.raises(AccountManagementError, match="invalid inactivity timeout"):
         mgr.update_security_settings(inactivity_timeout_seconds=-1)
     with pytest.raises(AccountManagementError, match="invalid login delay"):
@@ -169,11 +156,45 @@ def test_security_settings_reject_negative_values(tmp_path: Path) -> None:
     conn.close()  # type: ignore[union-attr]
 
 
+def test_company_profile_round_trip_and_audit(tmp_path: Path) -> None:
+    db, conn, session = _setup(tmp_path)
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T18:30:00Z")
+    mgr.update_company_profile(
+        company_name="ООО Тест",
+        logo_path=str(tmp_path / "logo.png"),
+    )
+    got = mgr.get_company_profile()
+    assert got == {
+        "company_name": "ООО Тест",
+        "logo_path": str(tmp_path / "logo.png"),
+    }
+    rows = conn.execute(  # type: ignore[union-attr]
+        "SELECT action_type, result, entity_type FROM user_action_log WHERE action_type = ?",
+        ("company_profile.update",),
+    ).fetchall()
+    assert ("company_profile.update", "success", "app_settings") in {
+        (r[0], r[1], r[2]) for r in rows
+    }
+    conn.close()  # type: ignore[union-attr]
+
+
+def test_company_profile_forbidden_for_non_admin(tmp_path: Path) -> None:
+    db, conn, session = _setup(tmp_path)
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T18:35:00Z")
+    hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
+    hr_mgr = AccountManagementService(
+        conn, _hr_session(conn, session, hr_id), db_path=db, clock=lambda: "2026-08-26T18:36:00Z"
+    )
+    with pytest.raises(AuthorizationError):
+        hr_mgr.get_company_profile()
+    with pytest.raises(AuthorizationError):
+        hr_mgr.update_company_profile(company_name="X")
+    conn.close()  # type: ignore[union-attr]
+
+
 def test_security_settings_forbidden_for_non_admin(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T18:20:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T18:20:00Z")
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
     hr_mgr = AccountManagementService(
         conn, _hr_session(conn, session, hr_id), db_path=db, clock=lambda: "2026-08-26T18:21:00Z"
@@ -189,9 +210,7 @@ def test_create_account_keywrap_failure_rolls_back_db(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T19:00:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T19:00:00Z")
 
     def _boom(*_a: object, **_k: object) -> None:
         raise OSError("disk full")
@@ -216,9 +235,7 @@ def test_reset_password_keywrap_failure_rolls_back_hash(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T19:10:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T19:10:00Z")
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
     hash_before = AccountRepository(conn).get_by_id(hr_id).password_hash  # type: ignore[union-attr]
 
@@ -262,9 +279,7 @@ def test_list_set_role_and_set_active_for_non_admin(tmp_path: Path) -> None:
 
 def test_create_account_requires_login_and_password(tmp_path: Path) -> None:
     db, conn, session = _setup(tmp_path)
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-26T19:30:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-26T19:30:00Z")
     with pytest.raises(AccountManagementError, match="login and password are required"):
         mgr.create_account(login="  ", password="x", role=RoleCode.OBSERVER)
     with pytest.raises(AccountManagementError, match="login and password are required"):

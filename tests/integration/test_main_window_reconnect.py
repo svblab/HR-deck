@@ -37,9 +37,7 @@ def _row_for(window: MainWindow, employee_id: int):
 
 
 @pytest.mark.acceptance
-def test_replace_connection_reloads_roster_from_restored_db(
-    qtbot, tmp_path: Path
-) -> None:
+def test_replace_connection_reloads_roster_from_restored_db(qtbot, tmp_path: Path) -> None:
     db, conn, session, backup, ids, _clock = _open(tmp_path)
     emp_id = ids["employee_a_id"]
     original_name = "Иванов Иван Иванович"
@@ -83,6 +81,27 @@ def test_replace_connection_reloads_roster_from_restored_db(
     again = _row_for(window, emp_id)
     assert again is not None
     assert again.full_name == original_name
+
+    window.close()
+    new_conn.close()
+
+
+@pytest.mark.acceptance
+def test_replace_connection_refreshes_branding(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db, conn, session, backup, _ids, _clock = _open(tmp_path)
+    window = MainWindow(conn=conn, session=session, db_path=db)
+    qtbot.addWidget(window)
+
+    calls: list[int] = []
+    monkeypatch.setattr(window, "_refresh_branding", lambda: calls.append(1))
+
+    snapshot = backup.create_backup(tmp_path / "external")
+    new_conn = backup.restore_backup(snapshot)
+    window._replace_connection(new_conn)
+
+    assert calls == [1]
 
     window.close()
     new_conn.close()
