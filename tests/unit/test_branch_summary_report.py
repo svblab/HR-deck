@@ -78,8 +78,12 @@ def test_build_branch_summary_rows_groups_by_division() -> None:
         _roster_row(employee_id=3, full_name="Сидоров С.С.", division_name="Продажи", status_id=4),
         _roster_row(employee_id=4, full_name="Смирнов А.А.", division_name="Продажи", status_id=3),
         _roster_row(employee_id=5, full_name="Кузнецов К.К.", division_name="Продажи", status_id=3),
-        _roster_row(employee_id=6, full_name="Орлова О.О.", division_name="Бухгалтерия", status_id=5),
-        _roster_row(employee_id=7, full_name="Волкова В.В.", division_name="Бухгалтерия", status_id=4),
+        _roster_row(
+            employee_id=6, full_name="Орлова О.О.", division_name="Бухгалтерия", status_id=5
+        ),
+        _roster_row(
+            employee_id=7, full_name="Волкова В.В.", division_name="Бухгалтерия", status_id=4
+        ),
         _roster_row(employee_id=8, full_name="Федоров Ф.Ф.", division_name="IT", status_id=5),
         _roster_row(employee_id=9, full_name="Егоров Е.Е.", division_name="IT", status_id=4),
         _roster_row(employee_id=10, full_name="Рабочий Р.Р.", division_name="IT", status_id=1),
@@ -140,7 +144,11 @@ def test_branch_summary_service_builds_context(tmp_path: Path) -> None:
 
 def test_build_branch_summary_context_scalars() -> None:
     status_codes = {5: "vacation"}
-    rows = [_roster_row(employee_id=1, full_name="Иванов И.И.", division_name="Продажи", status_id=5)]
+    rows = [
+        _roster_row(
+            employee_id=1, full_name="Иванов И.И.", division_name="Продажи", status_id=5
+        )
+    ]
     scalars, row_records = build_branch_summary_context(
         rows,
         status_codes,
