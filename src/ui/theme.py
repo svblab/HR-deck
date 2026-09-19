@@ -64,6 +64,9 @@ QLabel#clockDate {{
     color: {TITLEBAR_MUTED};
     font-size: 11px;
 }}
+QLabel#sessionUserLabel {{
+    color: #ffffff;
+}}
 QToolButton#titleIconBtn, QToolButton#actionLogBtn {{
     background: rgba(255, 255, 255, 0.06);
     color: #ffffff;
