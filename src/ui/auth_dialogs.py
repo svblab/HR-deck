@@ -6,12 +6,14 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -25,7 +27,7 @@ from PySide6.QtWidgets import (
 
 from data.db import Connection
 from domain.permissions import RoleCode
-from services.account_management import AccountManagementService
+from services.account_management import AccountManagementService, AccountView
 from services.authentication import AuthenticationError, AuthenticationService
 from services.bootstrap import BootstrapError, BootstrapService
 from services.session import SessionState
@@ -219,6 +221,7 @@ class UnlockDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Сессия заблокирована")
         self.setModal(True)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self._session = session
         self._db_path = db_path
         self._conn = conn
@@ -232,6 +235,12 @@ class UnlockDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self._submit)
         layout.addWidget(buttons)
+        self._password.setFocus()
+
+    def showEvent(self, event) -> None:  # noqa: ANN001, N802
+        super().showEvent(event)
+        self._password.setFocus()
+        self._password.selectAll()
 
     def _submit(self) -> None:
         try:
@@ -247,6 +256,23 @@ class UnlockDialog(QDialog):
         self.accept()
 
 
+class _ResetPasswordDialog(QDialog):
+    def __init__(self, login: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Сброс пароля")
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(f"Новый пароль для «{login}»"))
+        self._password = QLineEdit()
+        self._password.setEchoMode(QLineEdit.EchoMode.Password)
+        layout.addWidget(self._password)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+
 class AccountsDialog(QDialog):
     def __init__(
         self,
@@ -256,9 +282,14 @@ class AccountsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Учётные записи")
         self._service = service
+        self._acting_id = service.acting_account_id
         layout = QVBoxLayout(self)
-        self._table = QTableWidget(0, 4)
-        self._table.setHorizontalHeaderLabels(["ID", "Логин", "Роль", "Активна"])
+        self._table = QTableWidget(0, 5)
+        self._table.setHorizontalHeaderLabels(["ID", "Логин", "Роль", "Активна", "Действия"])
+        self._table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self._table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        header = self._table.horizontalHeader()
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self._table)
 
         form = QFormLayout()
@@ -266,7 +297,7 @@ class AccountsDialog(QDialog):
         self._password = QLineEdit()
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
         self._role = QComboBox()
-        for role in RoleCode:
+        for role in (RoleCode.HR_EMPLOYEE, RoleCode.OBSERVER):
             self._role.addItem(role.value, role)
         form.addRow("Логин", self._login)
         form.addRow("Пароль", self._password)
@@ -308,11 +339,85 @@ class AccountsDialog(QDialog):
             self._table.setItem(i, 1, QTableWidgetItem(row.login))
             self._table.setItem(i, 2, QTableWidgetItem(row.role_code))
             self._table.setItem(i, 3, QTableWidgetItem("да" if row.is_active else "нет"))
+            self._table.setCellWidget(i, 4, self._actions_widget(row))
         settings = self._service.get_security_settings()
         self._timeout.setValue(int(settings["inactivity_timeout_seconds"]))
         self._timeout_enabled.setChecked(bool(settings["inactivity_timeout_enabled"]))
         self._delay.setValue(int(settings["login_failure_delay_seconds"]))
         self._delay_enabled.setChecked(bool(settings["login_failure_delay_enabled"]))
+
+    def _actions_widget(self, row: AccountView) -> QWidget:
+        box = QWidget()
+        layout = QHBoxLayout(box)
+        layout.setContentsMargins(0, 0, 0, 0)
+        is_admin = row.role_code == RoleCode.ADMINISTRATOR.value
+        is_self = row.id == self._acting_id
+        can_edit_role = not is_admin and not is_self
+        role_combo = QComboBox(objectName=f"accountRoleCombo_{row.id}")
+        for role in (RoleCode.HR_EMPLOYEE, RoleCode.OBSERVER):
+            role_combo.addItem(role.value, role.value)
+        idx = role_combo.findData(row.role_code)
+        if idx >= 0:
+            role_combo.setCurrentIndex(idx)
+        role_combo.setEnabled(can_edit_role)
+        apply_btn = QPushButton("Применить", objectName=f"accountApplyRoleBtn_{row.id}")
+        apply_btn.setEnabled(can_edit_role)
+        apply_btn.clicked.connect(
+            lambda _checked=False, account_id=row.id, combo=role_combo: self._apply_role(
+                account_id, combo
+            )
+        )
+        archive_btn = QPushButton(
+            "Восстановить" if not row.is_active else "Архивировать",
+            objectName=f"accountToggleActiveBtn_{row.id}",
+        )
+        archive_btn.setEnabled(not is_self and not (is_admin and row.is_active))
+        archive_btn.clicked.connect(
+            lambda _checked=False, account_id=row.id: self._toggle_active(account_id)
+        )
+        reset_btn = QPushButton(
+            "Сбросить пароль", objectName=f"accountResetPasswordBtn_{row.id}"
+        )
+        reset_btn.clicked.connect(
+            lambda _checked=False, account_id=row.id, login=row.login: self._reset_password(
+                account_id, login
+            )
+        )
+        layout.addWidget(role_combo)
+        layout.addWidget(apply_btn)
+        layout.addWidget(archive_btn)
+        layout.addWidget(reset_btn)
+        return box
+
+    def _apply_role(self, account_id: int, combo: QComboBox) -> None:
+        role = combo.currentData()
+        try:
+            self._service.set_role(account_id, role)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Учётные записи", str(exc))
+            return
+        self._reload()
+
+    def _toggle_active(self, account_id: int) -> None:
+        row = next(r for r in self._service.list_accounts() if r.id == account_id)
+        try:
+            self._service.set_active(account_id, not row.is_active)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Учётные записи", str(exc))
+            return
+        self._reload()
+
+    def _reset_password(self, account_id: int, login: str) -> None:
+        dlg = _ResetPasswordDialog(login, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        try:
+            self._service.reset_password(account_id, dlg._password.text())
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Учётные записи", str(exc))
+            return
+        QMessageBox.information(self, "Учётные записи", "Пароль обновлён.")
+        self._reload()
 
     def _create(self) -> None:
         role = self._role.currentData()
