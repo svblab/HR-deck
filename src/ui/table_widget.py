@@ -50,6 +50,12 @@ class TableWidget(QTableWidget):
                 item.setData(Qt.ItemDataRole.UserRole, row.employee_id)
                 if row.needs_clarification and col in {4, 6}:
                     item.setForeground(Qt.GlobalColor.red)
+                elif row.needs_org_review and col == 3:
+                    item.setForeground(Qt.GlobalColor.darkYellow)
+                    item.setToolTip(
+                        "Требует внимания: проверьте департамент/отдел после "
+                        "изменения требований к должности."
+                    )
                 self.setItem(i, col, item)
 
     def _on_cell(self, row: int, _column: int) -> None:

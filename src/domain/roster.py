@@ -22,7 +22,7 @@ class RosterRow:
     position_name: str
     branch_id: int
     branch_name: str
-    department_id: int
+    department_id: int | None
     department_name: str
     division_id: int | None
     division_name: str | None
@@ -32,6 +32,7 @@ class RosterRow:
     start_date: str | None
     end_date: str | None
     needs_clarification: bool
+    needs_org_review: bool
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class RosterFilters:
     department_id: int | None = None
     division_id: int | None = None
     only_needing_clarification: bool = False
+    only_needing_org_review: bool = False
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,8 @@ def apply_filters(rows: list[RosterRow], filters: RosterFilters) -> list[RosterR
             continue
         if filters.only_needing_clarification and not row.needs_clarification:
             continue
+        if filters.only_needing_org_review and not row.needs_org_review:
+            continue
         out.append(row)
     return out
 
@@ -129,10 +133,15 @@ def group_rows(
         for spec in columns
     ]
     if extras:
+        extras_title = (
+            "Без департамента"
+            if group_by == GroupBy.DEPARTMENT
+            else UNASSIGNED_COLUMN_TITLE
+        )
         result.append(
             RosterColumn(
                 key=UNASSIGNED_COLUMN_ID,
-                title=UNASSIGNED_COLUMN_TITLE,
+                title=extras_title,
                 color_hex="#A32D2D",
                 rows=tuple(extras),
             )
@@ -145,4 +154,6 @@ def _group_key(row: RosterRow, group_by: GroupBy) -> int:
         return row.status_id if row.status_id is not None else UNASSIGNED_COLUMN_ID
     if group_by == GroupBy.BRANCH:
         return row.branch_id
+    if row.department_id is None:
+        return UNASSIGNED_COLUMN_ID
     return row.department_id

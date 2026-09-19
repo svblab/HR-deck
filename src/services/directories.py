@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -11,8 +12,10 @@ from data.directories import (
     DepartmentRepository,
     DivisionRepository,
     EmploymentTypeRepository,
+    PositionRecord,
     PositionRepository,
 )
+from data.employees import EmployeeRecord, EmployeeRepository
 from data.repositories import UserActionLogRepository
 from domain.permissions import Permission
 from services.authorization import AuthorizationError, AuthorizationService
@@ -50,6 +53,7 @@ class DirectoryService:
         self._divisions = DivisionRepository(conn)
         self._positions = PositionRepository(conn)
         self._employment_types = EmploymentTypeRepository(conn)
+        self._employees = EmployeeRepository(conn)
 
     # --- Branches ---
 
@@ -61,10 +65,13 @@ class DirectoryService:
         self._require(Permission.MANAGE_DIRECTORIES)
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.branch.create",
             entity_type="branch",
-            mutate=lambda: self._branches.create(name=clean, created_at=now),
+            mutate=lambda: self._branches.create(
+                external_id=external_id, name=clean, created_at=now
+            ),
             details=f"name={clean}",
         )
 
@@ -114,11 +121,12 @@ class DirectoryService:
             raise DirectoryError("cannot assign to archived branch")
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.department.create",
             entity_type="department",
             mutate=lambda: self._departments.create(
-                branch_id=branch_id, name=clean, created_at=now
+                external_id=external_id, branch_id=branch_id, name=clean, created_at=now
             ),
             details=f"branch_id={branch_id};name={clean}",
         )
@@ -158,24 +166,45 @@ class DirectoryService:
 
     # --- Divisions ---
 
-    def list_divisions(self, *, department_id: int | None = None, active_only: bool = False):
+    def list_divisions(
+        self,
+        *,
+        branch_id: int | None = None,
+        department_id: int | None = None,
+        active_only: bool = False,
+    ):
         self._require(Permission.VIEW_DIRECTORIES)
-        return self._divisions.list(department_id=department_id, active_only=active_only)
+        return self._divisions.list(
+            branch_id=branch_id, department_id=department_id, active_only=active_only
+        )
 
-    def create_division(self, department_id: int, name: str) -> int:
+    def create_division(
+        self, branch_id: int, department_id: int | None, name: str
+    ) -> int:
         self._require(Permission.MANAGE_DIRECTORIES)
-        department = self._require_department(department_id)
-        if department.is_archived:
-            raise DirectoryError("cannot assign to archived department")
+        branch = self._require_branch(branch_id)
+        if branch.is_archived:
+            raise DirectoryError("cannot assign to archived branch")
+        if department_id is not None:
+            department = self._require_department(department_id)
+            if department.branch_id != branch_id:
+                raise DirectoryError("department does not belong to branch")
+            if department.is_archived:
+                raise DirectoryError("cannot assign to archived department")
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.division.create",
             entity_type="division",
             mutate=lambda: self._divisions.create(
-                department_id=department_id, name=clean, created_at=now
+                external_id=external_id,
+                branch_id=branch_id,
+                department_id=department_id,
+                name=clean,
+                created_at=now,
             ),
-            details=f"department_id={department_id};name={clean}",
+            details=f"branch_id={branch_id};department_id={department_id};name={clean}",
         )
 
     def rename_division(self, division_id: int, name: str) -> None:
@@ -213,19 +242,43 @@ class DirectoryService:
 
     # --- Positions ---
 
-    def list_positions(self, *, active_only: bool = False):
+    def list_positions(
+        self, *, branch_id: int | None = None, active_only: bool = False
+    ):
         self._require(Permission.VIEW_DIRECTORIES)
-        return self._positions.list(active_only=active_only)
+        return self._positions.list(branch_id=branch_id, active_only=active_only)
 
-    def create_position(self, name: str) -> int:
+    def get_position(self, position_id: int) -> PositionRecord | None:
+        self._require(Permission.VIEW_DIRECTORIES)
+        return self._positions.get(position_id)
+
+    def create_position(
+        self,
+        branch_id: int,
+        name: str,
+        *,
+        department_required: bool = False,
+        division_required: bool = False,
+    ) -> int:
         self._require(Permission.MANAGE_DIRECTORIES)
+        branch = self._require_branch(branch_id)
+        if branch.is_archived:
+            raise DirectoryError("cannot assign to archived branch")
         clean = _clean_name(name)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="directory.position.create",
             entity_type="position",
-            mutate=lambda: self._positions.create(name=clean, created_at=now),
-            details=f"name={clean}",
+            mutate=lambda: self._positions.create(
+                external_id=external_id,
+                branch_id=branch_id,
+                name=clean,
+                department_required=department_required,
+                division_required=division_required,
+                created_at=now,
+            ),
+            details=f"branch_id={branch_id};name={clean}",
         )
 
     def rename_position(self, position_id: int, name: str) -> None:
@@ -260,6 +313,73 @@ class DirectoryService:
                 position_id, archived=archived, updated_at=now
             ),
         )
+
+    def preview_position_requirement_change(
+        self,
+        position_id: int,
+        *,
+        department_required: bool,
+        division_required: bool,
+    ) -> list[EmployeeRecord]:
+        self._require(Permission.VIEW_DIRECTORIES)
+        self._require_position(position_id)
+        violators: list[EmployeeRecord] = []
+        for emp in self._employees.list_by_position(position_id, active_only=True):
+            will_violate_department = department_required and emp.department_id is None
+            will_violate_division = division_required and emp.division_id is None
+            if will_violate_department or will_violate_division:
+                violators.append(emp)
+        return violators
+
+    def apply_position_requirement_change(
+        self,
+        position_id: int,
+        *,
+        department_required: bool,
+        division_required: bool,
+        reset_violations: bool = False,
+    ) -> None:
+        self._require(Permission.MANAGE_DIRECTORIES)
+        violators = self.preview_position_requirement_change(
+            position_id,
+            department_required=department_required,
+            division_required=division_required,
+        )
+        if violators and not reset_violations:
+            raise DirectoryError(
+                f"{len(violators)} employee(s) would violate the new "
+                "requirements; call again with reset_violations=True after "
+                "confirming with the user"
+            )
+        now = self._clock()
+        for emp in violators:
+            clear_department = department_required and emp.department_id is None
+            clear_division = division_required and emp.division_id is None
+            self._employees.clear_org_assignment_for_review(
+                emp.id,
+                clear_department=clear_department,
+                clear_division=clear_division,
+                updated_at=now,
+            )
+            self._audit.record(
+                account_id=self._session.account_id,
+                action_type="employee.org_review_reset",
+                result="success",
+                created_at=now,
+                entity_type="employee",
+                entity_id=emp.id,
+                details=(
+                    f"position_id={position_id} department_required="
+                    f"{department_required} division_required={division_required}"
+                ),
+            )
+        self._positions.set_org_requirements(
+            position_id,
+            department_required=department_required,
+            division_required=division_required,
+            updated_at=now,
+        )
+        self._conn.commit()
 
     # --- Employment types ---
 

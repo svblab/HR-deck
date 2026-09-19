@@ -68,7 +68,12 @@ class RosterPanel(QWidget):
         self._all_rows: list[RosterRow] = []
         self._group_by = GroupBy.STATUS
         self._name_query = ""
+        self._add_btn: QPushButton | None = None
+        self._import_btn: QPushButton | None = None
+        self._export_btn: QPushButton | None = None
 
+        if session is not None:
+            self.setObjectName(f"rosterPanel_{session.role.value}")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -108,7 +113,9 @@ class RosterPanel(QWidget):
         can_add = self._session is not None and has_permission(
             self._session.role, Permission.MANAGE_EMPLOYEES
         )
-        self._add_btn.setEnabled(bool(can_add and self._employees and self._directories))
+        add_allowed = bool(can_add and self._employees and self._directories)
+        self._add_btn.setVisible(add_allowed)
+        self._add_btn.setEnabled(add_allowed)
         self._add_btn.clicked.connect(self._open_create_form)
         can_io = self._session is not None and has_permission(
             self._session.role, Permission.IMPORT_EXPORT
@@ -116,6 +123,8 @@ class RosterPanel(QWidget):
         self._import_btn = QPushButton("Импорт", objectName="importEmployeesBtn")
         self._export_btn = QPushButton("Экспорт", objectName="exportEmployeesBtn")
         io_enabled = bool(can_io and self._employees and self._directories)
+        self._import_btn.setVisible(io_enabled)
+        self._export_btn.setVisible(io_enabled)
         self._import_btn.setEnabled(io_enabled)
         self._export_btn.setEnabled(io_enabled)
         self._import_btn.clicked.connect(self._open_import)
@@ -124,22 +133,26 @@ class RosterPanel(QWidget):
         can_reports = self._session is not None and has_permission(
             self._session.role, Permission.VIEW_STANDARD_REPORTS
         )
-        self._reports_btn.setEnabled(bool(can_reports and self._reports and self._directories))
+        reports_allowed = bool(can_reports and self._reports and self._directories)
+        self._reports_btn.setVisible(reports_allowed)
+        self._reports_btn.setEnabled(reports_allowed)
         self._reports_btn.clicked.connect(self._open_reports)
         self._directories_btn = QPushButton("Справочники", objectName="directoriesBtn")
         can_directories = self._session is not None and has_permission(
             self._session.role, Permission.VIEW_DIRECTORIES
         )
-        self._directories_btn.setEnabled(
-            bool(can_directories and self._directories and self._session)
-        )
+        directories_allowed = bool(can_directories and self._directories and self._session)
+        self._directories_btn.setVisible(directories_allowed)
+        self._directories_btn.setEnabled(directories_allowed)
         self._directories_btn.clicked.connect(self._open_directories)
         self._templates_btn = QPushButton("Шаблоны", objectName="templatesBtn")
         can_templates = self._session is not None and (
             has_permission(self._session.role, Permission.MANAGE_REPORT_TEMPLATES)
             or has_permission(self._session.role, Permission.USE_ACTIVE_REPORT_TEMPLATES)
         )
-        self._templates_btn.setEnabled(bool(can_templates and self._templates and self._session))
+        templates_allowed = bool(can_templates and self._templates and self._session)
+        self._templates_btn.setVisible(templates_allowed)
+        self._templates_btn.setEnabled(templates_allowed)
         self._templates_btn.clicked.connect(self._open_templates)
         self._board_btn = QPushButton("Доска", objectName="viewToggleActive")
         self._table_btn = QPushButton("Таблица", objectName="viewToggleInactive")
@@ -184,6 +197,9 @@ class RosterPanel(QWidget):
         self._only_clarify = QCheckBox("Только требующие уточнения")
         self._only_clarify.setObjectName("clarifyFilter")
         self._only_clarify.toggled.connect(self._render)
+        self._only_org_review = QCheckBox("Только «Требует внимания»")
+        self._only_org_review.setObjectName("orgReviewFilter")
+        self._only_org_review.toggled.connect(self._render)
         self._show_archived = QCheckBox("Показать архив")
         self._show_archived.setObjectName("showArchivedFilter")
         self._show_archived.toggled.connect(self._on_show_archived_changed)
@@ -193,6 +209,7 @@ class RosterPanel(QWidget):
         row2.addWidget(reset)
         row2.addWidget(self._group_combo)
         row2.addWidget(self._only_clarify)
+        row2.addWidget(self._only_org_review)
         row2.addWidget(self._show_archived)
         row2.addStretch(1)
         outer.addLayout(row2)
@@ -201,6 +218,7 @@ class RosterPanel(QWidget):
     def reset_filters(self) -> None:
         self._name_query = ""
         self._only_clarify.setChecked(False)
+        self._only_org_review.setChecked(False)
         self._show_archived.setChecked(False)
         self._group_combo.setCurrentIndex(0)
         self._fill_branch_combo()
@@ -278,16 +296,24 @@ class RosterPanel(QWidget):
             department_id=self._combo_id(self._dept),
             division_id=self._combo_id(self._div),
             only_needing_clarification=self._only_clarify.isChecked(),
+            only_needing_org_review=self._only_org_review.isChecked(),
         )
 
     def _render(self) -> None:
         filtered = apply_filters(self._all_rows, self._filters())
-        total, by_status, needing = summary_counts(filtered)
+        total, by_status, _needing_filtered = summary_counts(filtered)
+        _, _, needing_total = summary_counts(self._all_rows)
+        show_clarify = needing_total > 0
+        self._clarify_btn.setVisible(show_clarify)
+        self._only_clarify.setVisible(show_clarify)
+        if not show_clarify and self._only_clarify.isChecked():
+            self._only_clarify.setChecked(False)
         parts = [f"<b>{total}</b> сотрудников"]
         parts.extend(f"{name}: <b>{n}</b>" for name, n in by_status.items() if n)
         self._summary.setText(" · ".join(parts))
         self._summary.setTextFormat(Qt.TextFormat.RichText)
-        self._clarify_btn.setText(f"Требуют уточнения: {needing}")
+        if show_clarify:
+            self._clarify_btn.setText(f"Требуют уточнения: {needing_total}")
         columns = group_rows(filtered, self._group_by, self._service.column_specs(self._group_by))
         self._board.set_columns(columns)
         self._table.set_rows(filtered)

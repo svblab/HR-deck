@@ -5,14 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
 
 from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.bootstrap import BootstrapService
-from ui.auth_dialogs import LoginDialog, UnlockDialog
+from services.directories import DirectoryService
+from ui.auth_dialogs import AccountsDialog, LoginDialog, UnlockDialog
+from ui.directories_dialog import DirectoriesDialog
 from ui.main_window import MainWindow
 
 
@@ -172,3 +174,113 @@ def test_main_window_idle_lock_cancel_closes_window(qtbot, tmp_path: Path) -> No
     window._check_idle()
 
     assert window.isHidden() or not window.isVisible()
+
+
+@pytest.mark.acceptance
+def test_activity_inside_modal_resets_idle_timer(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db = _seed_accounts(tmp_path)
+    auth = AuthenticationService(sleeper=lambda _s: None)
+    conn, session = auth.login(db_path=db, login="admin", password="AdminPass-1")
+    session.inactivity_timeout_seconds = 10
+
+    now = {"t": 5000.0}
+    monkeypatch.setattr("services.session.monotonic", lambda: now["t"])
+
+    window = MainWindow(conn=conn, session=session, db_path=db)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+
+    directories = DirectoryService(conn, session)
+    dlg = DirectoriesDialog(directories, session, window)
+    dlg.show()
+    qtbot.waitExposed(dlg)
+
+    session.last_activity_mono = 5000.0
+    now["t"] = 5011.0
+    qtbot.mouseClick(dlg, Qt.MouseButton.LeftButton)
+
+    assert session.last_activity_mono == 5011.0
+    assert not session.check_inactivity(5020.0)
+    assert session.check_inactivity(5021.0)
+
+    dlg.close()
+    window.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_idle_lock_dismisses_directories_dialog(qtbot, tmp_path: Path) -> None:
+    db = _seed_accounts(tmp_path)
+    auth = AuthenticationService(sleeper=lambda _s: None)
+    conn, session = auth.login(db_path=db, login="admin", password="AdminPass-1")
+
+    window = MainWindow(conn=conn, session=session, db_path=db)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+
+    directories = DirectoryService(conn, session)
+    dlg = DirectoriesDialog(directories, session, window)
+    dlg.show()
+    qtbot.waitExposed(dlg)
+    assert dlg.isVisible()
+
+    def _unlock() -> None:
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, UnlockDialog) and widget.isVisible():
+                assert not dlg.isVisible()
+                widget._auth = auth
+                widget._password.setText("AdminPass-1")
+                widget._submit()
+                return
+        raise AssertionError("UnlockDialog not visible")
+
+    session.lock(clear_key=True)
+    QTimer.singleShot(0, _unlock)
+    window._check_idle()
+
+    assert not dlg.isVisible()
+    assert not session.locked
+    assert window._conn is not None
+    window.close()
+    window._conn.close()
+
+
+@pytest.mark.acceptance
+def test_idle_lock_dismisses_accounts_dialog(qtbot, tmp_path: Path) -> None:
+    db = _seed_accounts(tmp_path)
+    auth = AuthenticationService(sleeper=lambda _s: None)
+    conn, session = auth.login(db_path=db, login="admin", password="AdminPass-1")
+    service = AccountManagementService(conn, session, db_path=db)
+
+    window = MainWindow(conn=conn, session=session, db_path=db)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+
+    dlg = AccountsDialog(service, window)
+    dlg.show()
+    qtbot.waitExposed(dlg)
+    assert dlg.isVisible()
+
+    def _unlock() -> None:
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, UnlockDialog) and widget.isVisible():
+                assert not dlg.isVisible()
+                widget._auth = auth
+                widget._password.setText("AdminPass-1")
+                widget._submit()
+                return
+        raise AssertionError("UnlockDialog not visible")
+
+    session.lock(clear_key=True)
+    QTimer.singleShot(0, _unlock)
+    window._check_idle()
+
+    assert not dlg.isVisible()
+    assert not session.locked
+    window.close()
+    window._conn.close()

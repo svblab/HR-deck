@@ -11,10 +11,11 @@ from data.db import Connection
 @dataclass(frozen=True)
 class EmployeeRecord:
     id: int
+    external_id: str
     full_name: str
     position_id: int
     branch_id: int
-    department_id: int
+    department_id: int | None
     division_id: int | None
     employment_type_id: int
     note: str | None
@@ -22,6 +23,7 @@ class EmployeeRecord:
     contacts: str | None
     home_address: str | None
     social_insurance_number: str | None
+    needs_org_review: bool
     is_archived: bool
     created_at: str
     updated_at: str
@@ -32,14 +34,21 @@ class EmployeeRepository:
         self._conn = conn
 
     _SELECT = (
-        "SELECT id, full_name, position_id, branch_id, department_id, division_id,"
+        "SELECT id, external_id, full_name, position_id, branch_id, department_id, division_id,"
         " employment_type_id, note, hire_date, contacts, home_address,"
-        " social_insurance_number, is_archived, created_at, updated_at"
+        " social_insurance_number, needs_org_review, is_archived, created_at, updated_at"
         " FROM employees"
     )
 
     def get(self, employee_id: int) -> EmployeeRecord | None:
         row = self._conn.execute(f"{self._SELECT} WHERE id = ?", (employee_id,)).fetchone()
+        return _row(row) if row else None
+
+    def get_by_external_id(self, external_id: str) -> EmployeeRecord | None:
+        row = self._conn.execute(
+            f"{self._SELECT} WHERE external_id = ?",
+            (external_id,),
+        ).fetchone()
         return _row(row) if row else None
 
     def list(self, *, active_only: bool = True) -> builtins.list[EmployeeRecord]:
@@ -48,6 +57,16 @@ class EmployeeRepository:
             sql += " WHERE is_archived = 0"
         sql += " ORDER BY full_name, id"
         return [_row(r) for r in self._conn.execute(sql).fetchall()]
+
+    def list_by_position(
+        self, position_id: int, *, active_only: bool = True
+    ) -> builtins.list[EmployeeRecord]:
+        sql = f"{self._SELECT} WHERE position_id = ?"
+        params: list[object] = [position_id]
+        if active_only:
+            sql += " AND is_archived = 0"
+        sql += " ORDER BY full_name, id"
+        return [_row(r) for r in self._conn.execute(sql, params).fetchall()]
 
     def search_by_name(self, prefix: str, *, limit: int = 50) -> builtins.list[EmployeeRecord]:
         pattern = f"{prefix}%"
@@ -61,10 +80,11 @@ class EmployeeRepository:
     def create(
         self,
         *,
+        external_id: str,
         full_name: str,
         position_id: int,
         branch_id: int,
-        department_id: int,
+        department_id: int | None,
         employment_type_id: int,
         created_at: str,
         division_id: int | None = None,
@@ -72,11 +92,12 @@ class EmployeeRepository:
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO employees ("
-            " full_name, position_id, branch_id, department_id, division_id,"
+            " external_id, full_name, position_id, branch_id, department_id, division_id,"
             " employment_type_id, note, hire_date, contacts, home_address,"
             " social_insurance_number, is_archived, created_at, updated_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)",
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)",
             (
+                external_id,
                 full_name,
                 position_id,
                 branch_id,
@@ -97,7 +118,7 @@ class EmployeeRepository:
         full_name: str,
         position_id: int,
         branch_id: int,
-        department_id: int,
+        department_id: int | None,
         employment_type_id: int,
         updated_at: str,
         division_id: int | None = None,
@@ -141,22 +162,52 @@ class EmployeeRepository:
             (1 if archived else 0, updated_at, employee_id),
         )
 
+    def clear_org_assignment_for_review(
+        self,
+        employee_id: int,
+        *,
+        clear_department: bool,
+        clear_division: bool,
+        updated_at: str,
+    ) -> None:
+        self._conn.execute(
+            "UPDATE employees SET"
+            " department_id = CASE WHEN ? THEN NULL ELSE department_id END,"
+            " division_id = CASE WHEN ? THEN NULL ELSE division_id END,"
+            " needs_org_review = 1, updated_at = ?"
+            " WHERE id = ?",
+            (
+                int(clear_department),
+                int(clear_division),
+                updated_at,
+                employee_id,
+            ),
+        )
+
+    def clear_needs_org_review(self, employee_id: int, *, updated_at: str) -> None:
+        self._conn.execute(
+            "UPDATE employees SET needs_org_review = 0, updated_at = ? WHERE id = ?",
+            (updated_at, employee_id),
+        )
+
 
 def _row(row: tuple[object, ...]) -> EmployeeRecord:
     return EmployeeRecord(
         id=int(row[0]),
-        full_name=str(row[1]),
-        position_id=int(row[2]),
-        branch_id=int(row[3]),
-        department_id=int(row[4]),
-        division_id=int(row[5]) if row[5] is not None else None,
-        employment_type_id=int(row[6]),
-        note=str(row[7]) if row[7] is not None else None,
-        hire_date=str(row[8]) if row[8] is not None else None,
-        contacts=str(row[9]) if row[9] is not None else None,
-        home_address=str(row[10]) if row[10] is not None else None,
-        social_insurance_number=str(row[11]) if row[11] is not None else None,
-        is_archived=bool(int(row[12])),
-        created_at=str(row[13]),
-        updated_at=str(row[14]),
+        external_id=str(row[1]),
+        full_name=str(row[2]),
+        position_id=int(row[3]),
+        branch_id=int(row[4]),
+        department_id=int(row[5]) if row[5] is not None else None,
+        division_id=int(row[6]) if row[6] is not None else None,
+        employment_type_id=int(row[7]),
+        note=str(row[8]) if row[8] is not None else None,
+        hire_date=str(row[9]) if row[9] is not None else None,
+        contacts=str(row[10]) if row[10] is not None else None,
+        home_address=str(row[11]) if row[11] is not None else None,
+        social_insurance_number=str(row[12]) if row[12] is not None else None,
+        needs_org_review=bool(int(row[13])),
+        is_archived=bool(int(row[14])),
+        created_at=str(row[15]),
+        updated_at=str(row[16]),
     )

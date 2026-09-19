@@ -77,7 +77,7 @@ def test_cascade_branch_department_division(tmp_path: Path) -> None:
     svc = DirectoryService(conn, session, clock=lambda: "2026-08-26T13:10:00Z")
     branch_id = svc.create_branch("Бета")
     dept_id = svc.create_department(branch_id, "Департамент IT")
-    div_id = svc.create_division(dept_id, "Отдел платформы")
+    div_id = svc.create_division(branch_id, dept_id, "Отдел платформы")
     assert len(svc.list_departments(branch_id=branch_id)) >= 1
     assert len(svc.list_divisions(department_id=dept_id)) == 1
     assert svc.list_divisions(department_id=dept_id)[0].id == div_id
@@ -88,7 +88,8 @@ def test_cascade_branch_department_division(tmp_path: Path) -> None:
 def test_archive_excluded_from_active_only(tmp_path: Path) -> None:
     conn, session, _db = _open_db(tmp_path)
     svc = DirectoryService(conn, session, clock=lambda: "2026-08-26T13:20:00Z")
-    pos_id = svc.create_position("Инженер-тест")
+    branch_id = svc.create_branch("Бета")
+    pos_id = svc.create_position(branch_id, "Инженер-тест")
     svc.archive_position(pos_id)
     active_ids = {p.id for p in svc.list_positions(active_only=True)}
     all_ids = {p.id for p in svc.list_positions(active_only=False)}

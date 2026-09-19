@@ -35,8 +35,6 @@ _REQUIRED = (
     ("full_name", "ФИО"),
     ("position_id", "должность"),
     ("branch_id", "филиал"),
-    ("department_id", "департамент"),
-    ("division_id", "отдел"),
     ("employment_type_id", "тип занятости"),
 )
 
@@ -66,6 +64,7 @@ class EmployeeCardDialog(QDialog):
         self.status_changed = False
         self._is_archived = False
         self._loading = False
+        self._position_requirements: tuple[bool, bool] = (False, False)
         self._original_sensitive: tuple[str | None, str | None] = (None, None)
         self._sensitive_masked = False
 
@@ -110,6 +109,11 @@ class EmployeeCardDialog(QDialog):
             self._home.hide()
             self._insurance.hide()
         layout.addLayout(form)
+        self._org_review = QLabel(objectName="orgReviewHint")
+        self._org_review.setWordWrap(True)
+        self._org_review.setStyleSheet("color: #B8860B; font-size: 12px; font-weight: 600;")
+        self._org_review.hide()
+        layout.addWidget(self._org_review)
         self._similar = QLabel(objectName="similarNamesHint")
         self._similar.setWordWrap(True)
         self._similar.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
@@ -144,7 +148,9 @@ class EmployeeCardDialog(QDialog):
         layout.addWidget(buttons)
         self._branch.currentIndexChanged.connect(self._on_branch_changed)
         self._department.currentIndexChanged.connect(self._on_dept_changed)
+        self._position.currentIndexChanged.connect(self._on_position_changed)
         self._fill_static_combos()
+        self._refresh_position_requirements()
         if employee_id is not None:
             self._load(employee_id)
         if not can_manage:
@@ -208,21 +214,24 @@ class EmployeeCardDialog(QDialog):
             self.accept()
 
     def _fill_static_combos(self) -> None:
+        previous_loading = self._loading
         self._loading = True
-        _fill_combo(self._position, self._directories.list_positions(active_only=True), "Должность")
         _fill_combo(self._branch, self._directories.list_branches(active_only=True), "Филиал")
         _fill_combo(
             self._employment,
             self._directories.list_employment_types(active_only=True),
             "Тип занятости",
         )
+        self._fill_positions()
         self._fill_departments()
         self._fill_divisions()
-        self._loading = False
+        self._loading = previous_loading
 
     def _on_branch_changed(self) -> None:
         if self._loading:
             return
+        self._fill_positions()
+        self._refresh_position_requirements()
         self._fill_departments()
         self._fill_divisions()
 
@@ -230,6 +239,32 @@ class EmployeeCardDialog(QDialog):
         if self._loading:
             return
         self._fill_divisions()
+
+    def _on_position_changed(self) -> None:
+        if self._loading:
+            return
+        self._refresh_position_requirements()
+
+    def _refresh_position_requirements(self) -> None:
+        pos_id = _combo_id(self._position)
+        if pos_id is None:
+            self._position_requirements = (False, False)
+            return
+        position = self._directories.get_position(pos_id)
+        self._position_requirements = (
+            (position.department_required, position.division_required)
+            if position is not None
+            else (False, False)
+        )
+
+    def _fill_positions(self) -> None:
+        branch_id = _combo_id(self._branch)
+        items = (
+            self._directories.list_positions(branch_id=branch_id, active_only=True)
+            if branch_id is not None
+            else []
+        )
+        _fill_combo(self._position, items, "Должность")
 
     def _fill_departments(self) -> None:
         branch_id = _combo_id(self._branch)
@@ -241,10 +276,17 @@ class EmployeeCardDialog(QDialog):
         _fill_combo(self._department, items, "Департамент")
 
     def _fill_divisions(self) -> None:
+        branch_id = _combo_id(self._branch)
         dept_id = _combo_id(self._department)
         items = (
-            self._directories.list_divisions(department_id=dept_id, active_only=True)
-            if dept_id is not None
+            [
+                d
+                for d in self._directories.list_divisions(
+                    branch_id=branch_id, active_only=True
+                )
+                if d.department_id == dept_id
+            ]
+            if branch_id is not None
             else []
         )
         _fill_combo(self._division, items, "Отдел")
@@ -271,9 +313,13 @@ class EmployeeCardDialog(QDialog):
         if card.division_id is not None:
             _include_if_missing(
                 self._division,
-                self._directories.list_divisions(
-                    department_id=card.department_id, active_only=False
-                ),
+                [
+                    d
+                    for d in self._directories.list_divisions(
+                        branch_id=card.branch_id, active_only=False
+                    )
+                    if d.department_id == card.department_id
+                ],
                 card.division_id,
             )
             _select(self._division, card.division_id)
@@ -290,6 +336,16 @@ class EmployeeCardDialog(QDialog):
             self._home.setText(card.home_address or "")
             self._insurance.setText(card.social_insurance_number or "")
         self._loading = False
+        self._refresh_position_requirements()
+        if card.needs_org_review:
+            self._org_review.setText(
+                "Требует внимания: после изменения требований к должности "
+                "данные организационной привязки были сброшены — "
+                "проверьте департамент/отдел."
+            )
+            self._org_review.show()
+        else:
+            self._org_review.hide()
         self._refresh_similar()
         self._apply_archived_state()
 
@@ -359,14 +415,20 @@ class EmployeeCardDialog(QDialog):
             "division_id": _combo_id(self._division),
             "employment_type_id": _combo_id(self._employment),
         }
-        return [label for key, label in _REQUIRED if values[key] is None]
+        missing = [label for key, label in _REQUIRED if values[key] is None]
+        dept_required, div_required = self._position_requirements
+        if dept_required and values["department_id"] is None and "департамент" not in missing:
+            missing.append("департамент")
+        if div_required and values["division_id"] is None and "отдел" not in missing:
+            missing.append("отдел")
+        return missing
 
     def _payload(self) -> EmployeeCreateInput:
         return EmployeeCreateInput(
             full_name=self._name.text(),
             position_id=_combo_id(self._position) or 0,
             branch_id=_combo_id(self._branch) or 0,
-            department_id=_combo_id(self._department) or 0,
+            department_id=_combo_id(self._department),
             employment_type_id=_combo_id(self._employment) or 0,
             division_id=_combo_id(self._division),
             note=self._note.text().strip() or None,
@@ -432,13 +494,15 @@ def _fill_combo(combo: QComboBox, items: list, placeholder: str) -> None:
     combo.blockSignals(False)
 
 
-def _select(combo: QComboBox, value: int) -> None:
+def _select(combo: QComboBox, value: int | None) -> None:
     idx = combo.findData(value)
     if idx >= 0:
         combo.setCurrentIndex(idx)
 
 
-def _include_if_missing(combo: QComboBox, items: list, entity_id: int) -> None:
+def _include_if_missing(combo: QComboBox, items: list, entity_id: int | None) -> None:
+    if entity_id is None:
+        return
     if combo.findData(entity_id) >= 0:
         return
     for item in items:

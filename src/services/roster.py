@@ -139,7 +139,11 @@ class RosterService:
         status = self._statuses.get(status_id) if status_id is not None else None
         position = self._positions.get(emp.position_id)
         branch = self._branches.get(emp.branch_id)
-        department = self._departments.get(emp.department_id)
+        department = (
+            self._departments.get(emp.department_id)
+            if emp.department_id is not None
+            else None
+        )
         division = self._divisions.get(emp.division_id) if emp.division_id is not None else None
         return RosterRow(
             employee_id=emp.id,
@@ -157,6 +161,7 @@ class RosterService:
             start_date=start_date,
             end_date=end_date,
             needs_clarification=needs,
+            needs_org_review=emp.needs_org_review,
         )
 
     def _timeline(

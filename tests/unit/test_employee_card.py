@@ -27,7 +27,7 @@ def test_validate_org_assignment_accepts_valid_cascade() -> None:
         department_id=10,
         division_id=100,
         department=DepartmentRef(id=10, branch_id=1),
-        division=DivisionRef(id=100, department_id=10),
+        division=DivisionRef(id=100, branch_id=1, department_id=10),
     )
 
 
@@ -38,7 +38,7 @@ def test_validate_org_rejects_division_mismatch() -> None:
             department_id=10,
             division_id=100,
             department=DepartmentRef(id=10, branch_id=1),
-            division=DivisionRef(id=100, department_id=99),
+            division=DivisionRef(id=100, branch_id=1, department_id=99),
         )
 
 

@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QDialog,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -22,7 +23,7 @@ from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.session import SessionState
-from ui.directories_dialog import DirectoriesDialog
+from ui.directories_dialog import _NO_DEPARTMENT, DirectoriesDialog
 from ui.employee_card_form import EmployeeCardDialog
 from ui.main_window import MainWindow
 
@@ -101,12 +102,34 @@ def _create_chain_via_dialog(
             "Филиал Альфа",
             "Департамент HR",
             "Отдел платформы",
-            "Инженер",
         ]
     )
     monkeypatch.setattr(
         "ui.directories_dialog._prompt_text",
         lambda *_a, **_k: (next(prompts), True),
+    )
+
+    class _PositionDialogStub:
+        def __init__(
+            self,
+            parent: object,
+            *,
+            title: str,
+            name: str,
+            department_required: bool,
+            division_required: bool,
+        ) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Инженер", False, False)
+
+    monkeypatch.setattr(
+        "ui.directories_dialog._PositionRequirementsDialog",
+        _PositionDialogStub,
     )
     monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
 
@@ -135,9 +158,12 @@ def _create_chain_via_dialog(
     div_id = directories.list_divisions(department_id=dept_id, active_only=True)[0].id
 
     tabs.setCurrentIndex(_tab_index(dlg, "Должности"))
+    pos_parent = dlg.findChild(QComboBox, "directoriesPositionParent")
+    assert pos_parent is not None
+    _select_combo(pos_parent, branch_id)
     pos_btn = dlg.findChild(QPushButton, "directoriesPositionCreateBtn")
     _click(qtbot, pos_btn)
-    pos_id = directories.list_positions(active_only=True)[0].id
+    pos_id = directories.list_positions(branch_id=branch_id, active_only=True)[0].id
 
     return {
         "branch_id": branch_id,
@@ -290,4 +316,480 @@ def test_archived_position_hidden_for_new_employee_kept_on_existing(
     assert idx >= 0
     assert existing._position.itemText(idx) == "Инженер"
 
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_dialog_creates_branch_direct_division(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0008: отдел филиала без департамента через «— без департамента —»."""
+    conn, admin, _db = _open_empty_db(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    directories = DirectoryService(conn, admin, clock=clock)
+
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    branch_btn = dlg.findChild(QPushButton, "directoriesBranchCreateBtn")
+    monkeypatch.setattr(
+        "ui.directories_dialog._prompt_text",
+        lambda *_a, **_k: ("Филиал Центр", True),
+    )
+    _click(qtbot, branch_btn)
+    branch_id = directories.list_branches(active_only=True)[0].id
+
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Отделы"))
+    div_branch = dlg.findChild(QComboBox, "directoriesDivisionExtraParent")
+    div_dept = dlg.findChild(QComboBox, "directoriesDivisionParent")
+    assert div_branch is not None and div_dept is not None
+    _select_combo(div_branch, branch_id)
+    _select_combo(div_dept, _NO_DEPARTMENT)
+    monkeypatch.setattr(
+        "ui.directories_dialog._prompt_text",
+        lambda *_a, **_k: ("Секретариат филиала", True),
+    )
+    div_btn = dlg.findChild(QPushButton, "directoriesDivisionCreateBtn")
+    _click(qtbot, div_btn)
+
+    row = conn.execute(
+        "SELECT branch_id, department_id FROM divisions WHERE name = ?",
+        ("Секретариат филиала",),
+    ).fetchone()
+    assert row == (branch_id, None)
+    dlg.close()
+    conn.close()
+
+
+def _open_directories(tmp_path: Path) -> tuple[object, SessionState, DirectoryService, Path]:
+    conn, admin, db = _open_empty_db(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    directories = DirectoryService(conn, admin, clock=clock)
+    return conn, admin, directories, db
+
+
+def _position_panel(dlg: DirectoriesDialog) -> None:
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Должности"))
+
+
+def _select_position_branch(dlg: DirectoriesDialog, branch_id: int) -> None:
+    pos_parent = dlg.findChild(QComboBox, "directoriesPositionParent")
+    assert pos_parent is not None
+    _select_combo(pos_parent, branch_id)
+
+
+@pytest.mark.acceptance
+def test_directories_create_position_persists_requirement_checkboxes(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_id = directories.create_branch("Филиал Центр")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Бухгалтер", True, True)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+    _position_panel(dlg)
+    _select_position_branch(dlg, branch_id)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionCreateBtn"))
+
+    pos = next(
+        p
+        for p in directories.list_positions(branch_id=branch_id, active_only=True)
+        if p.name == "Бухгалтер"
+    )
+    assert pos.department_required is True
+    assert pos.division_required is True
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_position_tab_requires_branch_selection(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    directories.create_branch("Филиал Центр")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    infos: list[tuple[object, ...]] = []
+
+    def _information(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        infos.append(args)
+        return QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(QMessageBox, "information", _information)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            raise AssertionError("requirements dialog must not open without branch")
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+    _position_panel(dlg)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionCreateBtn"))
+
+    assert infos
+    assert "Выберите филиал" in str(infos[0])
+    assert directories.list_positions(active_only=False) == []
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_position_list_filtered_by_branch(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_a = directories.create_branch("Филиал A")
+    branch_b = directories.create_branch("Филиал B")
+    directories.create_position(branch_a, "Инженер A")
+    directories.create_position(branch_b, "Инженер B")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    table = dlg.findChild(QTableWidget, "directoriesPositionTable")
+    assert table is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    _select_position_branch(dlg, branch_a)
+    assert _names() == ["Инженер A"]
+    _select_position_branch(dlg, branch_b)
+    assert _names() == ["Инженер B"]
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_department_table_empty_until_branch_selected(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_a = directories.create_branch("Филиал A")
+    branch_b = directories.create_branch("Филиал B")
+    directories.create_department(branch_a, "Департамент A")
+    directories.create_department(branch_b, "Департамент B")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Департаменты"))
+    table = dlg.findChild(QTableWidget, "directoriesDepartmentTable")
+    dept_parent = dlg.findChild(QComboBox, "directoriesDepartmentParent")
+    assert table is not None and dept_parent is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    assert table.rowCount() == 0
+    _select_combo(dept_parent, branch_a)
+    assert _names() == ["Департамент A"]
+    _select_combo(dept_parent, branch_b)
+    assert _names() == ["Департамент B"]
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_division_table_empty_until_branch_selected(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_a = directories.create_branch("Филиал A")
+    branch_b = directories.create_branch("Филиал B")
+    directories.create_division(branch_a, None, "Отдел A")
+    directories.create_division(branch_b, None, "Отдел B")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Отделы"))
+    table = dlg.findChild(QTableWidget, "directoriesDivisionTable")
+    div_branch = dlg.findChild(QComboBox, "directoriesDivisionExtraParent")
+    assert table is not None and div_branch is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    div_dept = dlg.findChild(QComboBox, "directoriesDivisionParent")
+    assert div_dept is not None
+
+    assert table.rowCount() == 0
+    _select_combo(div_branch, branch_a)
+    assert table.rowCount() == 0
+    _select_combo(div_dept, _NO_DEPARTMENT)
+    assert _names() == ["Отдел A"]
+    _select_combo(div_branch, branch_b)
+    assert _names() == ["Отдел B"]
+    div_dept.setCurrentIndex(0)
+    assert table.rowCount() == 0
+    div_branch.setCurrentIndex(0)
+    assert table.rowCount() == 0
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_division_table_filters_by_department_selection(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_id = directories.create_branch("Филиал Центр")
+    dept_a = directories.create_department(branch_id, "Департамент A")
+    dept_b = directories.create_department(branch_id, "Департамент B")
+    directories.create_division(branch_id, dept_a, "Отдел в A")
+    directories.create_division(branch_id, dept_b, "Отдел в B")
+    directories.create_division(branch_id, None, "Отдел филиала")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Отделы"))
+    table = dlg.findChild(QTableWidget, "directoriesDivisionTable")
+    div_branch = dlg.findChild(QComboBox, "directoriesDivisionExtraParent")
+    div_dept = dlg.findChild(QComboBox, "directoriesDivisionParent")
+    assert table is not None and div_branch is not None and div_dept is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    _select_combo(div_branch, branch_id)
+    assert table.rowCount() == 0
+    _select_combo(div_dept, dept_a)
+    assert _names() == ["Отдел в A"]
+    _select_combo(div_dept, dept_b)
+    assert _names() == ["Отдел в B"]
+    _select_combo(div_dept, _NO_DEPARTMENT)
+    assert _names() == ["Отдел филиала"]
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_position_table_empty_until_branch_selected(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_a = directories.create_branch("Филиал A")
+    branch_b = directories.create_branch("Филиал B")
+    directories.create_position(branch_a, "Инженер A")
+    directories.create_position(branch_b, "Инженер B")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    table = dlg.findChild(QTableWidget, "directoriesPositionTable")
+    pos_parent = dlg.findChild(QComboBox, "directoriesPositionParent")
+    assert table is not None and pos_parent is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    assert table.rowCount() == 0
+    _select_combo(pos_parent, branch_a)
+    assert _names() == ["Инженер A"]
+    _select_combo(pos_parent, branch_b)
+    assert _names() == ["Инженер B"]
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_rename_position_requirements_without_violators_applies_silently(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_id = directories.create_branch("Филиал Центр")
+    pos_id = directories.create_position(branch_id, "Секретарь")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    _select_position_branch(dlg, branch_id)
+    table = dlg.findChild(QTableWidget, "directoriesPositionTable")
+    assert table is not None and table.rowCount() == 1
+    questions: list[tuple[object, ...]] = []
+
+    def _question(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        questions.append(args)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", _question)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Секретарь", True, False)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+
+    pos = directories.get_position(pos_id)
+    assert pos is not None
+    assert pos.department_required is True
+    assert pos.division_required is False
+    assert not questions
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_rename_position_requirements_with_violators_confirms(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, db = _open_directories(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    employees = EmployeeService(conn, admin, clock=clock)
+    branch_id = directories.create_branch("Филиал")
+    pos_id = directories.create_position(branch_id, "Бухгалтер")
+    emp_id = employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Иванов Иван",
+            position_id=pos_id,
+            branch_id=branch_id,
+            department_id=None,
+            division_id=None,
+            employment_type_id=1,
+        )
+    )
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    _select_position_branch(dlg, branch_id)
+    table = dlg.findChild(QTableWidget, "directoriesPositionTable")
+    assert table is not None
+    table.selectRow(0)
+
+    answers: list[QMessageBox.StandardButton] = []
+
+    def _question(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        return answers.pop(0)
+
+    monkeypatch.setattr(QMessageBox, "question", _question)
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Бухгалтер", True, False)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+
+    answers.append(QMessageBox.StandardButton.No)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+    pos = directories.get_position(pos_id)
+    assert pos is not None and not pos.department_required
+
+    answers.append(QMessageBox.StandardButton.Yes)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+    pos = directories.get_position(pos_id)
+    assert pos is not None and pos.department_required
+    row = conn.execute(
+        "SELECT department_id, needs_org_review FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    assert row == (None, 1)
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_rename_position_requirements_decline_leaves_data_unchanged(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    employees = EmployeeService(conn, admin, clock=clock)
+    branch_id = directories.create_branch("Склад")
+    pos_id = directories.create_position(branch_id, "Кладовщик")
+    dept_id = directories.create_department(branch_id, "Логистика")
+    emp_id = employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Петров Петр",
+            position_id=pos_id,
+            branch_id=branch_id,
+            department_id=dept_id,
+            division_id=None,
+            employment_type_id=1,
+        )
+    )
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    _position_panel(dlg)
+    _select_position_branch(dlg, branch_id)
+
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_a, **_k: QMessageBox.StandardButton.No,
+    )
+    monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
+
+    class _Dialog:
+        def __init__(self, *_a, **_k) -> None:
+            pass
+
+        def exec(self) -> QDialog.DialogCode:
+            return QDialog.DialogCode.Accepted
+
+        def values(self) -> tuple[str, bool, bool]:
+            return ("Кладовщик", True, True)
+
+    monkeypatch.setattr("ui.directories_dialog._PositionRequirementsDialog", _Dialog)
+    _click(qtbot, dlg.findChild(QPushButton, "directoriesPositionRenameBtn"))
+
+    pos = directories.get_position(pos_id)
+    assert pos is not None and not pos.division_required
+    row = conn.execute(
+        "SELECT department_id, needs_org_review FROM employees WHERE id = ?",
+        (emp_id,),
+    ).fetchone()
+    assert row == (dept_id, 0)
+    dlg.close()
     conn.close()

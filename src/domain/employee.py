@@ -22,7 +22,7 @@ class EmployeeCreateInput:
     full_name: str
     position_id: int
     branch_id: int
-    department_id: int
+    department_id: int | None
     employment_type_id: int
     division_id: int | None = None
     note: str | None = None
@@ -33,7 +33,7 @@ class EmployeeUpdateInput:
     full_name: str
     position_id: int
     branch_id: int
-    department_id: int
+    department_id: int | None
     employment_type_id: int
     division_id: int | None = None
     note: str | None = None
@@ -53,7 +53,7 @@ class EmployeeCard:
     full_name: str
     position_id: int
     branch_id: int
-    department_id: int
+    department_id: int | None
     division_id: int | None
     employment_type_id: int
     note: str | None
@@ -61,6 +61,7 @@ class EmployeeCard:
     social_insurance_number: str | None
     sensitive_fields_masked: bool
     is_archived: bool
+    needs_org_review: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,9 +105,9 @@ def normalize_name_for_match(value: str) -> str:
 def validate_employee_org(
     *,
     branch_id: int,
-    department_id: int,
+    department_id: int | None,
     division_id: int | None,
-    department: DepartmentRef,
+    department: DepartmentRef | None,
     division: DivisionRef | None,
 ) -> None:
     assignment = OrgAssignment(

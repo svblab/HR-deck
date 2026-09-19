@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -25,7 +26,12 @@ from domain.employee import (
     clean_full_name,
     validate_employee_org,
 )
-from domain.org_structure import DepartmentRef, DivisionRef
+from domain.org_structure import (
+    DepartmentRef,
+    DivisionRef,
+    validate_position_branch,
+    validate_position_requirements,
+)
 from domain.permissions import Permission
 from domain.sensitive import mask_sensitive_value
 from services.authorization import AuthorizationError, AuthorizationService
@@ -67,10 +73,12 @@ class EmployeeService:
         self._require(Permission.MANAGE_EMPLOYEES)
         payload = self._validate_input(data)
         now = self._clock()
+        external_id = str(uuid.uuid4())
         return self._mutate(
             action="employee.create",
             entity_type="employee",
             mutate=lambda: self._employees.create(
+                external_id=external_id,
                 full_name=payload.full_name,
                 position_id=payload.position_id,
                 branch_id=payload.branch_id,
@@ -95,14 +103,12 @@ class EmployeeService:
 
     def update_employee(self, employee_id: int, data: EmployeeUpdateInput) -> None:
         self._require(Permission.MANAGE_EMPLOYEES)
-        self._require_active_employee(employee_id)
+        record = self._require_active_employee(employee_id)
         payload = self._validate_input(data)
         now = self._clock()
-        self._mutate(
-            action="employee.update",
-            entity_type="employee",
-            entity_id=employee_id,
-            mutate=lambda: self._employees.update(
+
+        def mutate() -> None:
+            self._employees.update(
                 employee_id,
                 full_name=payload.full_name,
                 position_id=payload.position_id,
@@ -112,7 +118,15 @@ class EmployeeService:
                 division_id=payload.division_id,
                 note=payload.note,
                 updated_at=now,
-            ),
+            )
+            if record.needs_org_review:
+                self._employees.clear_needs_org_review(employee_id, updated_at=now)
+
+        self._mutate(
+            action="employee.update",
+            entity_type="employee",
+            entity_id=employee_id,
+            mutate=mutate,
             details=self._details(payload),
         )
 
@@ -179,11 +193,15 @@ class EmployeeService:
         self, data: EmployeeCreateInput | EmployeeUpdateInput
     ) -> EmployeeCreateInput:
         full_name = clean_full_name(data.full_name)
-        self._require_active_directory(self._positions.get, data.position_id, "position")
-        self._require_active_directory(self._branches.get, data.branch_id, "branch")
-        department = self._require_active_directory(
-            self._departments.get, data.department_id, "department"
+        position = self._require_active_directory(
+            self._positions.get, data.position_id, "position"
         )
+        self._require_active_directory(self._branches.get, data.branch_id, "branch")
+        department = None
+        if data.department_id is not None:
+            department = self._require_active_directory(
+                self._departments.get, data.department_id, "department"
+            )
         division = None
         if data.division_id is not None:
             division = self._require_active_directory(
@@ -197,12 +215,36 @@ class EmployeeService:
                 branch_id=data.branch_id,
                 department_id=data.department_id,
                 division_id=data.division_id,
-                department=DepartmentRef(id=department.id, branch_id=department.branch_id),
+                department=(
+                    DepartmentRef(id=department.id, branch_id=department.branch_id)
+                    if department
+                    else None
+                ),
                 division=(
-                    DivisionRef(id=division.id, department_id=division.department_id)
+                    DivisionRef(
+                        id=division.id,
+                        branch_id=division.branch_id,
+                        department_id=division.department_id,
+                    )
                     if division
                     else None
                 ),
+            )
+        except EmployeeValidationError as exc:
+            raise EmployeeError(str(exc)) from exc
+        try:
+            validate_position_requirements(
+                department_id=data.department_id,
+                division_id=data.division_id,
+                department_required=position.department_required,
+                division_required=position.division_required,
+            )
+        except EmployeeValidationError as exc:
+            raise EmployeeError(str(exc)) from exc
+        try:
+            validate_position_branch(
+                employee_branch_id=data.branch_id,
+                position_branch_id=position.branch_id,
             )
         except EmployeeValidationError as exc:
             raise EmployeeError(str(exc)) from exc
@@ -247,12 +289,17 @@ class EmployeeService:
                 record.home_address is not None or record.social_insurance_number is not None
             ),
             is_archived=record.is_archived,
+            needs_org_review=record.needs_org_review,
         )
 
     def _to_search_hit(self, record: EmployeeRecord) -> EmployeeSearchHit:
         position = self._positions.get(record.position_id)
         branch = self._branches.get(record.branch_id)
-        department = self._departments.get(record.department_id)
+        department = (
+            self._departments.get(record.department_id)
+            if record.department_id is not None
+            else None
+        )
         division = (
             self._divisions.get(record.division_id) if record.division_id is not None else None
         )

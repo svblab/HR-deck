@@ -25,7 +25,7 @@ TRANSPORT_TABLES = {
 
 def _migrations_through(version: int, root: Path) -> Path:
     target = root / "migrations"
-    target.mkdir()
+    target.mkdir(parents=True, exist_ok=True)
     for path in sorted(default_migrations_dir().glob("*.sql")):
         if int(path.name[:4]) <= version:
             shutil.copy(path, target / path.name)
@@ -46,7 +46,8 @@ def test_migration_0009_on_nonempty_db(tmp_path: Path) -> None:
     conn.close()
 
     conn2 = connect(path, key)
-    applied = apply_pending_migrations(conn2)
+    mig_v9 = _migrations_through(9, tmp_path / "v9apply")
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_v9)
     assert applied == [9]
     assert current_version(conn2) == 9
     tables = {

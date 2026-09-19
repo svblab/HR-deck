@@ -94,8 +94,8 @@ def test_divisions_fk_department(conn) -> None:
     with pytest.raises(sqlcipher.IntegrityError):
         conn.execute(
             "INSERT INTO divisions ("
-            " id, department_id, name, is_archived, created_at, updated_at"
-            ") VALUES (99, 999, 'x', 0, ?, ?)",
+            " id, branch_id, department_id, name, is_archived, created_at, updated_at"
+            ") VALUES (99, 1, 999, 'x', 0, ?, ?)",
             (_NOW, _NOW),
         )
 

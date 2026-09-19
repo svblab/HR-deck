@@ -9,9 +9,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDialogButtonBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -27,6 +29,7 @@ from services.directories import DirectoryError, DirectoryService
 from services.session import SessionState
 
 _USER_ROLE = 256  # Qt.ItemDataRole.UserRole
+_NO_DEPARTMENT = -1
 
 
 class DirectoriesDialog(QDialog):
@@ -72,18 +75,21 @@ class DirectoriesDialog(QDialog):
             parent_label="Департамент",
             extra_parent_label="Филиал",
             extra_parent_changed=self._on_div_branch_changed,
+            include_no_parent_option=True,
+        )
+        self._pos_panel = _DirectoryPanel(
+            directories,
+            self._can_manage,
+            kind="position",
+            title="Должности",
+            object_prefix="directoriesPosition",
+            parent_label="Филиал",
         )
         self._panels = [
             self._branch_panel,
             self._dept_panel,
             self._div_panel,
-            _DirectoryPanel(
-                directories,
-                self._can_manage,
-                kind="position",
-                title="Должности",
-                object_prefix="directoriesPosition",
-            ),
+            self._pos_panel,
             _DirectoryPanel(
                 directories,
                 self._can_manage,
@@ -94,6 +100,7 @@ class DirectoriesDialog(QDialog):
             ),
         ]
         self._dept_panel.set_parent_items(self._branch_panel.items_for_combo())
+        self._pos_panel.set_parent_items(self._branch_panel.items_for_combo())
         self._div_panel.set_extra_parent_items(self._branch_panel.items_for_combo())
         for panel in self._panels:
             self._tabs.addTab(panel, panel.title)
@@ -110,6 +117,7 @@ class DirectoriesDialog(QDialog):
 
     def _reload_branch_dependents(self) -> None:
         self._dept_panel.set_parent_items(self._branch_panel.items_for_combo())
+        self._pos_panel.set_parent_items(self._branch_panel.items_for_combo())
         self._div_panel.set_extra_parent_items(self._branch_panel.items_for_combo())
         self._on_div_branch_changed()
 
@@ -138,6 +146,7 @@ class _DirectoryPanel(QWidget):
         list_items: Callable[[bool], list] | None = None,
         extra_parent_changed: Callable[[], None] | None = None,
         reload: Callable[[], None] | None = None,
+        include_no_parent_option: bool = False,
     ) -> None:
         super().__init__()
         self._directories = directories
@@ -148,6 +157,7 @@ class _DirectoryPanel(QWidget):
         self._list_items = list_items
         self._extra_parent_changed = extra_parent_changed
         self._reload_hook = reload
+        self._include_no_parent_option = include_no_parent_option
 
         layout = QVBoxLayout(self)
         filters = QHBoxLayout()
@@ -229,6 +239,8 @@ class _DirectoryPanel(QWidget):
         self._parent.blockSignals(True)
         self._parent.clear()
         self._parent.addItem("— выберите —", None)
+        if self._include_no_parent_option:
+            self._parent.addItem("— без департамента (отдел филиала) —", _NO_DEPARTMENT)
         for item_id, name in items:
             self._parent.addItem(name, item_id)
         if current is not None:
@@ -297,17 +309,39 @@ class _DirectoryPanel(QWidget):
         if self._kind == "branch":
             return self._directories.list_branches(active_only=active_only)
         if self._kind == "department":
+            branch_id = self._parent_id()
+            if branch_id is None:
+                return []
             return self._directories.list_departments(
-                branch_id=self._parent_id(),
+                branch_id=branch_id,
                 active_only=active_only,
             )
         if self._kind == "division":
+            branch_id = self.extra_parent_id()
+            if branch_id is None:
+                return []
+            department_id = self._parent_id()
+            if department_id is None:
+                return []
+            if department_id == _NO_DEPARTMENT:
+                rows = self._directories.list_divisions(
+                    branch_id=branch_id,
+                    active_only=active_only,
+                )
+                return [row for row in rows if row.department_id is None]
             return self._directories.list_divisions(
-                department_id=self._parent_id(),
+                branch_id=branch_id,
+                department_id=department_id,
                 active_only=active_only,
             )
         if self._kind == "position":
-            return self._directories.list_positions(active_only=active_only)
+            branch_id = self._parent_id()
+            if branch_id is None:
+                return []
+            return self._directories.list_positions(
+                branch_id=branch_id,
+                active_only=active_only,
+            )
         if self._kind == "employment_type":
             return self._directories.list_employment_types(active_only=active_only)
         return []
@@ -339,9 +373,17 @@ class _DirectoryPanel(QWidget):
                 QMessageBox.information(self, "Создание", "Выберите филиал.")
                 return
         elif self._kind == "division":
+            branch_id = self.extra_parent_id()
+            if branch_id is None:
+                QMessageBox.information(self, "Создание", "Выберите филиал.")
+                return
             parent_id = self._parent_id()
             if parent_id is None:
-                QMessageBox.information(self, "Создание", "Выберите департамент.")
+                QMessageBox.information(
+                    self,
+                    "Создание",
+                    "Выберите департамент или «— без департамента —».",
+                )
                 return
         elif self._kind == "employment_type":
             code, ok = _prompt_text(self, "Код типа занятости", "")
@@ -352,6 +394,35 @@ class _DirectoryPanel(QWidget):
                 return
             try:
                 self._directories.create_employment_type(code.strip(), name.strip())
+            except (DirectoryError, AuthorizationError) as exc:
+                self._warn("Создание", exc)
+                return
+            self.reload()
+            return
+        elif self._kind == "position":
+            parent_id = self._parent_id()
+            if parent_id is None:
+                QMessageBox.information(self, "Создание", "Выберите филиал.")
+                return
+            dialog = _PositionRequirementsDialog(
+                self,
+                title="Новая должность",
+                name="",
+                department_required=False,
+                division_required=False,
+            )
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            name, dept_required, div_required = dialog.values()
+            if not name:
+                return
+            try:
+                self._directories.create_position(
+                    parent_id,
+                    name,
+                    department_required=dept_required,
+                    division_required=div_required,
+                )
             except (DirectoryError, AuthorizationError) as exc:
                 self._warn("Создание", exc)
                 return
@@ -371,9 +442,10 @@ class _DirectoryPanel(QWidget):
                 self._directories.create_department(parent_id, name.strip())
             elif self._kind == "division":
                 assert parent_id is not None
-                self._directories.create_division(parent_id, name.strip())
-            elif self._kind == "position":
-                self._directories.create_position(name.strip())
+                branch_id = self.extra_parent_id()
+                assert branch_id is not None
+                dept_id = None if parent_id == _NO_DEPARTMENT else parent_id
+                self._directories.create_division(branch_id, dept_id, name.strip())
         except (DirectoryError, AuthorizationError) as exc:
             self._warn("Создание", exc)
             return
@@ -382,6 +454,63 @@ class _DirectoryPanel(QWidget):
     def _rename(self) -> None:
         entity_id = self._selected_id()
         if entity_id is None:
+            return
+        if self._kind == "position":
+            current = self._directories.get_position(entity_id)
+            if current is None:
+                return
+            dialog = _PositionRequirementsDialog(
+                self,
+                title="Изменение должности",
+                name=current.name,
+                department_required=current.department_required,
+                division_required=current.division_required,
+            )
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+            new_name, new_dept_required, new_div_required = dialog.values()
+            if not new_name:
+                return
+            try:
+                if new_name != current.name:
+                    self._directories.rename_position(entity_id, new_name)
+                if (new_dept_required, new_div_required) != (
+                    current.department_required,
+                    current.division_required,
+                ):
+                    violators = self._directories.preview_position_requirement_change(
+                        entity_id,
+                        department_required=new_dept_required,
+                        division_required=new_div_required,
+                    )
+                    if violators:
+                        names = "\n".join(f"— {e.full_name}" for e in violators[:20])
+                        more = (
+                            f"\n… и ещё {len(violators) - 20}"
+                            if len(violators) > 20
+                            else ""
+                        )
+                        proceed = QMessageBox.question(
+                            self,
+                            "Требования должности",
+                            f"{len(violators)} сотрудник(ов) перестанут соответствовать "
+                            f"новым требованиям и будут помечены «Требует внимания» "
+                            f"(департамент и/или отдел будут сброшены):\n{names}{more}\n\n"
+                            "Продолжить?",
+                        )
+                        if proceed != QMessageBox.StandardButton.Yes:
+                            self.reload()
+                            return
+                    self._directories.apply_position_requirement_change(
+                        entity_id,
+                        department_required=new_dept_required,
+                        division_required=new_div_required,
+                        reset_violations=bool(violators),
+                    )
+            except (DirectoryError, AuthorizationError) as exc:
+                self._warn("Изменение должности", exc)
+                return
+            self.reload()
             return
         row = self._table.currentRow()
         name_col = 1 if self._kind == "employment_type" else 0
@@ -397,8 +526,6 @@ class _DirectoryPanel(QWidget):
                 self._directories.rename_department(entity_id, name.strip())
             elif self._kind == "division":
                 self._directories.rename_division(entity_id, name.strip())
-            elif self._kind == "position":
-                self._directories.rename_position(entity_id, name.strip())
             elif self._kind == "employment_type":
                 self._directories.rename_employment_type(entity_id, name.strip())
         except (DirectoryError, AuthorizationError) as exc:
@@ -452,3 +579,40 @@ def _prompt_text(parent: QWidget, title: str, default: str) -> tuple[str, bool]:
 
     text, ok = QInputDialog.getText(parent, title, "Название:", text=default)
     return text, ok
+
+
+class _PositionRequirementsDialog(QDialog):
+    def __init__(
+        self,
+        parent: QWidget,
+        *,
+        title: str,
+        name: str,
+        department_required: bool,
+        division_required: bool,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Название:"))
+        self._name = QLineEdit(name)
+        layout.addWidget(self._name)
+        self._dept_required = QCheckBox("Департамент обязателен")
+        self._dept_required.setChecked(department_required)
+        layout.addWidget(self._dept_required)
+        self._div_required = QCheckBox("Отдел обязателен")
+        self._div_required.setChecked(division_required)
+        layout.addWidget(self._div_required)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def values(self) -> tuple[str, bool, bool]:
+        return (
+            self._name.text().strip(),
+            self._dept_required.isChecked(),
+            self._div_required.isChecked(),
+        )
