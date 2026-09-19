@@ -28,6 +28,7 @@ from services.authentication import AuthenticationService
 from services.authorization import AuthorizationService
 from services.availability_statuses import AvailabilityStatusService
 from services.backup import BackupService
+from services.branch_summary_report import BranchSummaryReportService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
@@ -244,6 +245,7 @@ class MainWindow(QMainWindow):
             templates=TemplateLibraryService(
                 self._conn, self._session, data_dir=data_dir
             ),
+            branch_summary=BranchSummaryReportService(self._conn, self._session),
             status_history=status_history,
             availability_statuses=AvailabilityStatusService(
                 self._conn, self._session
@@ -473,6 +475,9 @@ class MainWindow(QMainWindow):
             self._roster._reports = StandardReportService(self._conn, self._session)
             self._roster._templates = TemplateLibraryService(
                 self._conn, self._session, data_dir=data_dir
+            )
+            self._roster._branch_summary = BranchSummaryReportService(
+                self._conn, self._session
             )
             self._roster._status_history = status_history
             self._roster._availability_statuses = AvailabilityStatusService(

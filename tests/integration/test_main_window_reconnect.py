@@ -9,6 +9,7 @@ from sqlcipher3.dbapi2 import ProgrammingError
 
 from services.backup import BackupService
 from services.bootstrap import BootstrapService
+from services.branch_summary_report import BranchSummaryReportService
 from services.roster import RosterService
 from services.status_history import StatusHistoryService
 from tests.fixtures.synthetic import seed_synthetic_org
@@ -53,6 +54,8 @@ def test_replace_connection_reloads_roster_from_restored_db(
     assert before.status_id == 1
     stale_service = window._roster._service
     assert isinstance(stale_service, RosterService)
+    stale_branch_summary = window._roster._branch_summary
+    assert isinstance(stale_branch_summary, BranchSummaryReportService)
 
     snapshot = backup.create_backup(tmp_path / "external")
     conn.execute(
@@ -78,6 +81,8 @@ def test_replace_connection_reloads_roster_from_restored_db(
     assert restored is not None
     assert restored.full_name == original_name
     assert restored.status_id == 1
+    assert window._roster._branch_summary is not stale_branch_summary
+    assert isinstance(window._roster._branch_summary, BranchSummaryReportService)
 
     window._roster.reload()
     again = _row_for(window, emp_id)

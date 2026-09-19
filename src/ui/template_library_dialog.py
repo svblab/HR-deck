@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
+    QDateEdit,
     QDialog,
+    QDialogButtonBox,
     QFileDialog,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -21,7 +26,11 @@ from PySide6.QtWidgets import (
 )
 
 from domain.permissions import Permission, has_permission
+from domain.template_markers import BRANCH_SUMMARY_MARKERS
+from reports.excel_template import list_canonical_markers
 from services.authorization import AuthorizationError
+from services.branch_summary_report import BranchSummaryReportService
+from services.directories import DirectoryService
 from services.session import SessionState
 from services.template_library import TemplateLibraryError, TemplateLibraryService
 
@@ -32,10 +41,15 @@ class TemplateLibraryDialog(QDialog):
         library: TemplateLibraryService,
         session: SessionState,
         parent: QWidget | None = None,
+        *,
+        branch_summary: BranchSummaryReportService | None = None,
+        directories: DirectoryService | None = None,
     ) -> None:
         super().__init__(parent)
         self._library = library
         self._session = session
+        self._branch_summary = branch_summary
+        self._directories = directories
         self._can_manage = has_permission(session.role, Permission.MANAGE_REPORT_TEMPLATES)
         self._can_use = self._can_manage or has_permission(
             session.role, Permission.USE_ACTIVE_REPORT_TEMPLATES
@@ -242,11 +256,39 @@ class TemplateLibraryDialog(QDialog):
         if output.suffix.lower() != f".{fmt}":
             output = output.with_suffix(f".{fmt}")
         try:
-            self._library.generate_report(version_id, output, values={})
+            if self._needs_branch_summary_context(version_id, fmt):
+                branch_summary = self._branch_summary
+                directories = self._directories
+                assert branch_summary is not None and directories is not None
+                params = _prompt_branch_summary_params(self, directories)
+                if params is None:
+                    return
+                branch_id, as_of = params
+                scalars, row_records = branch_summary.build_context(
+                    branch_id,
+                    as_of=as_of,
+                )
+                self._library.generate_report(
+                    version_id,
+                    output,
+                    values=scalars,
+                    row_records=row_records,
+                )
+            else:
+                self._library.generate_report(version_id, output, values={})
         except (TemplateLibraryError, AuthorizationError) as exc:
             QMessageBox.warning(self, "Формирование", str(exc))
             return
         QMessageBox.information(self, "Формирование", f"Отчёт сохранён:\n{output}")
+
+    def _needs_branch_summary_context(self, version_id: int, fmt: str) -> bool:
+        if fmt != "xlsx":
+            return False
+        if self._branch_summary is None or self._directories is None:
+            return False
+        version = self._library._require_version(version_id)
+        used = list_canonical_markers(Path(version.stored_path))
+        return bool(used & BRANCH_SUMMARY_MARKERS)
 
 
 def _prompt_text(parent: QWidget, title: str, default: str) -> tuple[str, bool]:
@@ -254,3 +296,46 @@ def _prompt_text(parent: QWidget, title: str, default: str) -> tuple[str, bool]:
 
     text, ok = QInputDialog.getText(parent, title, "Название:", text=default)
     return text, ok
+
+
+def _prompt_branch_summary_params(
+    parent: QWidget,
+    directories: DirectoryService | None,
+) -> tuple[int, str] | None:
+    if directories is None:
+        return None
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("Параметры сводки по филиалу")
+    layout = QVBoxLayout(dialog)
+    form = QFormLayout()
+    branch_combo = QComboBox(dialog)
+    for branch in directories.list_branches(active_only=True):
+        branch_combo.addItem(branch.name, branch.id)
+    if branch_combo.count() == 0:
+        QMessageBox.information(
+            parent,
+            "Параметры сводки по филиалу",
+            "Нет доступных филиалов.",
+        )
+        return None
+    form.addRow("Филиал", branch_combo)
+    date_edit = QDateEdit(dialog)
+    date_edit.setCalendarPopup(True)
+    date_edit.setDate(QDate.currentDate())
+    date_edit.setDisplayFormat("dd.MM.yyyy")
+    form.addRow("Дата", date_edit)
+    layout.addLayout(form)
+    buttons = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    )
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    layout.addWidget(buttons)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    branch_id = branch_combo.currentData()
+    if branch_id is None:
+        return None
+    qdate = date_edit.date()
+    as_of = f"{qdate.year():04d}-{qdate.month():02d}-{qdate.day():02d}"
+    return int(branch_id), as_of
