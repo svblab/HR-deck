@@ -42,7 +42,7 @@ SENSITIVE_EXPORT_HEADERS = ("Домашний адрес", "Номер стра�
 class ImportCatalog:
     """Справочники, уже полученные через DirectoryService (имена — casefold)."""
 
-    positions: dict[str, int]
+    positions_by_branch: dict[tuple[int, str], int]
     branches: dict[str, int]
     departments: dict[tuple[int, str], int]
     divisions_by_department: dict[tuple[int, str], int]
@@ -137,8 +137,13 @@ def evaluate_row(
         return None, issues
     try:
         full_name = clean_full_name(values["full_name"])
-        position_id = _lookup(catalog.positions, values["position"], "position")
         branch_id = _lookup(catalog.branches, values["branch"], "branch")
+        position_raw = values["position"].strip()
+        position_id = catalog.positions_by_branch.get(
+            (branch_id, position_raw.casefold())
+        )
+        if position_id is None:
+            raise EmployeeValidationError(f"unknown position: {position_raw}")
         department_raw = values["department"].strip()
         if department_raw:
             department_id = catalog.departments.get(

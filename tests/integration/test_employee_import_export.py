@@ -97,6 +97,38 @@ def test_rejected_preview_writes_nothing(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_import_resolves_branch_scoped_position_names(tmp_path: Path) -> None:
+    conn, _session, _emp, directories, importer, _exp, ids, _db = _open(tmp_path)
+    south_branch_id = directories.create_branch("Филиал Юг")
+    directories.create_position(branch_id=ids["branch_id"], name="Кандидат")
+    directories.create_position(branch_id=south_branch_id, name="Кандидат")
+    preview = importer.preview_rows(
+        list(EXPORT_HEADERS),
+        [
+            ["Северный Кандидат", "Кандидат", "Филиал Север (тест)", "", "", "Штатный"],
+            ["Южный Кандидат", "Кандидат", "Филиал Юг", "", "", "Штатный"],
+        ],
+    )
+    assert not preview.errors
+    assert len(preview.ready) == 2
+    north_position_id = next(
+        position.id
+        for position in directories.list_positions(branch_id=ids["branch_id"], active_only=True)
+        if position.name == "Кандидат"
+    )
+    south_position_id = next(
+        position.id
+        for position in directories.list_positions(
+            branch_id=south_branch_id, active_only=True
+        )
+        if position.name == "Кандидат"
+    )
+    by_name = {row.payload.full_name: row.payload.position_id for row in preview.ready}
+    assert by_name["Северный Кандидат"] == north_position_id
+    assert by_name["Южный Кандидат"] == south_position_id
+    conn.close()
+
+
 def test_duplicate_name_subdivision_is_warning_not_error(tmp_path: Path) -> None:
     conn, _session, _emp, _dirs, importer, _exp, _ids, _db = _open(tmp_path)
     preview = importer.preview_rows(
