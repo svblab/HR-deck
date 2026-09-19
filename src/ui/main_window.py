@@ -197,7 +197,7 @@ class MainWindow(QMainWindow):
         self._log_btn.clicked.connect(self._open_action_log)
 
         settings_btn = QToolButton(objectName="titleIconBtn")
-        settings_btn.setText("⚙")
+        settings_btn.setText("💾")
         settings_btn.setToolTip("Резервное копирование")
         settings_btn.clicked.connect(self._open_backup)
         self._settings_btn = settings_btn
