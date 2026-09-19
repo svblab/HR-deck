@@ -137,3 +137,10 @@ def test_branch_summary_sample_generate_pipeline(tmp_path: Path) -> None:
 def test_report_templates_guide_marker_catalog_in_sync() -> None:
     guide = _GUIDE.read_text(encoding="utf-8")
     assert marker_catalog_markdown() in guide
+
+
+@pytest.mark.acceptance
+def test_all_templates_samples_validate() -> None:
+    """Каждый образец в templates_samples/ должен проходить validate_archived."""
+    for path in sorted(_SAMPLES.glob("*.xlsx")):
+        validate_archived(path)
