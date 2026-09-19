@@ -540,13 +540,60 @@ def test_directories_division_table_empty_until_branch_selected(
             if table.item(i, 0) is not None
         ]
 
+    div_dept = dlg.findChild(QComboBox, "directoriesDivisionParent")
+    assert div_dept is not None
+
     assert table.rowCount() == 0
     _select_combo(div_branch, branch_a)
+    assert table.rowCount() == 0
+    _select_combo(div_dept, _NO_DEPARTMENT)
     assert _names() == ["Отдел A"]
     _select_combo(div_branch, branch_b)
     assert _names() == ["Отдел B"]
+    div_dept.setCurrentIndex(0)
+    assert table.rowCount() == 0
     div_branch.setCurrentIndex(0)
     assert table.rowCount() == 0
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_division_table_filters_by_department_selection(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    branch_id = directories.create_branch("Филиал Центр")
+    dept_a = directories.create_department(branch_id, "Департамент A")
+    dept_b = directories.create_department(branch_id, "Департамент B")
+    directories.create_division(branch_id, dept_a, "Отдел в A")
+    directories.create_division(branch_id, dept_b, "Отдел в B")
+    directories.create_division(branch_id, None, "Отдел филиала")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    tabs = dlg.findChild(QTabWidget, "directoriesTabs")
+    assert tabs is not None
+    tabs.setCurrentIndex(_tab_index(dlg, "Отделы"))
+    table = dlg.findChild(QTableWidget, "directoriesDivisionTable")
+    div_branch = dlg.findChild(QComboBox, "directoriesDivisionExtraParent")
+    div_dept = dlg.findChild(QComboBox, "directoriesDivisionParent")
+    assert table is not None and div_branch is not None and div_dept is not None
+
+    def _names() -> list[str]:
+        return [
+            table.item(i, 0).text()
+            for i in range(table.rowCount())
+            if table.item(i, 0) is not None
+        ]
+
+    _select_combo(div_branch, branch_id)
+    assert table.rowCount() == 0
+    _select_combo(div_dept, dept_a)
+    assert _names() == ["Отдел в A"]
+    _select_combo(div_dept, dept_b)
+    assert _names() == ["Отдел в B"]
+    _select_combo(div_dept, _NO_DEPARTMENT)
+    assert _names() == ["Отдел филиала"]
     dlg.close()
     conn.close()
 

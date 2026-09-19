@@ -320,9 +320,18 @@ class _DirectoryPanel(QWidget):
             branch_id = self.extra_parent_id()
             if branch_id is None:
                 return []
+            department_id = self._parent_id()
+            if department_id is None:
+                return []
+            if department_id == _NO_DEPARTMENT:
+                rows = self._directories.list_divisions(
+                    branch_id=branch_id,
+                    active_only=active_only,
+                )
+                return [row for row in rows if row.department_id is None]
             return self._directories.list_divisions(
                 branch_id=branch_id,
-                department_id=self._parent_id() if self._parent_id() != _NO_DEPARTMENT else None,
+                department_id=department_id,
                 active_only=active_only,
             )
         if self._kind == "position":
