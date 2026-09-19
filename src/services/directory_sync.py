@@ -19,7 +19,7 @@ from data.directories import (
     PositionRecord,
     PositionRepository,
 )
-from data.employees import EmployeeRepository
+from data.employees import EmployeeRecord, EmployeeRepository
 from domain.directory_sync import SYNCED_TABLES, DirectorySyncPackage
 from domain.permissions import Permission
 from services.authorization import AuthorizationService
@@ -61,6 +61,8 @@ class DirectorySyncService:
                     tables[table_name] = [self._division_export_row(row) for row in rows]
                 elif table_name == "positions":
                     tables[table_name] = [self._position_export_row(row) for row in rows]
+                elif table_name == "employees":
+                    tables[table_name] = [self._employee_export_row(row) for row in rows]
                 else:
                     tables[table_name] = [dataclasses.asdict(row) for row in rows]
 
@@ -122,6 +124,47 @@ class DirectorySyncService:
             "name": row.name,
             "department_required": row.department_required,
             "division_required": row.division_required,
+            "is_archived": row.is_archived,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+
+    def _employee_export_row(self, row: EmployeeRecord) -> dict[str, object]:
+        branch = self._branches.get(row.branch_id)
+        assert branch is not None
+        position = self._positions.get(row.position_id)
+        assert position is not None
+        department_external_id: str | None = None
+        if row.department_id is not None:
+            department = self._departments.get(row.department_id)
+            assert department is not None
+            department_external_id = department.external_id
+        division_external_id: str | None = None
+        if row.division_id is not None:
+            division = self._divisions.get(row.division_id)
+            assert division is not None
+            division_external_id = division.external_id
+        return {
+            "id": row.id,
+            "external_id": row.external_id,
+            "full_name": row.full_name,
+            "position_external_id": position.external_id,
+            "branch_external_id": branch.external_id,
+            "department_external_id": department_external_id,
+            "division_external_id": division_external_id,
+            # employment_type_id is intentionally left as a plain integer:
+            # employment_types are fixed system seeds (staff/temporary/
+            # contractor, ids 1-3 from migration 0001), identical across
+            # every installation by design, not locally created — this is
+            # a deliberate exception, not an oversight. ADR-0010 explicitly
+            # excludes employment_types from the synced entity set.
+            "employment_type_id": row.employment_type_id,
+            "note": row.note,
+            "hire_date": row.hire_date,
+            "contacts": row.contacts,
+            "home_address": row.home_address,
+            "social_insurance_number": row.social_insurance_number,
+            "needs_org_review": row.needs_org_review,
             "is_archived": row.is_archived,
             "created_at": row.created_at,
             "updated_at": row.updated_at,

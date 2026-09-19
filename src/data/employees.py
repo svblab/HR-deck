@@ -44,6 +44,13 @@ class EmployeeRepository:
         row = self._conn.execute(f"{self._SELECT} WHERE id = ?", (employee_id,)).fetchone()
         return _row(row) if row else None
 
+    def get_by_external_id(self, external_id: str) -> EmployeeRecord | None:
+        row = self._conn.execute(
+            f"{self._SELECT} WHERE external_id = ?",
+            (external_id,),
+        ).fetchone()
+        return _row(row) if row else None
+
     def list(self, *, active_only: bool = True) -> builtins.list[EmployeeRecord]:
         sql = self._SELECT
         if active_only:

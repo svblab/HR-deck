@@ -226,4 +226,14 @@ def test_adr0010_package_rows_are_json_serializable(tmp_path: Path) -> None:
     pos_row = pkg.tables["positions"][0]
     assert pos_row["branch_external_id"] == branch_ext
     assert "branch_id" not in pos_row
+    emp_row = pkg.tables["employees"][0]
+    assert emp_row["branch_external_id"] == branch_ext
+    assert emp_row["position_external_id"] == pos_row["external_id"]
+    assert emp_row["department_external_id"] is None
+    assert emp_row["division_external_id"] is None
+    assert emp_row["employment_type_id"] == 1
+    assert "branch_id" not in emp_row
+    assert "department_id" not in emp_row
+    assert "division_id" not in emp_row
+    assert "position_id" not in emp_row
     conn.close()
