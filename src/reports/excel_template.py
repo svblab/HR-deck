@@ -61,6 +61,42 @@ def validate_archived(path: Path) -> None:
         book.close()
 
 
+def list_canonical_markers(path: Path) -> set[str]:
+    """All canonical marker keys actually used in this workbook.
+
+    Skips structural tokens (#ROW, /ROW, #ROW:name, /ROW:name).
+    Markers with no canonical mapping are silently skipped — introspection only.
+    """
+    book = load_workbook(path, data_only=False)
+    try:
+        markers: set[str] = set()
+        for sheet in book.worksheets:
+            markers |= _canonical_markers_in_sheet(sheet)
+        return markers
+    finally:
+        book.close()
+
+
+def _canonical_markers_in_sheet(sheet: Worksheet) -> set[str]:
+    found: set[str] = set()
+    for row in sheet.iter_rows():
+        for cell in row:
+            text = _cell_source_text(cell)
+            if not text:
+                continue
+            try:
+                tokens = extract_markers(text)
+            except MarkerSyntaxError:
+                continue
+            for token in tokens:
+                if is_structural_token(token):
+                    continue
+                key = canonical_key(token)
+                if key is not None:
+                    found.add(key)
+    return found
+
+
 def generate_excel_report(
     archived: ArchivedTemplate,
     output_path: Path,

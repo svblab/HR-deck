@@ -25,6 +25,7 @@ from domain.roster import (
     summary_counts,
 )
 from services.availability_statuses import AvailabilityStatusService
+from services.branch_summary_report import BranchSummaryReportService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
@@ -53,6 +54,7 @@ class RosterPanel(QWidget):
         session: SessionState | None = None,
         reports: StandardReportService | None = None,
         templates: TemplateLibraryService | None = None,
+        branch_summary: BranchSummaryReportService | None = None,
         status_history: StatusHistoryService | None = None,
         availability_statuses: AvailabilityStatusService | None = None,
     ) -> None:
@@ -63,6 +65,7 @@ class RosterPanel(QWidget):
         self._session = session
         self._reports = reports
         self._templates = templates
+        self._branch_summary = branch_summary
         self._status_history = status_history
         self._availability_statuses = availability_statuses
         self._all_rows: list[RosterRow] = []
@@ -384,4 +387,10 @@ class RosterPanel(QWidget):
             return
         from ui.template_library_dialog import TemplateLibraryDialog
 
-        TemplateLibraryDialog(self._templates, self._session, self).exec()
+        TemplateLibraryDialog(
+            self._templates,
+            self._session,
+            self,
+            branch_summary=self._branch_summary,
+            directories=self._directories,
+        ).exec()

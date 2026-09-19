@@ -41,6 +41,18 @@ _ALIASES: dict[str, tuple[str, ...]] = {
 
 CANONICAL_KEYS: frozenset[str] = frozenset(_ALIASES)
 
+BRANCH_SUMMARY_MARKERS: frozenset[str] = frozenset(
+    {
+        "report.department_total",
+        "report.department_absent",
+        "report.vacation_employees",
+        "report.sick_leave_employees",
+        "report.business_trip_employees",
+        "report.branch_total",
+        "report.branch_absent",
+    }
+)
+
 _TOKEN_TO_CANONICAL: dict[str, str] = {}
 for _key, _names in _ALIASES.items():
     _TOKEN_TO_CANONICAL[_key] = _key

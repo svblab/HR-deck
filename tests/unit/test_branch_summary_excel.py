@@ -7,15 +7,29 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook, load_workbook
 
+from domain.template_markers import BRANCH_SUMMARY_MARKERS
 from reports.excel_template import (
     TemplateValidationError,
     archive_upload,
     generate_excel_report,
+    list_canonical_markers,
     validate_archived,
 )
 
 _SAMPLES = Path(__file__).resolve().parents[2] / "templates_samples"
 _BRANCH_SUMMARY = _SAMPLES / "branch_summary_report.xlsx"
+_SAMPLE_REPORT = _SAMPLES / "sample_report.xlsx"
+
+
+def test_list_canonical_markers_branch_summary_template() -> None:
+    markers = list_canonical_markers(_BRANCH_SUMMARY)
+    assert "report.branch_total" in markers
+    assert markers & BRANCH_SUMMARY_MARKERS
+
+
+def test_list_canonical_markers_sample_report_excludes_branch_summary() -> None:
+    markers = list_canonical_markers(_SAMPLE_REPORT)
+    assert not (markers & BRANCH_SUMMARY_MARKERS)
 
 
 def test_branch_summary_template_validates() -> None:
