@@ -17,6 +17,7 @@ from data.directories import (
 )
 from data.employees import EmployeeRecord, EmployeeRepository
 from data.repositories import UserActionLogRepository
+from domain.employment_types import is_system_employment_type_code
 from domain.permissions import Permission
 from services.authorization import AuthorizationError, AuthorizationService
 from services.session import SessionState
@@ -426,7 +427,9 @@ class DirectoryService:
 
     def _set_employment_type_archived(self, employment_type_id: int, *, archived: bool) -> None:
         self._require(Permission.MANAGE_DIRECTORIES)
-        self._require_employment_type(employment_type_id)
+        row = self._require_employment_type(employment_type_id)
+        if archived and is_system_employment_type_code(row.code):
+            raise DirectoryError(f"system employment type '{row.code}' cannot be archived")
         now = self._clock()
         verb = "archive" if archived else "unarchive"
         self._mutate(
