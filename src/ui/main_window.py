@@ -505,6 +505,7 @@ class MainWindow(QMainWindow):
         ArchiveDialog(
             RosterService(self._conn, self._session),
             EmployeeService(self._conn, self._session, status_history=status_history),
+            DirectoryService(self._conn, self._session),
             status_history,
             AvailabilityStatusService(self._conn, self._session),
             self._session,
