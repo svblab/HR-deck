@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
+from domain.transport import RoutingMetadata, TransportPackage
+
 MAGIC_SIGNING = b"HRTR\x01"
 MAGIC_ROUTING = b"HRTM\x01"
 MAGIC_ENVELOPE_AAD = b"HRENV\x01"
 MAGIC_PAYLOAD_AAD = b"HRPAY\x01"
+MAGIC_PACKAGE = b"HRPK\x01"
 BOOTSTRAP_HKDF_INFO_PREFIX = b"HRTR-bootstrap-wrap-v1"
 
 
@@ -132,4 +137,85 @@ def build_bootstrap_hkdf_info(
         + sender_installation_id.encode("utf-8")
         + recipient_installation_id.encode("utf-8")
         + package_id.encode("utf-8")
+    )
+
+
+def _parse_canon_field_bytes(data: bytes, offset: int, *, context: str) -> tuple[bytes, int]:
+    if offset + 4 > len(data):
+        raise ValueError(f"{context}: truncated length prefix")
+    length = int.from_bytes(data[offset : offset + 4], "big")
+    offset += 4
+    if offset + length > len(data):
+        raise ValueError(f"{context}: truncated field payload")
+    payload = data[offset : offset + length]
+    return payload, offset + length
+
+
+def _parse_canon_field_u32(data: bytes, offset: int, *, context: str) -> tuple[int, int]:
+    if offset + 4 > len(data):
+        raise ValueError(f"{context}: truncated u32 field")
+    value = int.from_bytes(data[offset : offset + 4], "big")
+    return value, offset + 4
+
+
+def _parse_canon_field_utf8(data: bytes, offset: int, *, context: str) -> tuple[str, int]:
+    payload, offset = _parse_canon_field_bytes(data, offset, context=context)
+    try:
+        text = payload.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"{context}: invalid utf-8 field") from exc
+    return text, offset
+
+
+def parse_routing_metadata_bytes(data: bytes) -> RoutingMetadata:
+    context = "routing metadata"
+    if not data.startswith(MAGIC_ROUTING):
+        raise ValueError(f"{context}: bad magic")
+    offset = len(MAGIC_ROUTING)
+    protocol_version, offset = _parse_canon_field_u32(data, offset, context=context)
+    sender_installation_id, offset = _parse_canon_field_utf8(data, offset, context=context)
+    recipient_installation_id, offset = _parse_canon_field_utf8(data, offset, context=context)
+    envelope_key_id, offset = _parse_canon_field_utf8(data, offset, context=context)
+    sequence, offset = _parse_canon_field_u32(data, offset, context=context)
+    package_id, offset = _parse_canon_field_utf8(data, offset, context=context)
+    if offset != len(data):
+        raise ValueError(f"{context}: trailing garbage")
+    return RoutingMetadata(
+        protocol_version=protocol_version,
+        sender_installation_id=sender_installation_id,
+        recipient_installation_id=recipient_installation_id,
+        envelope_key_id=envelope_key_id,
+        sequence=sequence,
+        package_id=package_id,
+    )
+
+
+def serialize_transport_package(package: TransportPackage) -> bytes:
+    routing_bytes = build_routing_metadata_bytes(**asdict(package.routing_metadata))
+    return (
+        MAGIC_PACKAGE
+        + canon_field_bytes(routing_bytes)
+        + canon_field_bytes(package.signature)
+        + canon_field_bytes(package.envelope_ciphertext)
+        + canon_field_bytes(package.payload_ciphertext)
+    )
+
+
+def deserialize_transport_package(data: bytes) -> TransportPackage:
+    context = "transport package"
+    if not data.startswith(MAGIC_PACKAGE):
+        raise ValueError(f"{context}: bad magic")
+    offset = len(MAGIC_PACKAGE)
+    routing_bytes, offset = _parse_canon_field_bytes(data, offset, context=context)
+    signature, offset = _parse_canon_field_bytes(data, offset, context=context)
+    envelope_ciphertext, offset = _parse_canon_field_bytes(data, offset, context=context)
+    payload_ciphertext, offset = _parse_canon_field_bytes(data, offset, context=context)
+    if offset != len(data):
+        raise ValueError(f"{context}: trailing garbage")
+    routing_metadata = parse_routing_metadata_bytes(routing_bytes)
+    return TransportPackage(
+        routing_metadata=routing_metadata,
+        signature=signature,
+        envelope_ciphertext=envelope_ciphertext,
+        payload_ciphertext=payload_ciphertext,
     )

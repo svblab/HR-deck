@@ -95,3 +95,21 @@ class PackageRecord:
     sequence: int
     classification: PackageClassification
     envelope_key_id: str | None
+
+
+@dataclass(frozen=True)
+class RoutingMetadata:
+    protocol_version: int
+    sender_installation_id: str
+    recipient_installation_id: str
+    envelope_key_id: str
+    sequence: int
+    package_id: str
+
+
+@dataclass(frozen=True)
+class TransportPackage:
+    routing_metadata: RoutingMetadata
+    signature: bytes
+    envelope_ciphertext: bytes
+    payload_ciphertext: bytes
