@@ -33,6 +33,7 @@ class RosterRow:
     end_date: str | None
     needs_clarification: bool
     needs_org_review: bool
+    is_archived: bool
 
 
 @dataclass(frozen=True)
@@ -134,9 +135,7 @@ def group_rows(
     ]
     if extras:
         extras_title = (
-            "Без департамента"
-            if group_by == GroupBy.DEPARTMENT
-            else UNASSIGNED_COLUMN_TITLE
+            "Без департамента" if group_by == GroupBy.DEPARTMENT else UNASSIGNED_COLUMN_TITLE
         )
         result.append(
             RosterColumn(

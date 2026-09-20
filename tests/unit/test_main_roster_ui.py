@@ -59,18 +59,12 @@ def test_clarification_filter_does_not_leave_stale_board_cards(qtbot, tmp_path: 
     assert clarify is not None
 
     def visible_board_cards() -> int:
-        return sum(
-            1
-            for card in panel.findChildren(EmployeeCardWidget)
-            if card.isVisible()
-        )
+        return sum(1 for card in panel.findChildren(EmployeeCardWidget) if card.isVisible())
 
     qtbot.waitUntil(lambda: visible_board_cards() == 2)
     for _ in range(4):
         clarify.click()
-        qtbot.waitUntil(
-            lambda: visible_board_cards() == (1 if clarify.isChecked() else 2)
-        )
+        qtbot.waitUntil(lambda: visible_board_cards() == (1 if clarify.isChecked() else 2))
     window.close()
     conn.close()
 
@@ -188,9 +182,7 @@ def test_action_log_button_visible_for_admin(qtbot, tmp_path: Path) -> None:
 def test_action_log_button_hidden_for_hr(qtbot, tmp_path: Path) -> None:
     window, conn, session, _ids = _window(tmp_path)
     db = tmp_path / "app.db"
-    mgr = AccountManagementService(
-        conn, session, db_path=db, clock=lambda: "2026-08-15T12:01:00Z"
-    )
+    mgr = AccountManagementService(conn, session, db_path=db, clock=lambda: "2026-08-15T12:01:00Z")
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
     hr = SessionState(
         account_id=hr_id,
@@ -208,28 +200,22 @@ def test_action_log_button_hidden_for_hr(qtbot, tmp_path: Path) -> None:
     conn.close()
 
 
-def test_show_archived_toggle_reveals_archived_employee(qtbot, tmp_path: Path) -> None:
-    from PySide6.QtWidgets import QCheckBox
-
+def test_archived_employee_not_shown_on_main_board(qtbot, tmp_path: Path) -> None:
     from services.employees import EmployeeService
 
     window, conn, session, ids = _window(tmp_path)
     qtbot.addWidget(window)
+    panel = window.findChild(RosterPanel)
+    assert panel is not None
+    qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 2)
+
     EmployeeService(conn, session, clock=lambda: "2026-08-15T12:05:00Z").archive_employee(
         ids["employee_a_id"]
     )
-    panel = window.findChild(RosterPanel)
-    assert panel is not None
     panel.reload()
     qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 1)
 
-    before = conn.execute("SELECT COUNT(*) FROM user_action_log").fetchone()[0]
-    toggle = panel.findChild(QCheckBox, "showArchivedFilter")
-    assert toggle is not None
-    toggle.setChecked(True)
-    qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 2)
-    after = conn.execute("SELECT COUNT(*) FROM user_action_log").fetchone()[0]
-    assert after == before
+    assert panel.findChild(QCheckBox, "showArchivedFilter") is None
 
     window.close()
     conn.close()

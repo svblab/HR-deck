@@ -16,9 +16,7 @@ from services.directories import DirectoryService
 from services.employees import EmployeeService
 
 _NOW = "2026-08-01T10:00:00Z"
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-)
+_UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 _EXTERNAL_ID_TABLES = (
     "branches",
     "departments",
@@ -115,8 +113,8 @@ def test_adr0010_migration_backfills_external_id_on_nonempty_db(tmp_path: Path) 
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [14, 15]
-    assert current_version(conn2) == 15
+    assert applied == [14, 15, 16]
+    assert current_version(conn2) == 16
 
     all_ids: list[str] = []
     for table in _EXTERNAL_ID_TABLES:

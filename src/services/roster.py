@@ -86,12 +86,10 @@ class RosterService:
             ]
         if group_by == GroupBy.BRANCH:
             return [
-                ColumnSpec(key=b.id, title=b.name)
-                for b in self._branches.list(active_only=True)
+                ColumnSpec(key=b.id, title=b.name) for b in self._branches.list(active_only=True)
             ]
         return [
-            ColumnSpec(key=d.id, title=d.name)
-            for d in self._departments.list(active_only=True)
+            ColumnSpec(key=d.id, title=d.name) for d in self._departments.list(active_only=True)
         ]
 
     def filter_branches(self):
@@ -140,9 +138,7 @@ class RosterService:
         position = self._positions.get(emp.position_id)
         branch = self._branches.get(emp.branch_id)
         department = (
-            self._departments.get(emp.department_id)
-            if emp.department_id is not None
-            else None
+            self._departments.get(emp.department_id) if emp.department_id is not None else None
         )
         division = self._divisions.get(emp.division_id) if emp.division_id is not None else None
         return RosterRow(
@@ -162,6 +158,7 @@ class RosterService:
             end_date=end_date,
             needs_clarification=needs,
             needs_org_review=emp.needs_org_review,
+            is_archived=emp.is_archived,
         )
 
     def _timeline(

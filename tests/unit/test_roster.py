@@ -34,6 +34,7 @@ def _row(**overrides: object) -> RosterRow:
         end_date=None,
         needs_clarification=False,
         needs_org_review=False,
+        is_archived=False,
     )
     base.update(overrides)
     return RosterRow(**base)  # type: ignore[arg-type]

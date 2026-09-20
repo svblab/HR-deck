@@ -74,7 +74,11 @@ def test_initial_migration_creates_schema_and_seeds(tmp_path: Path) -> None:
     roles = conn.execute("SELECT code FROM roles ORDER BY id").fetchall()
     assert [r[0] for r in roles] == ["administrator", "hr_employee", "observer"]
     statuses = conn.execute("SELECT COUNT(*) FROM availability_statuses").fetchone()
-    assert statuses is not None and statuses[0] == 7
+    assert statuses is not None and statuses[0] == 6
+    inactive = conn.execute(
+        "SELECT id FROM availability_statuses WHERE code = 'inactive'"
+    ).fetchone()
+    assert inactive is None
     conn.close()
 
 

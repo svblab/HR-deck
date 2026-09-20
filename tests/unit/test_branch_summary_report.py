@@ -44,6 +44,7 @@ def _roster_row(
         end_date=None,
         needs_clarification=False,
         needs_org_review=False,
+        is_archived=False,
     )
 
 
@@ -96,10 +97,7 @@ def test_build_branch_summary_rows_groups_by_division() -> None:
     assert by_division["Продажи"]["report.department_absent"] == "5"
     assert by_division["Продажи"]["report.vacation_employees"] == "Иванов И.И.; Петров П.П."
     assert by_division["Продажи"]["report.sick_leave_employees"] == "Сидоров С.С."
-    assert (
-        by_division["Продажи"]["report.business_trip_employees"]
-        == "Кузнецов К.К.; Смирнов А.А."
-    )
+    assert by_division["Продажи"]["report.business_trip_employees"] == "Кузнецов К.К.; Смирнов А.А."
     assert by_division["Бухгалтерия"]["report.department_total"] == "2"
     assert by_division["Бухгалтерия"]["report.business_trip_employees"] == ""
     assert by_division["IT"]["report.department_absent"] == "2"
@@ -145,9 +143,7 @@ def test_branch_summary_service_builds_context(tmp_path: Path) -> None:
 def test_build_branch_summary_context_scalars() -> None:
     status_codes = {5: "vacation"}
     rows = [
-        _roster_row(
-            employee_id=1, full_name="Иванов И.И.", division_name="Продажи", status_id=5
-        )
+        _roster_row(employee_id=1, full_name="Иванов И.И.", division_name="Продажи", status_id=5)
     ]
     scalars, row_records = build_branch_summary_context(
         rows,
