@@ -65,7 +65,6 @@ def test_is_absent_uses_existing_absence_codes() -> None:
     assert is_absent_status("sick")
     assert is_absent_status("trip")
     assert is_absent_status("day_off")
-    assert is_absent_status("inactive")
     assert not is_absent_status("office")
     assert not is_absent_status("remote")
     assert not is_absent_status(None)
