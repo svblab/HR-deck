@@ -178,8 +178,10 @@ class EmployeeService:
         def mutate() -> None:
             employee = self._employees.get(employee_id)
             if employee is not None and not employee.is_archived:
-                dismissed = self._employment_types.get_by_code("dismissed")
-                if dismissed is not None:
+                archiving_type = self._employment_types.resolve_default_archiving_type(
+                    active_only=True
+                )
+                if archiving_type is not None:
                     self._employees.update(
                         employee_id,
                         full_name=employee.full_name,
@@ -187,7 +189,7 @@ class EmployeeService:
                         branch_id=employee.branch_id,
                         department_id=employee.department_id,
                         division_id=employee.division_id,
-                        employment_type_id=dismissed.id,
+                        employment_type_id=archiving_type.id,
                         note=employee.note,
                         updated_at=now,
                     )
