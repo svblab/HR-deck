@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol
 
 # Зарезервированные system codes из migration 0001 + ADR-0011 seed.
@@ -22,7 +23,7 @@ def is_system_employment_type_code(code: str) -> bool:
 
 
 def resolve_default_archiving_type(
-    types: list[_ArchivingTypeCandidate],
+    types: Sequence[_ArchivingTypeCandidate],
     *,
     active_only: bool = True,
 ) -> _ArchivingTypeCandidate | None:

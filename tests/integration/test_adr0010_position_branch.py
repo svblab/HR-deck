@@ -89,8 +89,8 @@ def test_adr0010_migration_succeeds_on_empty_positions_table(tmp_path: Path) -> 
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [13, 14, 15, 16]
-    assert current_version(conn2) == 16
+    assert applied == [13, 14, 15, 16, 17]
+    assert current_version(conn2) == 17
     cols = {row[1] for row in conn2.execute("PRAGMA table_info(positions)").fetchall()}
     assert "branch_id" in cols
     conn2.close()
