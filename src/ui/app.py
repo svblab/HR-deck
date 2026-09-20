@@ -12,6 +12,7 @@ from data.backup_io import DatabaseCorruptionError, prepare_database_startup
 from data.paths import default_db_path, ensure_user_data_dirs
 from services.bootstrap import BootstrapService
 from services.upgrade import UpgradeError, UpgradeService
+from ui.app_icon import install_app_window_icon
 from ui.auth_dialogs import LoginDialog, SetupDialog
 from ui.logging_config import configure_logging, install_excepthook
 from ui.main_window import MainWindow
@@ -28,6 +29,8 @@ def run(db_path: Path | None = None) -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Журнал доступности персонала")
     app.setOrganizationName("HR")
+    if isinstance(app, QApplication):
+        install_app_window_icon(app)
 
     path = db_path or default_db_path()
     ensure_user_data_dirs(path.parent)
