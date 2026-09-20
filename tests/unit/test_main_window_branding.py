@@ -95,7 +95,11 @@ def test_refresh_branding_before_show_preserves_logo_aspect_ratio(
     scaled = logo.pixmap()
     assert scaled is not None
     assert not scaled.isNull()
-    assert abs(scaled.width() / scaled.height() - 2.0) < 0.01
+    from ui.company_logo import logo_badge_content_size
+
+    max_w, max_h = logo_badge_content_size()
+    assert scaled.width() == max_w
+    assert scaled.height() == max_h
 
     window.close()
     conn.close()  # type: ignore[union-attr]

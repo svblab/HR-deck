@@ -43,6 +43,7 @@ from ui.backup_dialog import BackupDialog
 from ui.company_logo import (
     LOGO_BADGE_OUTER_HEIGHT,
     LOGO_BADGE_OUTER_WIDTH,
+    TITLE_BAR_HEIGHT,
     logo_badge_content_size,
     scale_company_logo_pixmap,
 )
@@ -144,15 +145,19 @@ class MainWindow(QMainWindow):
 
     def _build_title_bar(self) -> QWidget:
         bar = QWidget(objectName="titleBar")
+        bar.setFixedHeight(TITLE_BAR_HEIGHT)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(18, 0, 18, 0)
         layout.setSpacing(18)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         brand = QHBoxLayout()
         brand.setSpacing(12)
+        brand.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         logo = QLabel("ЛОГО", objectName="logoBadge")
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo.setFixedSize(LOGO_BADGE_OUTER_WIDTH, LOGO_BADGE_OUTER_HEIGHT)
+        logo.setMaximumHeight(LOGO_BADGE_OUTER_HEIGHT)
         logo.setScaledContents(False)
         self._brand_logo = logo
         brand_text = QVBoxLayout()
