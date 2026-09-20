@@ -19,6 +19,7 @@ from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.directory_sync_import import DirectorySyncImportService
 from services.employees import EmployeeService
+from services.installation_identity import InstallationIdentityService
 
 _T0 = "2026-09-17T10:00:00Z"
 _T1 = "2026-09-17T11:00:00Z"
@@ -34,6 +35,25 @@ def _open(tmp_path: Path, *, clock: str = _T0):
         password="AdminPass-1",
     )
     return conn, session
+
+
+def _ensure_home_branch(
+    conn,
+    session,
+    directories: DirectoryService,
+    *,
+    branch_id: int | None = None,
+    new_name: str | None = None,
+) -> None:
+    identity = InstallationIdentityService(conn, session, directories=directories)
+    if identity.get_home_branch() is not None:
+        return
+    if branch_id is not None:
+        identity.set_home_branch(existing_branch_id=branch_id)
+    elif new_name is not None:
+        identity.set_home_branch(new_branch_name=new_name)
+    else:
+        raise ValueError("branch_id or new_name required")
 
 
 def _services(conn, session, *, clock: str = _T0):
@@ -134,7 +154,8 @@ def _pos_row(
 @pytest.mark.acceptance
 def test_adr0010_apply_creates_new_branch_from_package(tmp_path: Path) -> None:
     conn, session = _open(tmp_path)
-    _directories, _employees, importer = _services(conn, session)
+    directories, _employees, importer = _services(conn, session)
+    _ensure_home_branch(conn, session, directories, new_name="Домашний филиал")
     ext = str(uuid.uuid4())
     package = DirectorySyncPackage(
         tables={
@@ -155,6 +176,7 @@ def test_adr0010_apply_updates_existing_entity_by_external_id(tmp_path: Path) ->
     conn, session = _open(tmp_path)
     directories, _employees, importer = _services(conn, session)
     branch_id = directories.create_branch("Старое имя")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     local = BranchRepository(conn).get(branch_id)
     assert local is not None
     package = DirectorySyncPackage(
@@ -182,6 +204,7 @@ def test_adr0010_apply_noop_when_package_matches_local_state(tmp_path: Path) -> 
     conn, session = _open(tmp_path)
     directories, _employees, importer = _services(conn, session)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     local = BranchRepository(conn).get(branch_id)
     assert local is not None
     before = _dump_directories(conn)
@@ -207,6 +230,7 @@ def test_adr0010_apply_processes_parents_before_children(tmp_path: Path) -> None
     conn, session = _open(tmp_path)
     directories, _employees, importer = _services(conn, session)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     branch = BranchRepository(conn).get(branch_id)
     assert branch is not None
     dept_ext = str(uuid.uuid4())
@@ -256,6 +280,7 @@ def test_adr0010_apply_rejects_whole_package_when_position_policy_change_breaks_
     conn, session = _open(tmp_path)
     directories, employees, importer = _services(conn, session)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     pos_id = directories.create_position(branch_id, "Бухгалтер")
     employees.create_employee(
         EmployeeCreateInput(
@@ -309,6 +334,7 @@ def test_adr0010_apply_rejects_when_division_reparenting_breaks_employee(
     conn, session = _open(tmp_path)
     directories, employees, importer = _services(conn, session)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     dept_a = directories.create_department(branch_id, "Департамент A")
     dept_b = directories.create_department(branch_id, "Департамент B")
     div_id = directories.create_division(branch_id, dept_a, "Отдел")
@@ -379,6 +405,7 @@ def test_adr0010_apply_ignores_archived_employees_when_checking_for_breakage(
     conn, session = _open(tmp_path)
     directories, employees, importer = _services(conn, session)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     pos_id = directories.create_position(branch_id, "Бухгалтер")
     emp_id = employees.create_employee(
         EmployeeCreateInput(
@@ -428,6 +455,7 @@ def test_adr0010_apply_is_all_or_nothing_across_multiple_tables(
     conn, session = _open(tmp_path)
     directories, employees, importer = _services(conn, session)
     branch_id = directories.create_branch("Старое имя филиала")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     pos_id = directories.create_position(branch_id, "Бухгалтер")
     employees.create_employee(
         EmployeeCreateInput(
@@ -486,6 +514,7 @@ def test_adr0010_apply_resolves_parent_by_external_id_when_parent_table_omitted_
     conn, session = _open(tmp_path)
     directories, _employees, importer = _services(conn, session)
     own_id = directories.create_branch("Receiver's own unrelated branch")
+    _ensure_home_branch(conn, session, directories, branch_id=own_id)
     synced_id = directories.create_branch("Previously synced sender branch")
     own = BranchRepository(conn).get(own_id)
     synced = BranchRepository(conn).get(synced_id)
@@ -522,7 +551,8 @@ def test_adr0010_apply_rejects_package_when_referenced_parent_is_missing_locally
     tmp_path: Path,
 ) -> None:
     conn, session = _open(tmp_path)
-    _directories, _employees, importer = _services(conn, session)
+    directories, _employees, importer = _services(conn, session)
+    _ensure_home_branch(conn, session, directories, new_name="Домашний филиал")
     before = _dump_directories(conn)
     missing_branch_ext = str(uuid.uuid4())
     package = DirectorySyncPackage(

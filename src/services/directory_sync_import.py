@@ -20,6 +20,7 @@ from data.directories import (
 from domain.directory_sync import DirectorySyncConflictError, DirectorySyncPackage
 from domain.permissions import Permission
 from services.authorization import AuthorizationService
+from services.installation_identity import InstallationIdentityService
 from services.session import SessionState
 
 Clock = Callable[[], str]
@@ -84,6 +85,7 @@ class DirectorySyncImportService:
 
     def apply_package(self, package: DirectorySyncPackage) -> None:
         self._require_transport_admin()
+        InstallationIdentityService(self._conn, self._session).require_home_branch()
         self._conn.execute(f"SAVEPOINT {_SAVEPOINT}")
         try:
             self._reconcile_branches(package.tables.get("branches", []))
