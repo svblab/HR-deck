@@ -205,7 +205,6 @@ class _DirectoryPanel(QWidget):
         self._rename_btn = QPushButton("Переименовать…", objectName=f"{object_prefix}RenameBtn")
         self._archive_btn = QPushButton("В архив", objectName=f"{object_prefix}ArchiveBtn")
         self._restore_btn = QPushButton("Восстановить", objectName=f"{object_prefix}RestoreBtn")
-        refresh_btn = QPushButton("Обновить", objectName=f"{object_prefix}RefreshBtn")
         for btn in (
             self._create_btn,
             self._rename_btn,
@@ -217,13 +216,11 @@ class _DirectoryPanel(QWidget):
         self._rename_btn.clicked.connect(self._rename)
         self._archive_btn.clicked.connect(self._archive)
         self._restore_btn.clicked.connect(self._restore)
-        refresh_btn.clicked.connect(self.reload)
         for btn in (
             self._create_btn,
             self._rename_btn,
             self._archive_btn,
             self._restore_btn,
-            refresh_btn,
         ):
             buttons.addWidget(btn)
         buttons.addStretch(1)
