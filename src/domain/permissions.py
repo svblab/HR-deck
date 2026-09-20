@@ -24,6 +24,7 @@ class Permission(StrEnum):
     MANAGE_ACCOUNTS = "manage_accounts"
     MANAGE_SECURITY_SETTINGS = "manage_security_settings"
     MANAGE_ENCRYPTION_KEYS = "manage_encryption_keys"
+    MANAGE_INSTALLATION_IDENTITY = "manage_installation_identity"
     VIEW_USER_ACTION_LOG = "view_user_action_log"
     VIEW_TECHNICAL_EVENTS = "view_technical_events"
 
