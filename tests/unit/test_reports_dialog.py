@@ -64,7 +64,7 @@ def test_filter_combos_include_all_option_and_expected_counts(qtbot, tmp_path: P
     assert branch.count() == 2
     assert dept.count() == 2
     assert status.count() == 7
-    assert employment.count() == 4
+    assert employment.count() == 5
     assert employee.count() == 3
     for combo in (branch, dept, status, employment, employee):
         assert combo.itemText(0) == "Все"

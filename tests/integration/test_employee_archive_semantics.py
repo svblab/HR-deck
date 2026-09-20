@@ -124,7 +124,10 @@ def test_archive_uses_lexicographic_fallback_without_dismissed(tmp_path: Path) -
     conn, session = _open_db(tmp_path)
     ids = seed_synthetic_org(conn)
     emp_id = ids["employee_a_id"]
-    conn.execute("DELETE FROM employment_types WHERE code = ?", (DEFAULT_ARCHIVING_EMPLOYMENT_CODE,))
+    conn.execute(
+        "DELETE FROM employment_types WHERE code = ?",
+        (DEFAULT_ARCHIVING_EMPLOYMENT_CODE,),
+    )
     conn.execute(
         "INSERT INTO employment_types (code, name, archives_record, is_archived,"
         " created_at, updated_at) VALUES (?, ?, 1, 0, ?, ?)",
