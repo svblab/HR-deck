@@ -4,10 +4,10 @@ Living audit of domain-model gaps, identity contracts, and cross-cutting inconsi
 between specification, schema, and implementation. Each section is self-contained and cites
 evidence in the repository at the time of writing.
 
-**Status:** WORKING (audit in progress)  
+**Status:** WORKING (§1 resolved by ADR-0011 implementation)  
 **Last updated:** 2026-09-20
 
-**Proposed resolution (§1):** [`ADR-0011-employee-archive-semantics.md`](adr/ADR-0011-employee-archive-semantics.md)
+**Resolution (§1):** [`ADR-0011-employee-archive-semantics.md`](adr/ADR-0011-employee-archive-semantics.md) — **Принято**, implemented in migration 0017.
 — canonical model: `employees.is_archived` + `employment_types.archives_record`
 with system seed `code = dismissed`.
 
