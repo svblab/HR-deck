@@ -147,6 +147,15 @@ def test_employment_type_code_unique(tmp_path: Path) -> None:
     conn.close()
 
 
+def test_system_employment_type_cannot_be_archived(tmp_path: Path) -> None:
+    conn, session, _db = _open_db(tmp_path)
+    svc = DirectoryService(conn, session, clock=lambda: "2026-08-26T14:05:00Z")
+    staff_id = next(row.id for row in svc.list_employment_types() if row.code == "staff")
+    with pytest.raises(DirectoryError, match="system employment type 'staff'"):
+        svc.archive_employment_type(staff_id)
+    conn.close()
+
+
 def test_failed_create_no_audit(tmp_path: Path) -> None:
     conn, session, _db = _open_db(tmp_path)
     svc = DirectoryService(conn, session, clock=lambda: "2026-08-26T14:10:00Z")
