@@ -58,6 +58,7 @@ class EmploymentTypeRecord:
     id: int
     code: str
     name: str
+    archives_record: bool
     is_archived: bool
     created_at: str
     updated_at: str
@@ -377,7 +378,10 @@ class EmploymentTypeRepository:
         self._conn = conn
 
     def list(self, *, active_only: bool = False) -> list[EmploymentTypeRecord]:
-        sql = "SELECT id, code, name, is_archived, created_at, updated_at FROM employment_types"
+        sql = (
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at"
+            " FROM employment_types"
+        )
         if active_only:
             sql += " WHERE is_archived = 0"
         sql += " ORDER BY name"
@@ -385,7 +389,7 @@ class EmploymentTypeRepository:
 
     def get(self, employment_type_id: int) -> EmploymentTypeRecord | None:
         row = self._conn.execute(
-            "SELECT id, code, name, is_archived, created_at, updated_at "
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at "
             "FROM employment_types WHERE id = ?",
             (employment_type_id,),
         ).fetchone()
@@ -393,7 +397,7 @@ class EmploymentTypeRepository:
 
     def get_by_code(self, code: str) -> EmploymentTypeRecord | None:
         row = self._conn.execute(
-            "SELECT id, code, name, is_archived, created_at, updated_at "
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at "
             "FROM employment_types WHERE code = ?",
             (code,),
         ).fetchone()
@@ -475,7 +479,8 @@ def _employment_type_row(row: tuple[object, ...]) -> EmploymentTypeRecord:
         id=int(row[0]),
         code=str(row[1]),
         name=str(row[2]),
-        is_archived=bool(int(row[3])),
-        created_at=str(row[4]),
-        updated_at=str(row[5]),
+        archives_record=bool(int(row[3])),
+        is_archived=bool(int(row[4])),
+        created_at=str(row[5]),
+        updated_at=str(row[6]),
     )
