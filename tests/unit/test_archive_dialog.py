@@ -220,6 +220,12 @@ def test_archive_open_card_without_restore(
     assert (
         conn.execute("SELECT is_archived FROM employees WHERE id = ?", (emp_id,)).fetchone()[0] == 1
     )
+    restore_btn = dialog.findChild(QPushButton, "archiveRestoreBtn")
+    assert restore_btn is not None
+    assert open_btn.isEnabled()
+    assert restore_btn.isEnabled()
+    assert dialog._selected is not None  # noqa: SLF001
+    assert dialog._selected.employee_id == emp_id  # noqa: SLF001
 
     dialog.close()
     window.close()
@@ -262,6 +268,48 @@ def test_archive_open_card_restore_notifies_parent(
 
     assert notified == 1
     assert table.rowCount() == 1
+    assert open_btn.isEnabled()
+    assert dialog._selected is not None  # noqa: SLF001
+    assert dialog._selected.employee_id == emp_id  # noqa: SLF001
+
+    dialog.close()
+    window.close()
+    conn.close()
+
+
+def test_archive_open_card_clears_selection_after_restore_from_card(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtWidgets import QDialog
+
+    from ui.employee_card_form import EmployeeCardDialog
+
+    window, conn, session, ids = _admin_window(tmp_path)
+    qtbot.addWidget(window)
+    emp_id = ids["employee_a_id"]
+    employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
+    employees.archive_employee(emp_id)
+
+    def _restore_from_card(self: EmployeeCardDialog) -> QDialog.DialogCode:
+        employees.restore_employee(self._employee_id)  # noqa: SLF001
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(EmployeeCardDialog, "exec", _restore_from_card)
+
+    dialog = _archive_dialog(conn, session, parent=window)
+    qtbot.addWidget(dialog)
+    table = dialog.findChild(QTableWidget, "archiveTable")
+    assert table is not None
+    table.selectRow(0)
+    open_btn = dialog.findChild(QPushButton, "archiveOpenCardBtn")
+    restore_btn = dialog.findChild(QPushButton, "archiveRestoreBtn")
+    assert open_btn is not None and restore_btn is not None
+    open_btn.click()
+
+    assert table.rowCount() == 0
+    assert dialog._selected is None  # noqa: SLF001
+    assert not open_btn.isEnabled()
+    assert not restore_btn.isEnabled()
 
     dialog.close()
     window.close()
