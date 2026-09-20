@@ -80,6 +80,7 @@ class ArchiveDialog(QDialog):
         if header is not None:
             header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self._table.itemSelectionChanged.connect(self._on_selection_changed)
+        self._table.cellClicked.connect(self._on_row_clicked)
         layout.addWidget(self._table, stretch=1)
 
         actions = QHBoxLayout()
@@ -147,6 +148,15 @@ class ArchiveDialog(QDialog):
         self._open_card_btn.setEnabled(has_selection and self._can_view)
         self._restore_btn.setEnabled(has_selection and self._can_manage)
         self._restore_assign_btn.setEnabled(has_selection and self._can_manage)
+
+    def _on_row_clicked(self, row: int, _column: int) -> None:
+        if not self._can_view:
+            return
+        if row < 0 or row >= len(self._rows):
+            return
+        self._selected = self._rows[row]
+        self._update_action_buttons()
+        self._open_selected_card()
 
     def _open_selected_card(self) -> None:
         if self._selected is None:

@@ -177,6 +177,58 @@ def test_archive_restore_and_assign_uses_status_dialog(
     conn.close()
 
 
+def test_archive_open_card_on_row_click_without_restore(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtWidgets import QDialog
+
+    from ui.employee_card_form import EmployeeCardDialog
+
+    window, conn, session, ids = _admin_window(tmp_path)
+    qtbot.addWidget(window)
+    emp_id = ids["employee_a_id"]
+    employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
+    employees.archive_employee(emp_id)
+
+    restore_calls: list[int] = []
+
+    def _track_restore(employee_id: int) -> None:
+        restore_calls.append(employee_id)
+
+    monkeypatch.setattr(employees, "restore_employee", _track_restore)
+
+    opened: list[int] = []
+
+    def _open_card(self: EmployeeCardDialog) -> QDialog.DialogCode:
+        opened.append(self._employee_id)  # noqa: SLF001
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(EmployeeCardDialog, "exec", _open_card)
+
+    dialog = _archive_dialog(conn, session, parent=window)
+    qtbot.addWidget(dialog)
+    table = dialog.findChild(QTableWidget, "archiveTable")
+    assert table is not None
+    table.cellClicked.emit(0, 0)
+
+    assert opened == [emp_id]
+    assert restore_calls == []
+    assert (
+        conn.execute("SELECT is_archived FROM employees WHERE id = ?", (emp_id,)).fetchone()[0] == 1
+    )
+    open_btn = dialog.findChild(QPushButton, "archiveOpenCardBtn")
+    restore_btn = dialog.findChild(QPushButton, "archiveRestoreBtn")
+    assert open_btn is not None and restore_btn is not None
+    assert open_btn.isEnabled()
+    assert restore_btn.isEnabled()
+    assert dialog._selected is not None  # noqa: SLF001
+    assert dialog._selected.employee_id == emp_id  # noqa: SLF001
+
+    dialog.close()
+    window.close()
+    conn.close()
+
+
 def test_archive_open_card_without_restore(
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
