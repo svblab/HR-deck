@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from domain.permissions import Permission, has_permission
 from services.authorization import AuthorizationError
 from services.directories import DirectoryError, DirectoryService
+from services.installation_identity import InstallationIdentityService
 from services.session import SessionState
 
 _USER_ROLE = 256  # Qt.ItemDataRole.UserRole
@@ -43,6 +44,9 @@ class DirectoriesDialog(QDialog):
         self._directories = directories
         self._session = session
         self._can_manage = has_permission(session.role, Permission.MANAGE_DIRECTORIES)
+        self._installation_identity = InstallationIdentityService(
+            directories._conn, session, directories=directories
+        )
         self.setObjectName("directoriesDialog")
         self.setWindowTitle("Справочники")
         self.setModal(True)
@@ -57,6 +61,8 @@ class DirectoriesDialog(QDialog):
             title="Филиалы",
             object_prefix="directoriesBranch",
             reload=self._reload_branch_dependents,
+            allow_create=False,
+            get_home_branch_id=self._home_branch_id,
         )
         self._dept_panel = _DirectoryPanel(
             directories,
@@ -115,6 +121,10 @@ class DirectoriesDialog(QDialog):
 
         self._reload_branch_dependents()
 
+    def _home_branch_id(self) -> int | None:
+        home = self._installation_identity.get_home_branch()
+        return home.id if home is not None else None
+
     def _reload_branch_dependents(self) -> None:
         self._dept_panel.set_parent_items(self._branch_panel.items_for_combo())
         self._pos_panel.set_parent_items(self._branch_panel.items_for_combo())
@@ -147,6 +157,8 @@ class _DirectoryPanel(QWidget):
         extra_parent_changed: Callable[[], None] | None = None,
         reload: Callable[[], None] | None = None,
         include_no_parent_option: bool = False,
+        allow_create: bool = True,
+        get_home_branch_id: Callable[[], int | None] | None = None,
     ) -> None:
         super().__init__()
         self._directories = directories
@@ -158,6 +170,7 @@ class _DirectoryPanel(QWidget):
         self._extra_parent_changed = extra_parent_changed
         self._reload_hook = reload
         self._include_no_parent_option = include_no_parent_option
+        self._get_home_branch_id = get_home_branch_id
 
         layout = QVBoxLayout(self)
         filters = QHBoxLayout()
@@ -198,6 +211,7 @@ class _DirectoryPanel(QWidget):
         header = self._table.horizontalHeader()
         assert header is not None
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self._table.itemSelectionChanged.connect(self._update_row_actions)
         layout.addWidget(self._table, stretch=1)
 
         buttons = QHBoxLayout()
@@ -206,12 +220,10 @@ class _DirectoryPanel(QWidget):
         self._archive_btn = QPushButton("В архив", objectName=f"{object_prefix}ArchiveBtn")
         self._restore_btn = QPushButton("Восстановить", objectName=f"{object_prefix}RestoreBtn")
         refresh_btn = QPushButton("Обновить", objectName=f"{object_prefix}RefreshBtn")
-        for btn in (
-            self._create_btn,
-            self._rename_btn,
-            self._archive_btn,
-            self._restore_btn,
-        ):
+        if not allow_create:
+            self._create_btn.hide()
+        self._create_btn.setEnabled(can_manage and allow_create)
+        for btn in (self._rename_btn, self._archive_btn, self._restore_btn):
             btn.setEnabled(can_manage)
         self._create_btn.clicked.connect(self._create)
         self._rename_btn.clicked.connect(self._rename)
@@ -300,8 +312,26 @@ class _DirectoryPanel(QWidget):
             )
         if rows:
             self._table.selectRow(0)
+        self._update_row_actions()
         if self._reload_hook is not None and not self._initializing:
             self._reload_hook()
+
+    def _row_is_editable(self) -> bool:
+        if not self._can_manage:
+            return False
+        if self._kind != "branch" or self._get_home_branch_id is None:
+            return True
+        home_id = self._get_home_branch_id()
+        entity_id = self._selected_id()
+        if home_id is None or entity_id is None:
+            return False
+        return entity_id == home_id
+
+    def _update_row_actions(self) -> None:
+        editable = self._row_is_editable()
+        self._rename_btn.setEnabled(editable)
+        self._archive_btn.setEnabled(editable)
+        self._restore_btn.setEnabled(editable)
 
     def _fetch_rows(self, *, active_only: bool):
         if self._list_items is not None:

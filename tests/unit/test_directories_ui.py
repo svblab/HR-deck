@@ -22,6 +22,7 @@ from services.account_management import AccountManagementService
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.employees import EmployeeService
+from services.installation_identity import InstallationIdentityService
 from services.session import SessionState
 from ui.directories_dialog import _NO_DEPARTMENT, DirectoriesDialog
 from ui.employee_card_form import EmployeeCardDialog
@@ -91,15 +92,29 @@ def _tab_index(dlg: DirectoriesDialog, title: str) -> int:
     raise AssertionError(f"tab {title!r} not found")
 
 
+def _create_home_branch(
+    conn: object,
+    session: SessionState,
+    directories: DirectoryService,
+    name: str,
+) -> int:
+    branch = InstallationIdentityService(
+        conn, session, directories=directories
+    ).set_home_branch(new_branch_name=name)
+    return branch.id
+
+
 def _create_chain_via_dialog(
     qtbot,
     dlg: DirectoriesDialog,
     directories: DirectoryService,
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    conn: object,
+    session: SessionState,
 ) -> dict[str, int]:
     prompts = iter(
         [
-            "Филиал Альфа",
             "Департамент HR",
             "Отдел платформы",
         ]
@@ -133,9 +148,8 @@ def _create_chain_via_dialog(
     )
     monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
 
-    branch_btn = dlg.findChild(QPushButton, "directoriesBranchCreateBtn")
-    _click(qtbot, branch_btn)
-    branch_id = directories.list_branches(active_only=True)[0].id
+    branch_id = _create_home_branch(conn, session, directories, "Филиал Альфа")
+    dlg._reload_branch_dependents()
 
     tabs = dlg.findChild(QTabWidget, "directoriesTabs")
     assert tabs is not None
@@ -194,7 +208,9 @@ def test_directories_dialog_populates_employee_card_combos(
 
     dlg = DirectoriesDialog(directories, session)
     qtbot.addWidget(dlg)
-    ids = _create_chain_via_dialog(qtbot, dlg, directories, monkeypatch)
+    ids = _create_chain_via_dialog(
+        qtbot, dlg, directories, monkeypatch, conn=conn, session=admin
+    )
     dlg.close()
 
     card = EmployeeCardDialog(employees, directories, session)
@@ -221,7 +237,9 @@ def test_observer_directories_dialog_is_view_only(
     dlg_admin = DirectoriesDialog(directories_admin, admin)
     qtbot.addWidget(dlg_admin)
     monkeypatch = pytest.MonkeyPatch()
-    _create_chain_via_dialog(qtbot, dlg_admin, directories_admin, monkeypatch)
+    _create_chain_via_dialog(
+        qtbot, dlg_admin, directories_admin, monkeypatch, conn=conn, session=admin
+    )
     dlg_admin.close()
 
     obs = _session_for_role(conn, admin, db, clock, RoleCode.OBSERVER)
@@ -281,7 +299,9 @@ def test_archived_position_hidden_for_new_employee_kept_on_existing(
 
     dlg = DirectoriesDialog(directories, admin)
     qtbot.addWidget(dlg)
-    ids = _create_chain_via_dialog(qtbot, dlg, directories, monkeypatch)
+    ids = _create_chain_via_dialog(
+        qtbot, dlg, directories, monkeypatch, conn=conn, session=admin
+    )
     dlg.close()
 
     emp_id = employees.create_employee(
@@ -332,13 +352,8 @@ def test_directories_dialog_creates_branch_direct_division(
     qtbot.addWidget(dlg)
     monkeypatch.setattr(QMessageBox, "warning", _fail_on_warning)
 
-    branch_btn = dlg.findChild(QPushButton, "directoriesBranchCreateBtn")
-    monkeypatch.setattr(
-        "ui.directories_dialog._prompt_text",
-        lambda *_a, **_k: ("Филиал Центр", True),
-    )
-    _click(qtbot, branch_btn)
-    branch_id = directories.list_branches(active_only=True)[0].id
+    branch_id = _create_home_branch(conn, admin, directories, "Филиал Центр")
+    dlg._reload_branch_dependents()
 
     tabs = dlg.findChild(QTabWidget, "directoriesTabs")
     assert tabs is not None
@@ -791,5 +806,25 @@ def test_directories_rename_position_requirements_decline_leaves_data_unchanged(
         (emp_id,),
     ).fetchone()
     assert row == (dept_id, 0)
+    dlg.close()
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_directories_dialog_branch_tab_has_no_create_action(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, admin, directories, _db = _open_directories(tmp_path)
+    _create_home_branch(conn, admin, directories, "Домашний филиал")
+    dlg = DirectoriesDialog(directories, admin)
+    qtbot.addWidget(dlg)
+    dlg.show()
+
+    branch_create = dlg.findChild(QPushButton, "directoriesBranchCreateBtn")
+    dept_create = dlg.findChild(QPushButton, "directoriesDepartmentCreateBtn")
+    assert branch_create is not None and dept_create is not None
+    assert branch_create.isHidden()
+    assert not dept_create.isHidden()
+
     dlg.close()
     conn.close()
