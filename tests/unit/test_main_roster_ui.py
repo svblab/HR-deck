@@ -4,10 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QPushButton, QTableWidget, QToolButton
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+    QToolButton,
+)
 
 from data.db import Connection
 from domain.permissions import RoleCode
+from domain.roster import GroupBy
 from services.account_management import AccountManagementService
 from services.bootstrap import BootstrapService
 from services.session import SessionState
@@ -197,6 +206,45 @@ def test_action_log_button_hidden_for_hr(qtbot, tmp_path: Path) -> None:
     assert btn is not None
     assert btn.isHidden()
     hr_window.close()
+    conn.close()
+
+
+def test_reload_preserves_org_filters_and_grouping(qtbot, tmp_path: Path) -> None:
+    window, conn, _session, ids = _window(tmp_path)
+    qtbot.addWidget(window)
+    panel = window.findChild(RosterPanel)
+    assert panel is not None
+    branch = window.findChild(QComboBox, "filterBranch")
+    dept = window.findChild(QComboBox, "filterDept")
+    div = window.findChild(QComboBox, "filterDivision")
+    group = window.findChild(QComboBox, "groupByCombo")
+    clarify = window.findChild(QCheckBox, "clarifyFilter")
+    assert branch is not None and dept is not None and div is not None
+    assert group is not None and clarify is not None
+
+    branch.setCurrentIndex(1)
+    qtbot.wait(10)
+    dept.setCurrentIndex(1)
+    qtbot.wait(10)
+    div.setCurrentIndex(1)
+    group.setCurrentIndex(group.findData(GroupBy.BRANCH))
+    clarify.setChecked(True)
+
+    assert panel._combo_id(branch) == ids["branch_id"]
+    assert panel._combo_id(dept) == ids["department_id"]
+    assert panel._combo_id(div) == ids["division_id"]
+    assert panel._group_by == GroupBy.BRANCH
+    assert clarify.isChecked()
+
+    panel.reload()
+
+    assert panel._combo_id(branch) == ids["branch_id"]
+    assert panel._combo_id(dept) == ids["department_id"]
+    assert panel._combo_id(div) == ids["division_id"]
+    assert panel._group_by == GroupBy.BRANCH
+    assert clarify.isChecked()
+
+    window.close()
     conn.close()
 
 

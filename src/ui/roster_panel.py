@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -38,6 +40,15 @@ from ui.employee_popup import EmployeePopupDialog
 from ui.import_export_dialog import run_export_flow, run_import_flow
 from ui.reports_dialog import ReportsDialog
 from ui.table_widget import TableWidget
+
+
+class _FilterState(NamedTuple):
+    branch_id: int | None
+    department_id: int | None
+    division_id: int | None
+    group_by: GroupBy
+    only_clarify: bool
+    only_org_review: bool
 
 
 class RosterPanel(QWidget):
@@ -93,8 +104,10 @@ class RosterPanel(QWidget):
         self._render()
 
     def reload(self) -> None:
+        saved = self._capture_filter_state()
         self._all_rows = self._service.list_rows()
         self._fill_branch_combo()
+        self._restore_filter_state(saved)
         self._render()
 
     def _build_toolbar(self) -> QWidget:
@@ -239,6 +252,46 @@ class RosterPanel(QWidget):
     def _combo_id(self, combo: QComboBox) -> int | None:
         data = combo.currentData()
         return int(data) if data is not None else None
+
+    def _capture_filter_state(self) -> _FilterState:
+        return _FilterState(
+            branch_id=self._combo_id(self._branch),
+            department_id=self._combo_id(self._dept),
+            division_id=self._combo_id(self._div),
+            group_by=self._group_by,
+            only_clarify=self._only_clarify.isChecked(),
+            only_org_review=self._only_org_review.isChecked(),
+        )
+
+    def _restore_combo_selection(self, combo: QComboBox, item_id: int | None) -> None:
+        combo.blockSignals(True)
+        if item_id is None:
+            combo.setCurrentIndex(0)
+        else:
+            index = combo.findData(item_id)
+            combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _restore_filter_state(self, state: _FilterState) -> None:
+        self._restore_combo_selection(self._branch, state.branch_id)
+        self._fill_dept_combo()
+        self._restore_combo_selection(self._dept, state.department_id)
+        self._fill_div_combo()
+        self._restore_combo_selection(self._div, state.division_id)
+
+        group_index = self._group_combo.findData(state.group_by)
+        if group_index >= 0:
+            self._group_combo.blockSignals(True)
+            self._group_combo.setCurrentIndex(group_index)
+            self._group_combo.blockSignals(False)
+            self._group_by = state.group_by
+
+        self._only_clarify.blockSignals(True)
+        self._only_clarify.setChecked(state.only_clarify)
+        self._only_clarify.blockSignals(False)
+        self._only_org_review.blockSignals(True)
+        self._only_org_review.setChecked(state.only_org_review)
+        self._only_org_review.blockSignals(False)
 
     def _fill_branch_combo(self) -> None:
         self._branch.blockSignals(True)
