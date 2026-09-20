@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+from ui.company_logo import (
+    LOGO_BADGE_CONTENT_HEIGHT,
+    LOGO_BADGE_CONTENT_WIDTH,
+    LOGO_BADGE_PADDING_H,
+    LOGO_BADGE_PADDING_V,
+    TITLE_BAR_HEIGHT,
+)
+
 NAVY = "#1B2A3D"
 NAVY_2 = "#25384F"
 ACCENT = "#2E6E62"
@@ -20,8 +28,8 @@ QMainWindow, QWidget#centralRoot {{
 QWidget#titleBar {{
     background: {NAVY};
     color: #ffffff;
-    min-height: 56px;
-    max-height: 56px;
+    min-height: {TITLE_BAR_HEIGHT}px;
+    max-height: {TITLE_BAR_HEIGHT}px;
 }}
 QLabel#logoBadge {{
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3A5A78, stop:1 #233A50);
@@ -30,10 +38,11 @@ QLabel#logoBadge {{
     border-radius: 7px;
     font-weight: 700;
     font-size: 13px;
-    padding: 6px 8px;
-    min-width: 34px;
-    max-width: 48px;
-    min-height: 34px;
+    padding: {LOGO_BADGE_PADDING_V}px {LOGO_BADGE_PADDING_H}px;
+    min-width: {LOGO_BADGE_CONTENT_WIDTH}px;
+    max-width: {LOGO_BADGE_CONTENT_WIDTH}px;
+    min-height: {LOGO_BADGE_CONTENT_HEIGHT}px;
+    max-height: {LOGO_BADGE_CONTENT_HEIGHT}px;
 }}
 QLabel#brandCompany {{
     color: #ffffff;

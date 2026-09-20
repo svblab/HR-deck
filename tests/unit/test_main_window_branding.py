@@ -74,3 +74,32 @@ def test_refresh_branding_loads_valid_logo(qtbot, tmp_path: Path) -> None:
 
     window.close()
     conn.close()  # type: ignore[union-attr]
+
+
+def test_refresh_branding_before_show_preserves_logo_aspect_ratio(
+    tmp_path: Path,
+) -> None:
+    """Симулирует старт приложения: branding до layout/show не искажает пропорции."""
+    window, conn, service = _admin_window(tmp_path)
+
+    logo_path = tmp_path / "wide-logo.png"
+    pixmap = QPixmap(200, 100)
+    pixmap.fill()
+    assert pixmap.save(str(logo_path))
+
+    service.update_company_profile(logo_path=str(logo_path))
+    window._refresh_branding()
+
+    logo = window.findChild(QLabel, "logoBadge")
+    assert logo is not None
+    scaled = logo.pixmap()
+    assert scaled is not None
+    assert not scaled.isNull()
+    from ui.company_logo import logo_badge_content_size
+
+    max_w, max_h = logo_badge_content_size()
+    assert scaled.width() == max_w
+    assert scaled.height() == max_h
+
+    window.close()
+    conn.close()  # type: ignore[union-attr]

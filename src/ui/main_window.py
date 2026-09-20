@@ -40,6 +40,13 @@ from ui.action_log_dialog import ActionLogDialog
 from ui.archive_dialog import ArchiveDialog
 from ui.auth_dialogs import AccountsDialog, LoginDialog, SettingsDialog, UnlockDialog
 from ui.backup_dialog import BackupDialog
+from ui.company_logo import (
+    LOGO_BADGE_OUTER_HEIGHT,
+    LOGO_BADGE_OUTER_WIDTH,
+    TITLE_BAR_HEIGHT,
+    logo_badge_content_size,
+    scale_company_logo_pixmap,
+)
 from ui.roster_panel import RosterPanel
 from ui.session_activity import install_session_activity_filter
 from ui.session_lock import dismiss_open_modal_dialogs
@@ -138,14 +145,20 @@ class MainWindow(QMainWindow):
 
     def _build_title_bar(self) -> QWidget:
         bar = QWidget(objectName="titleBar")
+        bar.setFixedHeight(TITLE_BAR_HEIGHT)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(18, 0, 18, 0)
         layout.setSpacing(18)
+        layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         brand = QHBoxLayout()
         brand.setSpacing(12)
+        brand.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         logo = QLabel("ЛОГО", objectName="logoBadge")
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo.setFixedSize(LOGO_BADGE_OUTER_WIDTH, LOGO_BADGE_OUTER_HEIGHT)
+        logo.setMaximumHeight(LOGO_BADGE_OUTER_HEIGHT)
+        logo.setScaledContents(False)
         self._brand_logo = logo
         brand_text = QVBoxLayout()
         brand_text.setSpacing(0)
@@ -342,10 +355,12 @@ class MainWindow(QMainWindow):
         if logo_path:
             pixmap = QPixmap(logo_path)
             if not pixmap.isNull():
-                scaled = pixmap.scaled(
-                    self._brand_logo.size(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
+                max_w, max_h = logo_badge_content_size()
+                scaled = scale_company_logo_pixmap(
+                    pixmap,
+                    max_width=max_w,
+                    max_height=max_h,
+                    device_pixel_ratio=self._brand_logo.devicePixelRatioF(),
                 )
                 self._brand_logo.setPixmap(scaled)
                 self._brand_logo.setText("")
