@@ -107,7 +107,7 @@ class ArchiveDialog(QDialog):
         self._can_manage = has_permission(session.role, Permission.MANAGE_EMPLOYEES)
         self._reload()
 
-    def _reload(self) -> None:
+    def _reload(self, select_employee_id: int | None = None) -> None:
         query = self._search.text().strip()
         rows = self._roster.list_rows(
             include_archived=True,
@@ -122,6 +122,12 @@ class ArchiveDialog(QDialog):
             status = row.status_name or "—"
             self._table.setItem(i, 3, QTableWidgetItem(status))
         self._selected = None
+        if select_employee_id is not None:
+            for i, row in enumerate(self._rows):
+                if row.employee_id == select_employee_id:
+                    self._table.selectRow(i)
+                    self._selected = row
+                    break
         self._update_action_buttons()
 
     def _on_selection_changed(self) -> None:
@@ -145,18 +151,21 @@ class ArchiveDialog(QDialog):
     def _open_selected_card(self) -> None:
         if self._selected is None:
             return
+        employee_id = self._selected.employee_id
         dialog = EmployeeCardDialog(
             self._employees,
             self._directories,
             self._session,
-            employee_id=self._selected.employee_id,
+            employee_id=employee_id,
             parent=self,
             status_history=self._history,
             availability_statuses=self._statuses,
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._notify_changed()
-        self._reload()
+        self._reload(select_employee_id=employee_id)
+        self.activateWindow()
+        self._table.setFocus()
 
     def _restore_selected(self) -> None:
         if self._selected is None:
