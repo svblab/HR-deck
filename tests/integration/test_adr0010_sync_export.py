@@ -14,6 +14,7 @@ from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
 from services.directory_sync import DirectorySyncService
 from services.employees import EmployeeService
+from services.installation_identity import InstallationIdentityService
 from services.transport_keys import TransportKeyStore
 
 _T0 = "2026-09-17T10:00:00Z"
@@ -55,6 +56,25 @@ def _direction_id(conn, *, clock: str = _T0) -> int:
     return direction.id
 
 
+def _ensure_home_branch(
+    conn,
+    session,
+    directories: DirectoryService,
+    *,
+    branch_id: int | None = None,
+    new_name: str | None = None,
+) -> None:
+    identity = InstallationIdentityService(conn, session, directories=directories)
+    if identity.get_home_branch() is not None:
+        return
+    if branch_id is not None:
+        identity.set_home_branch(existing_branch_id=branch_id)
+    elif new_name is not None:
+        identity.set_home_branch(new_branch_name=new_name)
+    else:
+        raise ValueError("branch_id or new_name required")
+
+
 def _services(conn, session, *, clock: str):
     directories = DirectoryService(conn, session, clock=lambda: clock)
     employees = EmployeeService(conn, session, clock=lambda: clock)
@@ -69,15 +89,17 @@ def test_adr0010_export_includes_table_when_any_row_changed_since_watermark(
     conn, session = _open(tmp_path, clock=_T0)
     direction_id = _direction_id(conn)
     directories, _employees, sync = _services(conn, session, clock=_T0)
-    directories.create_branch("Филиал A")
+    branch_id = directories.create_branch("Филиал A")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     pkg = sync.build_export_package(direction_id)
     assert "branches" in pkg.tables
     sync.record_export(direction_id, ["branches"], exported_at=_T1)
 
     directories_later = DirectoryService(conn, session, clock=lambda: _T2)
     directories_later.create_branch("Филиал B")
+    directories_later.create_department(branch_id, "Новый департамент")
     pkg2 = sync.build_export_package(direction_id)
-    assert "branches" in pkg2.tables
+    assert "departments" in pkg2.tables
     conn.close()
 
 
@@ -88,7 +110,8 @@ def test_adr0010_export_omits_table_when_nothing_changed_since_watermark(
     conn, session = _open(tmp_path, clock=_T0)
     direction_id = _direction_id(conn)
     directories, _employees, sync = _services(conn, session, clock=_T0)
-    directories.create_branch("Филиал A")
+    branch_id = directories.create_branch("Филиал A")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     sync.record_export(direction_id, ["branches"], exported_at=_T1)
 
     pkg = sync.build_export_package(direction_id)
@@ -104,13 +127,16 @@ def test_adr0010_export_includes_all_rows_of_a_changed_table_not_just_changed_on
     direction_id = _direction_id(conn)
     directories, _employees, sync = _services(conn, session, clock=_T0)
     branch_a = directories.create_branch("Филиал Старый")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_a)
     sync.record_export(direction_id, ["branches"], exported_at=_T1)
 
     directories_later = DirectoryService(conn, session, clock=lambda: _T2)
     directories_later.create_branch("Филиал Новый")
+    directories_later.rename_branch(branch_a, "Филиал Старый переименован")
     pkg = sync.build_export_package(direction_id)
     names = {row["name"] for row in pkg.tables["branches"]}
-    assert names == {"Филиал Старый", "Филиал Новый"}
+    assert names == {"Филиал Старый переименован"}
+    assert len(pkg.tables["branches"]) == 1
     assert any(row["id"] == branch_a for row in pkg.tables["branches"])
     conn.close()
 
@@ -121,6 +147,7 @@ def test_adr0010_export_includes_archived_rows(tmp_path: Path) -> None:
     direction_id = _direction_id(conn)
     directories, _employees, sync = _services(conn, session, clock=_T0)
     branch_id = directories.create_branch("Филиал Архив")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     directories.archive_branch(branch_id)
 
     pkg = sync.build_export_package(direction_id)
@@ -138,6 +165,7 @@ def test_adr0010_export_with_no_watermark_row_includes_everything(
     direction_id = _direction_id(conn)
     directories, employees, sync = _services(conn, session, clock=_T0)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     dept_id = directories.create_department(branch_id, "Департамент")
     directories.create_division(branch_id, dept_id, "Отдел")
     pos_id = directories.create_position(branch_id, "Инженер")
@@ -172,6 +200,7 @@ def test_adr0010_record_export_only_bumps_watermark_for_tables_actually_exported
     direction_id = _direction_id(conn)
     directories, _employees, sync = _services(conn, session, clock=_T0)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     directories.create_department(branch_id, "Департамент")
 
     sync.record_export(direction_id, ["branches", "departments"], exported_at=_T1)
@@ -195,6 +224,7 @@ def test_adr0010_package_rows_are_json_serializable(tmp_path: Path) -> None:
     direction_id = _direction_id(conn)
     directories, employees, sync = _services(conn, session, clock=_T0)
     branch_id = directories.create_branch("Филиал")
+    _ensure_home_branch(conn, session, directories, branch_id=branch_id)
     dept_id = directories.create_department(branch_id, "Департамент")
     directories.create_division(branch_id, dept_id, "Отдел")
     pos_id = directories.create_position(branch_id, "Инженер")

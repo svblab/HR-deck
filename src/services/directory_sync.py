@@ -23,6 +23,7 @@ from data.employees import EmployeeRecord, EmployeeRepository
 from domain.directory_sync import SYNCED_TABLES, DirectorySyncPackage
 from domain.permissions import Permission
 from services.authorization import AuthorizationService
+from services.installation_identity import InstallationIdentityService
 from services.session import SessionState
 
 
@@ -47,8 +48,18 @@ class DirectorySyncService:
 
     def build_export_package(self, direction_id: int) -> DirectorySyncPackage:
         self._require_transport_admin()
+        home_branch = InstallationIdentityService(
+            self._conn, self._session
+        ).require_home_branch()
+        home_branch_id = home_branch.id
         watermarks = self._load_watermarks(direction_id)
         tables: dict[str, list[dict[str, object]]] = {}
+
+        def scoped_branches(rows: Sequence[Any]) -> list[Any]:
+            return [row for row in rows if row.id == home_branch_id]
+
+        def scoped_by_branch(rows: Sequence[Any]) -> list[Any]:
+            return [row for row in rows if row.branch_id == home_branch_id]
 
         def include_if_changed(table_name: str, rows: Sequence[Any]) -> None:
             watermark = watermarks.get(table_name, "")
@@ -69,11 +80,26 @@ class DirectorySyncService:
         # active_only=False deliberately: archived rows must be in every dump so
         # the receiving side (Part 4 reconciliation) sees complete current state,
         # not only the active subset.
-        include_if_changed("branches", self._branches.list(active_only=False))
-        include_if_changed("departments", self._departments.list(active_only=False))
-        include_if_changed("divisions", self._divisions.list(active_only=False))
-        include_if_changed("positions", self._positions.list(active_only=False))
-        include_if_changed("employees", self._employees.list(active_only=False))
+        include_if_changed(
+            "branches",
+            scoped_branches(self._branches.list(active_only=False)),
+        )
+        include_if_changed(
+            "departments",
+            scoped_by_branch(self._departments.list(active_only=False)),
+        )
+        include_if_changed(
+            "divisions",
+            scoped_by_branch(self._divisions.list(active_only=False)),
+        )
+        include_if_changed(
+            "positions",
+            scoped_by_branch(self._positions.list(active_only=False)),
+        )
+        include_if_changed(
+            "employees",
+            scoped_by_branch(self._employees.list(active_only=False)),
+        )
         assert set(tables).issubset(SYNCED_TABLES)
         return DirectorySyncPackage(tables=tables)
 
