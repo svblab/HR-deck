@@ -31,19 +31,10 @@ def _open_db(tmp_path: Path) -> tuple[Connection, SessionState, Path]:
     return conn, session, db
 
 
-def _ensure_dismissed_employment_type(conn: Connection) -> int:
+def _dismissed_employment_type_id(conn: Connection) -> int:
     row = conn.execute("SELECT id FROM employment_types WHERE code = 'dismissed'").fetchone()
-    if row is not None:
-        return int(row[0])
-    conn.execute(
-        "INSERT INTO employment_types (code, name, is_archived, created_at, updated_at)"
-        " VALUES (?, ?, 0, ?, ?)",
-        ("dismissed", "Уволен", "2026-08-30T10:00:00Z", "2026-08-30T10:00:00Z"),
-    )
-    conn.commit()
-    return int(
-        conn.execute("SELECT id FROM employment_types WHERE code = 'dismissed'").fetchone()[0]
-    )
+    assert row is not None
+    return int(row[0])
 
 
 def _observer_session(conn: Connection, admin: SessionState, db: Path) -> SessionState:
@@ -123,7 +114,7 @@ def test_archive_employee_sets_dismissed_employment_type(tmp_path: Path) -> None
     conn, session, _db = _open_db(tmp_path)
     ids = seed_synthetic_org(conn)
     emp_id = ids["employee_a_id"]
-    dismissed_id = _ensure_dismissed_employment_type(conn)
+    dismissed_id = _dismissed_employment_type_id(conn)
     before_type = conn.execute(
         "SELECT employment_type_id FROM employees WHERE id = ?", (emp_id,)
     ).fetchone()[0]
@@ -151,6 +142,8 @@ def test_archive_employee_graceful_without_dismissed_type(tmp_path: Path) -> Non
     before_type = conn.execute(
         "SELECT employment_type_id FROM employees WHERE id = ?", (emp_id,)
     ).fetchone()[0]
+    conn.execute("UPDATE employment_types SET archives_record = 0 WHERE archives_record = 1")
+    conn.commit()
     employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T10:15:30Z")
 
     employees.archive_employee(emp_id)
@@ -167,7 +160,7 @@ def test_restore_employee_does_not_change_employment_type(tmp_path: Path) -> Non
     conn, session, _db = _open_db(tmp_path)
     ids = seed_synthetic_org(conn)
     emp_id = ids["employee_a_id"]
-    dismissed_id = _ensure_dismissed_employment_type(conn)
+    dismissed_id = _dismissed_employment_type_id(conn)
     employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T10:16:00Z")
 
     employees.archive_employee(emp_id)

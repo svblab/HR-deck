@@ -22,17 +22,6 @@ from ui.main_window import MainWindow
 from ui.roster_panel import RosterPanel
 
 
-def _ensure_dismissed(conn, clock: str = "2026-08-30T10:00:00Z") -> None:
-    if conn.execute("SELECT 1 FROM employment_types WHERE code = 'dismissed'").fetchone():
-        return
-    conn.execute(
-        "INSERT INTO employment_types (code, name, is_archived, created_at, updated_at)"
-        " VALUES (?, ?, 0, ?, ?)",
-        ("dismissed", "Уволен", clock, clock),
-    )
-    conn.commit()
-
-
 def _admin_window(tmp_path: Path) -> tuple[MainWindow, object, object, dict[str, int]]:
     db = tmp_path / "app.db"
     clock = lambda: "2026-08-30T12:00:00Z"  # noqa: E731
@@ -40,7 +29,6 @@ def _admin_window(tmp_path: Path) -> tuple[MainWindow, object, object, dict[str,
         db_path=db, login="admin", password="AdminPass-1"
     )
     ids = seed_synthetic_org(conn)
-    _ensure_dismissed(conn)
     history = StatusHistoryService(conn, session, clock=clock)
     history.assign_status(ids["employee_a_id"], status_id=1, start_date="2026-08-01")
     window = MainWindow(conn=conn, session=session, db_path=db)

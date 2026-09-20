@@ -79,6 +79,15 @@ def test_initial_migration_creates_schema_and_seeds(tmp_path: Path) -> None:
         "SELECT id FROM availability_statuses WHERE code = 'inactive'"
     ).fetchone()
     assert inactive is None
+    employment_types = conn.execute(
+        "SELECT code, archives_record FROM employment_types ORDER BY code"
+    ).fetchall()
+    assert dict(employment_types) == {
+        "contractor": 0,
+        "dismissed": 1,
+        "staff": 0,
+        "temporary": 0,
+    }
     conn.close()
 
 
