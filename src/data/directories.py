@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from data.db import Connection
+from domain.employment_types import resolve_default_archiving_type
 
 
 @dataclass(frozen=True)
@@ -386,6 +387,23 @@ class EmploymentTypeRepository:
             sql += " WHERE is_archived = 0"
         sql += " ORDER BY name"
         return [_employment_type_row(r) for r in self._conn.execute(sql).fetchall()]
+
+    def list_archiving_types(self, *, active_only: bool = False) -> list[EmploymentTypeRecord]:
+        sql = (
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at"
+            " FROM employment_types WHERE archives_record = 1"
+        )
+        if active_only:
+            sql += " AND is_archived = 0"
+        sql += " ORDER BY code"
+        return [_employment_type_row(r) for r in self._conn.execute(sql).fetchall()]
+
+    def resolve_default_archiving_type(
+        self, *, active_only: bool = True
+    ) -> EmploymentTypeRecord | None:
+        """ADR-0011: default archiving employment type for archive metadata."""
+        rows = self.list_archiving_types(active_only=active_only)
+        return resolve_default_archiving_type(rows, active_only=active_only)
 
     def get(self, employment_type_id: int) -> EmploymentTypeRecord | None:
         row = self._conn.execute(
