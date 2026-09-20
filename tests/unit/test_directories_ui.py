@@ -269,6 +269,25 @@ def test_observer_directories_dialog_is_view_only(
     conn.close()
 
 
+def test_directories_dialog_has_no_manual_refresh_button(qtbot, tmp_path: Path) -> None:
+    conn, admin, _db = _open_empty_db(tmp_path)
+    clock = lambda: _AS_OF  # noqa: E731
+    dlg = DirectoriesDialog(DirectoryService(conn, admin, clock=clock), admin)
+    qtbot.addWidget(dlg)
+
+    for prefix in (
+        "directoriesBranch",
+        "directoriesDepartment",
+        "directoriesDivision",
+        "directoriesPosition",
+        "directoriesEmployment",
+    ):
+        assert dlg.findChild(QPushButton, f"{prefix}RefreshBtn") is None
+
+    dlg.close()
+    conn.close()
+
+
 @pytest.mark.acceptance
 def test_archived_position_hidden_for_new_employee_kept_on_existing(
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
