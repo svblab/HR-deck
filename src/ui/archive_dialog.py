@@ -23,10 +23,12 @@ from PySide6.QtWidgets import (
 from domain.permissions import Permission, has_permission
 from domain.roster import RosterFilters, RosterRow
 from services.availability_statuses import AvailabilityStatusService
+from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from services.status_history import StatusHistoryService
+from ui.employee_card_form import EmployeeCardDialog
 from ui.status_assign_dialog import StatusAssignDialog
 
 
@@ -35,6 +37,7 @@ class ArchiveDialog(QDialog):
         self,
         roster: RosterService,
         employees: EmployeeService,
+        directories: DirectoryService,
         history: StatusHistoryService,
         statuses: AvailabilityStatusService,
         session: SessionState,
@@ -49,6 +52,7 @@ class ArchiveDialog(QDialog):
         self.setMinimumSize(720, 420)
         self._roster = roster
         self._employees = employees
+        self._directories = directories
         self._history = history
         self._statuses = statuses
         self._session = session
@@ -79,6 +83,8 @@ class ArchiveDialog(QDialog):
         layout.addWidget(self._table, stretch=1)
 
         actions = QHBoxLayout()
+        self._open_card_btn = QPushButton("Открыть карточку", objectName="archiveOpenCardBtn")
+        self._open_card_btn.clicked.connect(self._open_selected_card)
         self._restore_btn = QPushButton("Восстановить", objectName="archiveRestoreBtn")
         self._restore_btn.clicked.connect(self._restore_selected)
         self._restore_assign_btn = QPushButton(
@@ -86,6 +92,7 @@ class ArchiveDialog(QDialog):
             objectName="archiveRestoreAssignBtn",
         )
         self._restore_assign_btn.clicked.connect(self._restore_and_assign_status)
+        actions.addWidget(self._open_card_btn)
         actions.addWidget(self._restore_btn)
         actions.addWidget(self._restore_assign_btn)
         actions.addStretch(1)
@@ -96,9 +103,8 @@ class ArchiveDialog(QDialog):
         close_box.accepted.connect(self.accept)
         layout.addWidget(close_box)
 
-        can_manage = has_permission(session.role, Permission.MANAGE_EMPLOYEES)
-        self._restore_btn.setEnabled(can_manage)
-        self._restore_assign_btn.setEnabled(can_manage)
+        self._can_view = has_permission(session.role, Permission.VIEW_EMPLOYEES)
+        self._can_manage = has_permission(session.role, Permission.MANAGE_EMPLOYEES)
         self._reload()
 
     def _reload(self) -> None:
@@ -131,9 +137,26 @@ class ArchiveDialog(QDialog):
         self._update_action_buttons()
 
     def _update_action_buttons(self) -> None:
-        enabled = self._selected is not None
-        self._restore_btn.setEnabled(enabled)
-        self._restore_assign_btn.setEnabled(enabled)
+        has_selection = self._selected is not None
+        self._open_card_btn.setEnabled(has_selection and self._can_view)
+        self._restore_btn.setEnabled(has_selection and self._can_manage)
+        self._restore_assign_btn.setEnabled(has_selection and self._can_manage)
+
+    def _open_selected_card(self) -> None:
+        if self._selected is None:
+            return
+        dialog = EmployeeCardDialog(
+            self._employees,
+            self._directories,
+            self._session,
+            employee_id=self._selected.employee_id,
+            parent=self,
+            status_history=self._history,
+            availability_statuses=self._statuses,
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._notify_changed()
+        self._reload()
 
     def _restore_selected(self) -> None:
         if self._selected is None:

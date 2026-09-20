@@ -12,6 +12,7 @@ from services.account_management import AccountManagementService
 from services.authentication import AuthenticationService
 from services.availability_statuses import AvailabilityStatusService
 from services.bootstrap import BootstrapService
+from services.directories import DirectoryService
 from services.employees import EmployeeService
 from services.roster import RosterService
 from services.status_history import StatusHistoryService
@@ -20,6 +21,27 @@ from ui.archive_dialog import ArchiveDialog
 from ui.board_widget import EmployeeCardWidget
 from ui.main_window import MainWindow
 from ui.roster_panel import RosterPanel
+
+
+def _archive_dialog(
+    conn: object,
+    session: object,
+    *,
+    on_changed: object | None = None,
+    parent: MainWindow | None = None,
+) -> ArchiveDialog:
+    clock = lambda: "2026-08-30T12:00:00Z"  # noqa: E731
+    status_history = StatusHistoryService(conn, session, clock=clock)
+    return ArchiveDialog(
+        RosterService(conn, session, clock=clock),
+        EmployeeService(conn, session, clock=clock, status_history=status_history),
+        DirectoryService(conn, session),
+        status_history,
+        AvailabilityStatusService(conn, session),
+        session,
+        on_changed=on_changed,
+        parent=parent,
+    )
 
 
 def _admin_window(tmp_path: Path) -> tuple[MainWindow, object, object, dict[str, int]]:
@@ -62,14 +84,7 @@ def test_archive_dialog_lists_archived_employee(qtbot, tmp_path: Path) -> None:
     employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
     employees.archive_employee(ids["employee_a_id"])
 
-    history = StatusHistoryService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
-    dialog = ArchiveDialog(
-        RosterService(conn, session, clock=lambda: "2026-08-30T12:00:00Z"),
-        employees,
-        history,
-        AvailabilityStatusService(conn, session),
-        session,
-    )
+    dialog = _archive_dialog(conn, session)
     qtbot.addWidget(dialog)
 
     table = dialog.findChild(QTableWidget, "archiveTable")
@@ -96,16 +111,7 @@ def test_archive_restore_returns_employee_to_main_board(
     panel.reload()
     qtbot.waitUntil(lambda: len(panel.findChildren(EmployeeCardWidget)) == 1)
 
-    history = StatusHistoryService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
-    dialog = ArchiveDialog(
-        RosterService(conn, session, clock=lambda: "2026-08-30T12:00:00Z"),
-        employees,
-        history,
-        AvailabilityStatusService(conn, session),
-        session,
-        on_changed=panel.reload,
-        parent=window,
-    )
+    dialog = _archive_dialog(conn, session, on_changed=panel.reload, parent=window)
     qtbot.addWidget(dialog)
     table = dialog.findChild(QTableWidget, "archiveTable")
     assert table is not None
@@ -152,15 +158,7 @@ def test_archive_restore_and_assign_uses_status_dialog(
         lambda *_args, **_kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    history = StatusHistoryService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
-    dialog = ArchiveDialog(
-        RosterService(conn, session, clock=lambda: "2026-08-30T12:00:00Z"),
-        employees,
-        history,
-        AvailabilityStatusService(conn, session),
-        session,
-        parent=window,
-    )
+    dialog = _archive_dialog(conn, session, parent=window)
     qtbot.addWidget(dialog)
     table = dialog.findChild(QTableWidget, "archiveTable")
     assert table is not None
@@ -173,6 +171,97 @@ def test_archive_restore_and_assign_uses_status_dialog(
     assert (
         conn.execute("SELECT is_archived FROM employees WHERE id = ?", (emp_id,)).fetchone()[0] == 0
     )
+
+    dialog.close()
+    window.close()
+    conn.close()
+
+
+def test_archive_open_card_without_restore(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtWidgets import QDialog
+
+    from ui.employee_card_form import EmployeeCardDialog
+
+    window, conn, session, ids = _admin_window(tmp_path)
+    qtbot.addWidget(window)
+    emp_id = ids["employee_a_id"]
+    employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
+    employees.archive_employee(emp_id)
+
+    restore_calls: list[int] = []
+
+    def _track_restore(employee_id: int) -> None:
+        restore_calls.append(employee_id)
+
+    monkeypatch.setattr(employees, "restore_employee", _track_restore)
+
+    opened: list[int] = []
+
+    def _open_card(self: EmployeeCardDialog) -> QDialog.DialogCode:
+        opened.append(self._employee_id)  # noqa: SLF001
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(EmployeeCardDialog, "exec", _open_card)
+
+    dialog = _archive_dialog(conn, session, parent=window)
+    qtbot.addWidget(dialog)
+    table = dialog.findChild(QTableWidget, "archiveTable")
+    assert table is not None
+    table.selectRow(0)
+    open_btn = dialog.findChild(QPushButton, "archiveOpenCardBtn")
+    assert open_btn is not None
+    assert open_btn.isEnabled()
+    open_btn.click()
+
+    assert opened == [emp_id]
+    assert restore_calls == []
+    assert (
+        conn.execute("SELECT is_archived FROM employees WHERE id = ?", (emp_id,)).fetchone()[0] == 1
+    )
+
+    dialog.close()
+    window.close()
+    conn.close()
+
+
+def test_archive_open_card_restore_notifies_parent(
+    qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PySide6.QtWidgets import QDialog
+
+    from ui.employee_card_form import EmployeeCardDialog
+
+    window, conn, session, ids = _admin_window(tmp_path)
+    qtbot.addWidget(window)
+    emp_id = ids["employee_a_id"]
+    employees = EmployeeService(conn, session, clock=lambda: "2026-08-30T12:00:00Z")
+    employees.archive_employee(emp_id)
+
+    notified = 0
+
+    def _on_changed() -> None:
+        nonlocal notified
+        notified += 1
+
+    monkeypatch.setattr(
+        EmployeeCardDialog,
+        "exec",
+        lambda self: QDialog.DialogCode.Accepted,
+    )
+
+    dialog = _archive_dialog(conn, session, on_changed=_on_changed, parent=window)
+    qtbot.addWidget(dialog)
+    table = dialog.findChild(QTableWidget, "archiveTable")
+    assert table is not None
+    table.selectRow(0)
+    open_btn = dialog.findChild(QPushButton, "archiveOpenCardBtn")
+    assert open_btn is not None
+    open_btn.click()
+
+    assert notified == 1
+    assert table.rowCount() == 1
 
     dialog.close()
     window.close()
