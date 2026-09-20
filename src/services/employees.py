@@ -6,7 +6,6 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 
-from data.availability_statuses import AvailabilityStatusRepository
 from data.db import Connection
 from data.directories import (
     BranchRepository,
@@ -67,7 +66,6 @@ class EmployeeService:
         self._status_history = status_history
         self._audit = UserActionLogRepository(conn)
         self._employees = EmployeeRepository(conn)
-        self._availability_statuses = AvailabilityStatusRepository(conn)
         self._branches = BranchRepository(conn)
         self._departments = DepartmentRepository(conn)
         self._divisions = DivisionRepository(conn)
@@ -135,9 +133,7 @@ class EmployeeService:
             details=self._details(payload),
         )
 
-    def update_sensitive_fields(
-        self, employee_id: int, data: SensitiveEmployeeInput
-    ) -> None:
+    def update_sensitive_fields(self, employee_id: int, data: SensitiveEmployeeInput) -> None:
         self._require(Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS)
         self._require_active_employee(employee_id)
         now = self._clock()
@@ -178,23 +174,24 @@ class EmployeeService:
         if record.is_archived:
             return
         now = self._clock()
-        today = now[:10]
 
         def mutate() -> None:
-            if self._status_history is not None:
-                status = self._availability_statuses.get_by_code("inactive")
-                if status is not None:
-                    self._status_history.assign_status(
-                        employee_id,
-                        status_id=status.id,
-                        start_date=today,
-                        confirmed=True,
-                    )
             employee = self._employees.get(employee_id)
             if employee is not None and not employee.is_archived:
-                self._employees.set_archived(
-                    employee_id, archived=True, updated_at=now
-                )
+                dismissed = self._employment_types.get_by_code("dismissed")
+                if dismissed is not None:
+                    self._employees.update(
+                        employee_id,
+                        full_name=employee.full_name,
+                        position_id=employee.position_id,
+                        branch_id=employee.branch_id,
+                        department_id=employee.department_id,
+                        division_id=employee.division_id,
+                        employment_type_id=dismissed.id,
+                        note=employee.note,
+                        updated_at=now,
+                    )
+                self._employees.set_archived(employee_id, archived=True, updated_at=now)
 
         self._mutate(
             action="employee.archive",
@@ -225,9 +222,7 @@ class EmployeeService:
         self, data: EmployeeCreateInput | EmployeeUpdateInput
     ) -> EmployeeCreateInput:
         full_name = clean_full_name(data.full_name)
-        position = self._require_active_directory(
-            self._positions.get, data.position_id, "position"
-        )
+        position = self._require_active_directory(self._positions.get, data.position_id, "position")
         self._require_active_directory(self._branches.get, data.branch_id, "branch")
         department = None
         if data.department_id is not None:
@@ -317,9 +312,7 @@ class EmployeeService:
             home_address=home,
             social_insurance_number=social,
             sensitive_fields_masked=masked
-            and (
-                record.home_address is not None or record.social_insurance_number is not None
-            ),
+            and (record.home_address is not None or record.social_insurance_number is not None),
             is_archived=record.is_archived,
             needs_org_review=record.needs_org_review,
         )

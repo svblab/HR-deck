@@ -7,6 +7,7 @@ from pathlib import Path
 from data.db import Connection
 from domain.roster import GroupBy, RosterFilters
 from services.bootstrap import BootstrapService
+from services.employees import EmployeeService
 from services.roster import RosterService
 from services.session import SessionState
 from services.status_history import StatusHistoryService
@@ -61,4 +62,20 @@ def test_roster_read_does_not_write_audit(tmp_path: Path) -> None:
     roster.filter_departments(branch_id=1)
     after = conn.execute("SELECT COUNT(*) FROM user_action_log").fetchone()[0]
     assert after == before
+    conn.close()
+
+
+def test_roster_row_reflects_is_archived(tmp_path: Path) -> None:
+    conn, session = _open(tmp_path)
+    ids = seed_synthetic_org(conn)
+    emp_id = ids["employee_a_id"]
+    roster = RosterService(conn, session, clock=lambda: "2026-08-15T12:00:00Z")
+    employees = EmployeeService(conn, session, clock=lambda: "2026-08-15T12:00:00Z")
+
+    active = next(r for r in roster.list_rows() if r.employee_id == emp_id)
+    assert active.is_archived is False
+
+    employees.archive_employee(emp_id)
+    archived = next(r for r in roster.list_rows(include_archived=True) if r.employee_id == emp_id)
+    assert archived.is_archived is True
     conn.close()

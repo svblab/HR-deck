@@ -93,14 +93,9 @@ class RosterPanel(QWidget):
         self._render()
 
     def reload(self) -> None:
-        self._all_rows = self._service.list_rows(
-            include_archived=self._show_archived.isChecked()
-        )
+        self._all_rows = self._service.list_rows()
         self._fill_branch_combo()
         self._render()
-
-    def _on_show_archived_changed(self) -> None:
-        self.reload()
 
     def _build_toolbar(self) -> QWidget:
         toolbar = QWidget(objectName="toolbar")
@@ -200,9 +195,6 @@ class RosterPanel(QWidget):
         self._only_org_review = QCheckBox("Только «Требует внимания»")
         self._only_org_review.setObjectName("orgReviewFilter")
         self._only_org_review.toggled.connect(self._render)
-        self._show_archived = QCheckBox("Показать архив")
-        self._show_archived.setObjectName("showArchivedFilter")
-        self._show_archived.toggled.connect(self._on_show_archived_changed)
         row2.addWidget(self._branch)
         row2.addWidget(self._dept)
         row2.addWidget(self._div)
@@ -210,7 +202,6 @@ class RosterPanel(QWidget):
         row2.addWidget(self._group_combo)
         row2.addWidget(self._only_clarify)
         row2.addWidget(self._only_org_review)
-        row2.addWidget(self._show_archived)
         row2.addStretch(1)
         outer.addLayout(row2)
         return toolbar
@@ -219,7 +210,6 @@ class RosterPanel(QWidget):
         self._name_query = ""
         self._only_clarify.setChecked(False)
         self._only_org_review.setChecked(False)
-        self._show_archived.setChecked(False)
         self._group_combo.setCurrentIndex(0)
         self._fill_branch_combo()
         self.filters_reset.emit()

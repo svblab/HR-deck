@@ -37,6 +37,7 @@ from services.status_history import StatusHistoryService
 from services.template_library import TemplateLibraryService
 from services.user_action_log import UserActionLogService
 from ui.action_log_dialog import ActionLogDialog
+from ui.archive_dialog import ArchiveDialog
 from ui.auth_dialogs import AccountsDialog, LoginDialog, SettingsDialog, UnlockDialog
 from ui.backup_dialog import BackupDialog
 from ui.roster_panel import RosterPanel
@@ -105,6 +106,7 @@ class MainWindow(QMainWindow):
         self._log_btn: QToolButton | None = None
         self._settings_btn: QToolButton | None = None
         self._program_settings_btn: QToolButton | None = None
+        self._archive_btn: QToolButton | None = None
         self._brand_logo: QLabel | None = None
         self._brand_company: QLabel | None = None
         self._search_signal_connected = False
@@ -204,6 +206,11 @@ class MainWindow(QMainWindow):
         self._program_settings_btn.setToolTip("Настройки программы")
         self._program_settings_btn.clicked.connect(self._open_settings)
 
+        self._archive_btn = QToolButton(objectName="titleIconBtn")
+        self._archive_btn.setText("🗄")
+        self._archive_btn.setToolTip("Архив")
+        self._archive_btn.clicked.connect(self._open_archive)
+
         settings_btn = QToolButton(objectName="titleIconBtn")
         settings_btn.setText("💾")
         settings_btn.setToolTip("Резервное копирование")
@@ -220,6 +227,7 @@ class MainWindow(QMainWindow):
         right.addWidget(self._accounts_btn)
         right.addWidget(self._log_btn)
         right.addWidget(self._program_settings_btn)
+        right.addWidget(self._archive_btn)
         right.addWidget(settings_btn)
         right.addWidget(self._switch_user_btn)
         right.addWidget(exit_btn)
@@ -305,6 +313,14 @@ class MainWindow(QMainWindow):
             )
             self._program_settings_btn.setVisible(can_program_settings)
             self._program_settings_btn.setEnabled(can_program_settings)
+        if self._archive_btn is not None:
+            can_archive = bool(
+                has_session
+                and self._session is not None
+                and self._authz.check(self._session.role, Permission.MANAGE_EMPLOYEES)
+            )
+            self._archive_btn.setVisible(can_archive)
+            self._archive_btn.setEnabled(can_archive)
 
     def _refresh_branding(self) -> None:
         if (
@@ -479,6 +495,26 @@ class MainWindow(QMainWindow):
         assert self._session is not None
         service = AccountManagementService(self._conn, self._session, db_path=self._db_path)
         AccountsDialog(service, self).exec()
+
+    def _open_archive(self) -> None:
+        if not self._require_unlocked():
+            return
+        assert self._conn is not None
+        assert self._session is not None
+        status_history = StatusHistoryService(self._conn, self._session)
+        ArchiveDialog(
+            RosterService(self._conn, self._session),
+            EmployeeService(self._conn, self._session, status_history=status_history),
+            status_history,
+            AvailabilityStatusService(self._conn, self._session),
+            self._session,
+            on_changed=self._on_archive_changed,
+            parent=self,
+        ).exec()
+
+    def _on_archive_changed(self) -> None:
+        if self._roster is not None:
+            self._roster.reload()
 
     def _open_settings(self) -> None:
         if not self._require_unlocked() or self._db_path is None:
