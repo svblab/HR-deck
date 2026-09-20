@@ -27,8 +27,6 @@ from services.session import SessionState
 
 Clock = Callable[[], str]
 
-INACTIVE_STATUS_CODE = "inactive"
-
 
 def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -172,15 +170,6 @@ class StatusHistoryService:
                     first_id = row_id
             if first_id is None:
                 raise StatusHistoryError("plan has no inserts")
-            inactive_id = self._inactive_status_id()
-            if inactive_id is not None and any(
-                insert.status_id == inactive_id for insert in plan.inserts
-            ):
-                emp = self._employees.get(employee_id)
-                if emp is not None and not emp.is_archived:
-                    self._employees.set_archived(
-                        employee_id, archived=True, updated_at=now
-                    )
             details = (
                 f"inserts={len(plan.inserts)};corrections={len(plan.corrections)};"
                 f"confirmed={int(plan.requires_confirmation)}"
@@ -249,10 +238,6 @@ class StatusHistoryService:
             raise StatusHistoryError("employee not found")
         if record.is_archived:
             raise StatusHistoryError("archived employee")
-
-    def _inactive_status_id(self) -> int | None:
-        row = self._statuses.get_by_code(INACTIVE_STATUS_CODE)
-        return row.id if row is not None else None
 
     def _require_active_status(self, status_id: int):
         row = self._statuses.get(status_id)

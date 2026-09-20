@@ -130,7 +130,7 @@ REPORT_SPECS: dict[ReportKind, ReportSpec] = {
     ),
 }
 
-ABSENCE_STATUS_CODES = frozenset({"trip", "sick", "vacation", "day_off", "inactive"})
+ABSENCE_STATUS_CODES = frozenset({"trip", "sick", "vacation", "day_off"})
 TEMPORARY_EMPLOYMENT_CODE = "temporary"
 
 
