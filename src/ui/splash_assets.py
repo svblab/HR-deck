@@ -16,13 +16,29 @@ def load_splash_pixmap() -> QPixmap:
     return pixmap
 
 
-def scale_splash_pixmap(pixmap: QPixmap, max_width: int, max_height: int) -> QPixmap:
-    """Вписать splash в прямоугольник без искажения пропорций."""
-    if pixmap.isNull() or max_width <= 0 or max_height <= 0:
+def cover_splash_pixmap(pixmap: QPixmap, target_width: int, target_height: int) -> QPixmap:
+    """
+    Масштабировать splash в стиле cover: заполнить прямоугольник без искажения,
+    при необходимости обрезать края по центру.
+    """
+    if pixmap.isNull() or target_width <= 0 or target_height <= 0:
         return QPixmap()
-    return pixmap.scaled(
-        max_width,
-        max_height,
+    src_w = pixmap.width()
+    src_h = pixmap.height()
+    if src_w <= 0 or src_h <= 0:
+        return QPixmap()
+
+    scale = max(target_width / src_w, target_height / src_h)
+    scaled_w = max(1, int(src_w * scale + 0.5))
+    scaled_h = max(1, int(src_h * scale + 0.5))
+    scaled = pixmap.scaled(
+        scaled_w,
+        scaled_h,
         Qt.AspectRatioMode.KeepAspectRatio,
         Qt.TransformationMode.SmoothTransformation,
     )
+    x = max(0, (scaled.width() - target_width) // 2)
+    y = max(0, (scaled.height() - target_height) // 2)
+    crop_w = min(target_width, scaled.width() - x)
+    crop_h = min(target_height, scaled.height() - y)
+    return scaled.copy(x, y, crop_w, crop_h)

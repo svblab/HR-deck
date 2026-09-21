@@ -7,13 +7,13 @@ from unittest.mock import patch
 
 import pytest
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QWidget
 
 from domain.permissions import RoleCode
 from services.authentication import AuthenticationError, AuthenticationService
 from services.bootstrap import BootstrapService
 from ui.auth_dialogs import RecoverPasswordDialog
-from ui.splash_assets import SPLASH_IMAGE_RESOURCE, load_splash_pixmap, scale_splash_pixmap
+from ui.splash_assets import SPLASH_IMAGE_RESOURCE, cover_splash_pixmap, load_splash_pixmap
 from ui.splash_login_dialog import SplashLoginDialog
 
 
@@ -43,29 +43,111 @@ def test_splash_image_available_from_qt_resources(qapp) -> None:  # noqa: ANN001
     assert SPLASH_IMAGE_RESOURCE == ":/ui/Splash/splash.png"
 
 
-def test_scale_splash_pixmap_preserves_aspect_ratio(qapp) -> None:  # noqa: ANN001
+def test_cover_splash_pixmap_fills_target_without_distortion(qapp) -> None:  # noqa: ANN001
     source = load_splash_pixmap()
     assert not source.isNull()
-    ratio = source.width() / source.height()
-    scaled = scale_splash_pixmap(source, max_width=400, max_height=300)
-    assert not scaled.isNull()
-    assert scaled.width() <= 400
-    assert scaled.height() <= 300
-    assert abs(scaled.width() / scaled.height() - ratio) < 0.02
+    source_ratio = source.width() / source.height()
+
+    covered = cover_splash_pixmap(source, target_width=1280, target_height=720)
+    assert not covered.isNull()
+    assert covered.width() == 1280
+    assert covered.height() == 720
+
+    scale = max(1280 / source.width(), 720 / source.height())
+    scaled_w = int(source.width() * scale + 0.5)
+    scaled_h = int(source.height() * scale + 0.5)
+    assert abs(scaled_w / scaled_h - source_ratio) < 0.02
 
 
-def test_splash_login_dialog_builds_form(qtbot, tmp_path: Path) -> None:
+def test_splash_login_dialog_uses_fullscreen_background_layer(qtbot, tmp_path: Path) -> None:
     dlg = SplashLoginDialog(tmp_path / "missing.db")
     qtbot.addWidget(dlg)
+    dlg.resize(960, 540)
+    dlg.show()
+    qtbot.waitExposed(dlg)
+
+    background = dlg.findChild(QLabel, "splashLoginBackground")
+    overlay = dlg.findChild(QWidget, "splashLoginOverlay")  # type: ignore[name-defined]
+    form = dlg.findChild(QWidget, "splashLoginForm")  # type: ignore[name-defined]
+
+    assert background is not None
+    assert overlay is not None
+    assert form is not None
+    assert dlg.findChild(QLabel, "splashLoginImage") is None
+    assert background.geometry() == dlg._root.rect()
+    assert overlay.geometry() == dlg._root.rect()
+    assert not dlg._source_pixmap.isNull()
+    pixmap = background.pixmap()
+    assert pixmap is not None and not pixmap.isNull()
+    assert pixmap.width() == dlg._root.width()
+    assert pixmap.height() == dlg._root.height()
+
+
+def test_splash_login_background_recalculates_on_resize(qtbot, tmp_path: Path) -> None:
+    dlg = SplashLoginDialog(tmp_path / "missing.db")
+    qtbot.addWidget(dlg)
+    dlg.show()
+    qtbot.waitExposed(dlg)
+
+    dlg.resize(800, 600)
+    qtbot.wait(10)
+    first = dlg.findChild(QLabel, "splashLoginBackground")
+    assert first is not None
+    pixmap_first = first.pixmap()
+    assert pixmap_first is not None
+    assert pixmap_first.width() == 800
+    assert pixmap_first.height() == 600
+
+    dlg.resize(1024, 768)
+    qtbot.wait(10)
+    pixmap_second = first.pixmap()
+    assert pixmap_second is not None
+    assert pixmap_second.width() == 1024
+    assert pixmap_second.height() == 768
+
+
+def test_splash_login_form_is_independent_foreground_component(
+    qtbot, tmp_path: Path
+) -> None:
+    dlg = SplashLoginDialog(tmp_path / "missing.db")
+    qtbot.addWidget(dlg)
+
+    overlay = dlg.findChild(QWidget, "splashLoginOverlay")  # type: ignore[name-defined]
+    form = dlg.findChild(QWidget, "splashLoginForm")  # type: ignore[name-defined]
+    background = dlg.findChild(QLabel, "splashLoginBackground")
+
+    assert overlay is not None and form is not None and background is not None
+    assert form.parentWidget() is overlay
+    assert background.parentWidget() is dlg._root
+    assert form.parentWidget() is not background
 
     assert dlg.findChild(QLineEdit, "splashLoginUsername") is not None
     assert dlg.findChild(QLineEdit, "splashLoginPassword") is not None
     assert dlg.objectName() == "splashLoginDialog"
-    assert not dlg._source_pixmap.isNull()
-    assert dlg.findChild(QLabel, "splashLoginImage") is not None
 
 
-def test_splash_login_dialog_hides_image_when_unavailable(
+def test_splash_login_dialog_has_no_side_by_side_image_panel(
+    qtbot, tmp_path: Path
+) -> None:
+    dlg = SplashLoginDialog(tmp_path / "missing.db")
+    qtbot.addWidget(dlg)
+
+    background = dlg.findChild(QLabel, "splashLoginBackground")
+    form = dlg.findChild(QWidget, "splashLoginForm")  # type: ignore[name-defined]
+    assert background is not None and form is not None
+
+    for layout in (dlg.findChildren(QHBoxLayout),):
+        for hbox in layout:
+            direct_widgets = []
+            for i in range(hbox.count()):
+                item = hbox.itemAt(i)
+                if item is not None and item.widget() is not None:
+                    direct_widgets.append(item.widget())
+            if background in direct_widgets and form in direct_widgets:
+                pytest.fail("background and form must not share a horizontal content panel")
+
+
+def test_splash_login_dialog_fallback_when_image_unavailable(
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
@@ -77,9 +159,12 @@ def test_splash_login_dialog_hides_image_when_unavailable(
     dlg.show()
     qtbot.waitExposed(dlg)
 
-    image = dlg.findChild(QLabel, "splashLoginImage")
-    assert image is not None
-    assert not image.isVisible()
+    background = dlg.findChild(QLabel, "splashLoginBackground")
+    form = dlg.findChild(QWidget, "splashLoginForm")  # type: ignore[name-defined]
+    assert background is not None
+    assert form is not None
+    assert form.isVisible()
+    assert background.pixmap() is None or background.pixmap().isNull()
 
 
 def test_splash_login_dialog_success_returns_session(qtbot, tmp_path: Path) -> None:

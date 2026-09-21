@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QResizeEvent
+from PySide6.QtGui import QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -19,12 +19,80 @@ from PySide6.QtWidgets import (
 )
 
 from ui.auth_dialogs import LoginDialog
-from ui.splash_assets import load_splash_pixmap, scale_splash_pixmap
-from ui.theme import ACCENT, CARD, NAVY, TEXT, TEXT_MUTED
+from ui.splash_assets import cover_splash_pixmap, load_splash_pixmap
+from ui.theme import ACCENT, NAVY, TEXT, TEXT_MUTED
+
+
+class _SplashLoginRoot(QWidget):
+    """Корневой контейнер: фоновый слой + независимая форма поверх."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("splashLoginRoot")
+        self._source_pixmap = QPixmap()
+
+        self._background = QLabel(self)
+        self._background.setObjectName("splashLoginBackground")
+        self._background.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self._overlay = QWidget(self)
+        self._overlay.setObjectName("splashLoginOverlay")
+        self._overlay.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._overlay.setStyleSheet("background: transparent;")
+
+        self._overlay_layout = QVBoxLayout(self._overlay)
+        self._overlay_layout.setContentsMargins(32, 32, 32, 32)
+
+    @property
+    def background_label(self) -> QLabel:
+        return self._background
+
+    def set_source_pixmap(self, pixmap: QPixmap) -> None:
+        self._source_pixmap = pixmap
+        self._refresh_background()
+
+    def set_foreground_form(self, form: QWidget, *, horizontal_bias: float) -> None:
+        """Разместить форму поверх фона; bias 0.0 — слева, 0.5 — по центру, 1.0 — справа."""
+        bias = min(1.0, max(0.0, horizontal_bias))
+        left_stretch = max(1, int(bias * 20))
+        right_stretch = max(1, int((1.0 - bias) * 20))
+
+        self._overlay_layout.addStretch(1)
+        row = QHBoxLayout()
+        row.addStretch(left_stretch)
+        row.addWidget(form)
+        row.addStretch(right_stretch)
+        self._overlay_layout.addLayout(row)
+        self._overlay_layout.addStretch(1)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        rect = self.rect()
+        self._background.setGeometry(rect)
+        self._overlay.setGeometry(rect)
+        self._overlay.raise_()
+        self._refresh_background()
+
+    def _refresh_background(self) -> None:
+        width = max(1, self.width())
+        height = max(1, self.height())
+        if self._source_pixmap.isNull():
+            self._background.clear()
+            self._background.setStyleSheet(f"background: {NAVY};")
+            self.setStyleSheet(f"background: {NAVY};")
+            return
+
+        covered = cover_splash_pixmap(self._source_pixmap, width, height)
+        self._background.setPixmap(covered)
+        self._background.setStyleSheet("")
+        self.setStyleSheet(f"background: {NAVY};")
 
 
 class SplashLoginDialog(LoginDialog):
     """Полноэкранный вход при старте; контракт conn/session как у LoginDialog."""
+
+    # Горизонтальное смещение формы: 0.5 — центр; уменьшить для сдвига влево.
+    _FORM_HORIZONTAL_BIAS = 0.5
 
     def __init__(self, db_path: Path, parent: QWidget | None = None) -> None:
         QDialog.__init__(self, parent)
@@ -37,44 +105,47 @@ class SplashLoginDialog(LoginDialog):
 
         self._auth = AuthenticationService()
 
-        self._splash_label = QLabel(objectName="splashLoginImage")
-        self._splash_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._source_pixmap = load_splash_pixmap()
-        self._splash_label.setVisible(not self._source_pixmap.isNull())
 
+        self._root = _SplashLoginRoot()
+        self._background = self._root.background_label
+        self._form_panel = self._build_form_panel()
+        self._root.set_foreground_form(
+            self._form_panel,
+            horizontal_bias=self._FORM_HORIZONTAL_BIAS,
+        )
+        self._root.set_source_pixmap(self._source_pixmap)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(self._root)
+
+    def _build_form_panel(self) -> QWidget:
         self._login = QLineEdit(objectName="splashLoginUsername")
         self._password = QLineEdit(objectName="splashLoginPassword")
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
 
-        root = QWidget(objectName="splashLoginRoot")
-        root.setStyleSheet(f"background: {NAVY}; color: #ffffff;")
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(root)
-
-        layout = QHBoxLayout(root)
-        layout.setContentsMargins(48, 48, 48, 48)
-        layout.setSpacing(48)
-
-        layout.addWidget(self._splash_label, stretch=3)
-
         form_panel = QWidget(objectName="splashLoginForm")
+        form_panel.setMaximumWidth(360)
         form_panel.setStyleSheet(
-            f"background: {CARD}; color: {TEXT}; border-radius: 12px; padding: 8px;"
+            "QWidget#splashLoginForm {"
+            "  background: rgba(255, 255, 255, 0.78);"
+            "  border: 1px solid rgba(255, 255, 255, 0.45);"
+            "  border-radius: 10px;"
+            f"  color: {TEXT};"
+            "}"
         )
-        form_layout = QVBoxLayout(form_panel)
-        form_layout.setContentsMargins(32, 32, 32, 32)
-        form_layout.setSpacing(18)
 
-        title = QLabel("Журнал доступности персонала", objectName="splashLoginAppName")
-        title.setStyleSheet("font-size: 22px; font-weight: 600;")
+        form_layout = QVBoxLayout(form_panel)
+        form_layout.setContentsMargins(28, 28, 28, 28)
+        form_layout.setSpacing(16)
+
         subtitle = QLabel("Вход в систему", objectName="splashLoginSubtitle")
         subtitle.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 13px;")
-        form_layout.addWidget(title)
         form_layout.addWidget(subtitle)
 
         fields = QFormLayout()
-        fields.setSpacing(12)
+        fields.setSpacing(10)
         fields.addRow("Логин", self._login)
         fields.addRow("Пароль", self._password)
         form_layout.addLayout(fields)
@@ -100,24 +171,9 @@ class SplashLoginDialog(LoginDialog):
         buttons.rejected.connect(self.reject)
         form_layout.addWidget(buttons)
 
-        layout.addWidget(form_panel, stretch=2)
-        self._refresh_splash_image()
+        return form_panel
 
     def showEvent(self, event) -> None:  # noqa: ANN001, N802
         super().showEvent(event)
         self.showFullScreen()
 
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
-        super().resizeEvent(event)
-        self._refresh_splash_image()
-
-    def _refresh_splash_image(self) -> None:
-        if self._source_pixmap.isNull():
-            self._splash_label.clear()
-            self._splash_label.setVisible(False)
-            return
-        max_w = max(1, int(self._splash_label.width() * 0.95))
-        max_h = max(1, int(self.height() * 0.75))
-        scaled = scale_splash_pixmap(self._source_pixmap, max_w, max_h)
-        self._splash_label.setPixmap(scaled)
-        self._splash_label.setVisible(not scaled.isNull())
