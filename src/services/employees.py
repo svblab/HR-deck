@@ -72,6 +72,13 @@ class EmployeeService:
         self._positions = PositionRepository(conn)
         self._employment_types = EmploymentTypeRepository(conn)
 
+    def validate_card_input(
+        self, data: EmployeeCreateInput | EmployeeUpdateInput
+    ) -> EmployeeCreateInput:
+        """Validate org assignment and directory refs without persisting."""
+        self._require(Permission.MANAGE_EMPLOYEES)
+        return self._validate_input(data)
+
     def create_employee(self, data: EmployeeCreateInput) -> int:
         self._require(Permission.MANAGE_EMPLOYEES)
         payload = self._validate_input(data)
