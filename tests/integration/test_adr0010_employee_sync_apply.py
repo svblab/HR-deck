@@ -512,3 +512,195 @@ def test_adr0010_apply_rejects_low_confidence_name_match_without_external_id(
     assert exc_info.value.details[0].status.value == "low"
     assert _count_employees(conn) == 1
     conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_apply_rejects_ambiguous_name_match(tmp_path: Path) -> None:
+    conn, session = _open(tmp_path)
+    directories, employees, sync, _importer = _services(conn, session)
+    org = _seed_org(directories)
+    _create_employee(employees, org, full_name="Новиков Николай Николаевич")
+    _create_employee(employees, org, full_name="Новиков Николай Николаевич")
+    package = DirectorySyncPackage(
+        tables={
+            "employees": [
+                _employee_row(
+                    conn,
+                    org,
+                    external_id=str(uuid.uuid4()),
+                    full_name="Новиков Николай Николаевич",
+                )
+            ]
+        }
+    )
+    with pytest.raises(EmployeeSyncConflictError) as exc_info:
+        sync.apply_employees(package)
+    assert exc_info.value.details[0].status.value == "ambiguous"
+    assert _count_employees(conn) == 2
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_apply_clears_needs_org_review_on_compliant_sync(
+    tmp_path: Path,
+) -> None:
+    """ADR-0009: flag clears on next compliant save; sync apply is that save.
+
+    Package needs_org_review is ignored (ADR-0010: local / manual path only).
+    """
+    conn, session = _open(tmp_path)
+    directories, employees, sync, _importer = _services(conn, session)
+    org = _seed_org(directories)
+    emp_id = _create_employee(employees, org, full_name="Иванов Иван Иванович")
+    EmployeeRepository(conn).mark_needs_org_review(emp_id, updated_at=_T0)
+    conn.commit()
+    record = EmployeeRepository(conn).get(emp_id)
+    assert record is not None and record.needs_org_review
+    package = DirectorySyncPackage(
+        tables={
+            "employees": [
+                {
+                    **_employee_row(
+                        conn,
+                        org,
+                        external_id=record.external_id,
+                        full_name="Иванов Иван Иванович",
+                    ),
+                    "needs_org_review": True,  # must not be imported
+                }
+            ]
+        }
+    )
+    sync.apply_employees(package)
+    updated = EmployeeRepository(conn).get(emp_id)
+    assert updated is not None
+    assert updated.needs_org_review is False
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_apply_is_archived_without_status_history_or_restore_side_effects(
+    tmp_path: Path,
+) -> None:
+    """ADR-0010 syncs is_archived as a package field; ADR-0011 archive/restore
+    side-effects (status_history, restore→needs_org_review) are UI-only.
+    """
+    conn, session = _open(tmp_path)
+    directories, employees, sync, _importer = _services(conn, session)
+    history = StatusHistoryService(conn, session, clock=lambda: _T0)
+    org = _seed_org(directories)
+    emp_id = _create_employee(employees, org, full_name="Иванов Иван Иванович")
+    history.assign_status(emp_id, status_id=1, start_date="2026-01-01", confirmed=True)
+    before_hist = int(
+        conn.execute(
+            "SELECT COUNT(*) FROM status_history WHERE employee_id = ?", (emp_id,)
+        ).fetchone()[0]
+    )
+    record = EmployeeRepository(conn).get(emp_id)
+    assert record is not None and not record.is_archived
+    package = DirectorySyncPackage(
+        tables={
+            "employees": [
+                _employee_row(
+                    conn,
+                    org,
+                    external_id=record.external_id,
+                    full_name="Иванов Иван Иванович",
+                    is_archived=True,
+                )
+            ]
+        }
+    )
+    sync.apply_employees(package)
+    archived = EmployeeRepository(conn).get(emp_id)
+    assert archived is not None
+    assert archived.is_archived is True
+    assert archived.needs_org_review is False
+    assert (
+        int(
+            conn.execute(
+                "SELECT COUNT(*) FROM status_history WHERE employee_id = ?", (emp_id,)
+            ).fetchone()[0]
+        )
+        == before_hist
+    )
+
+    restore_pkg = DirectorySyncPackage(
+        tables={
+            "employees": [
+                _employee_row(
+                    conn,
+                    org,
+                    external_id=record.external_id,
+                    full_name="Иванов Иван Иванович",
+                    is_archived=False,
+                )
+            ]
+        }
+    )
+    sync.apply_employees(restore_pkg)
+    restored = EmployeeRepository(conn).get(emp_id)
+    assert restored is not None
+    assert restored.is_archived is False
+    # Sync unarchive is field apply, not UI restore_employee (ADR-0011).
+    assert restored.needs_org_review is False
+    assert (
+        int(
+            conn.execute(
+                "SELECT COUNT(*) FROM status_history WHERE employee_id = ?", (emp_id,)
+            ).fetchone()[0]
+        )
+        == before_hist
+    )
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_apply_employment_type_id_as_seed_integer(tmp_path: Path) -> None:
+    """ADR-0010 exports employment_type_id as seed int; ADR-0011 notes the
+    known cross-install risk and does not block current sync.
+    """
+    conn, session = _open(tmp_path)
+    directories, employees, sync, _importer = _services(conn, session)
+    org = _seed_org(directories)
+    emp_id = _create_employee(employees, org, full_name="Иванов Иван Иванович")
+    record = EmployeeRepository(conn).get(emp_id)
+    assert record is not None
+    assert record.employment_type_id == 1
+    row = _employee_row(
+        conn,
+        org,
+        external_id=record.external_id,
+        full_name="Иванов Иван Иванович",
+    )
+    row["employment_type_id"] = 2  # temporary — seed id, identical across installs
+    sync.apply_employees(DirectorySyncPackage(tables={"employees": [row]}))
+    updated = EmployeeRepository(conn).get(emp_id)
+    assert updated is not None
+    assert updated.employment_type_id == 2
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_apply_sensitive_fields_require_edit_permission(tmp_path: Path) -> None:
+    conn, session = _open(tmp_path)
+    directories, employees, sync, _importer = _services(conn, session)
+    org = _seed_org(directories)
+    emp_id = _create_employee(employees, org, full_name="Иванов Иван Иванович")
+    record = EmployeeRepository(conn).get(emp_id)
+    assert record is not None
+    row = _employee_row(
+        conn,
+        org,
+        external_id=record.external_id,
+        full_name="Иванов Иван Иванович",
+    )
+    row["home_address"] = "ул. Тестовая, 1"
+    row["social_insurance_number"] = "123-456-789 00"
+    # Administrator has EDIT_SENSITIVE_EMPLOYEE_FIELDS — values applied.
+    sync.apply_employees(DirectorySyncPackage(tables={"employees": [row]}))
+    updated = EmployeeRepository(conn).get(emp_id)
+    assert updated is not None
+    assert updated.home_address == "ул. Тестовая, 1"
+    assert updated.social_insurance_number == "123-456-789 00"
+    conn.close()

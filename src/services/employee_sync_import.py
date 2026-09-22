@@ -188,9 +188,25 @@ class EmployeeSyncImportService:
         social = (
             row.social_insurance_number if can_edit_sensitive else local.social_insurance_number
         )
-        if self._row_matches_local(local, row, home=home, social=social):
+        # ADR-0009: needs_org_review clears on the next successful compliant
+        # save. A validated sync apply is that save — even when other fields
+        # are already identical (idempotent re-apply). Package needs_org_review
+        # is never imported (ADR-0010: flag is local / manual-directory only).
+        fields_match = self._row_matches_local(local, row, home=home, social=social)
+        if fields_match and not local.needs_org_review:
             return
-        clear_review = local.needs_org_review
+        if fields_match and local.needs_org_review:
+            self._employees.clear_needs_org_review(local.id, updated_at=now)
+            self._audit.record(
+                account_id=self._session.account_id,
+                action_type="employee.sync_update",
+                result="success",
+                created_at=now,
+                entity_type="employee",
+                entity_id=local.id,
+                details=f"external_id={row.external_id};cleared_needs_org_review=1",
+            )
+            return
         self._employees.apply_sync_row(
             local.id,
             full_name=row.payload.full_name,
@@ -205,7 +221,7 @@ class EmployeeSyncImportService:
             home_address=home,
             social_insurance_number=social,
             is_archived=row.is_archived,
-            clear_needs_org_review=clear_review,
+            clear_needs_org_review=local.needs_org_review,
             updated_at=now,
         )
         self._audit.record(
