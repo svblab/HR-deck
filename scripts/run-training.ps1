@@ -38,13 +38,60 @@ function Resolve-PythonExe {
     throw "Python 3.11+ not found in PATH."
 }
 
-if ($Clean) {
-    if (Test-Path -LiteralPath $dataDir) {
-        Remove-Item -LiteralPath $dataDir -Recurse -Force
-        Write-Host "Removed data directory: $dataDir"
-    } else {
-        Write-Host "Data directory not found (already clean): $dataDir"
+function Stop-RunningUxTestApp {
+    $stopped = 0
+    Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object {
+            $cmd = $_.CommandLine
+            $cmd -and (
+                $cmd -match '-m ui\b' -or
+                $cmd -match 'personnel-availability' -or
+                $cmd -match 'ui\.app'
+            )
+        } |
+        ForEach-Object {
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            $stopped += 1
+        }
+    if ($stopped -gt 0) {
+        Start-Sleep -Milliseconds 500
+        Write-Host "Stopped $stopped running UI process(es)."
     }
+}
+
+function Reset-DataDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Host "Data directory not found (already clean): $Path"
+        return
+    }
+
+    Stop-RunningUxTestApp
+
+    try {
+        Remove-Item -LiteralPath $Path -Recurse -Force
+        Write-Host "Removed data directory: $Path"
+        return
+    } catch {
+        Write-Host "Could not delete data directory (files may be locked): $Path"
+    }
+
+    $backup = "{0}.bak.{1}" -f $Path, (Get-Date -Format "yyyyMMddHHmmss")
+    try {
+        Move-Item -LiteralPath $Path -Destination $backup -Force
+        Write-Host "Moved locked data directory to: $backup"
+        return
+    } catch {
+        throw "Failed to reset UX test data directory. Close the running app and retry -Clean."
+    }
+}
+
+if ($Clean) {
+    Reset-DataDirectory -Path $dataDir
     Write-Host "Run without -Clean to start SetupDialog (admin / 111)."
     exit 0
 }
@@ -52,7 +99,9 @@ if ($Clean) {
 $python = Resolve-PythonExe
 Write-Host "Python: $python"
 Write-Host "Data: $dataDir"
-Write-Host "UX login: admin / 111 (after SetupDialog)"
+Write-Host "UX login: admin / 111 (after SetupDialog or splash login)"
+
+Stop-RunningUxTestApp
 
 Set-Location $repoRoot
 try {

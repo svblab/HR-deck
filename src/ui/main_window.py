@@ -117,6 +117,7 @@ class MainWindow(QMainWindow):
         self._brand_logo: QLabel | None = None
         self._brand_company: QLabel | None = None
         self._search_signal_connected = False
+        self._session_released = False
 
         root = QWidget(objectName="centralRoot")
         self._root_layout = QVBoxLayout(root)
@@ -587,16 +588,21 @@ class MainWindow(QMainWindow):
         self._refresh_branding()
 
     def _logout_and_close(self) -> None:
-        if self._session is not None and self._conn is not None:
-            try:
-                self._auth.logout(self._session, self._conn)
-            except Exception as exc:  # noqa: BLE001
-                QMessageBox.warning(self, "Выход", str(exc))
-            try:
-                self._conn.close()
-            except Exception:  # noqa: BLE001
-                pass
+        self._release_session()
         self.close()
+
+    def _release_session(self) -> None:
+        if self._session_released or self._session is None or self._conn is None:
+            return
+        try:
+            self._auth.logout(self._session, self._conn)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "Выход", str(exc))
+        try:
+            self._conn.close()
+        except Exception:  # noqa: BLE001
+            pass
+        self._session_released = True
 
     def resizeEvent(self, event) -> None:  # noqa: ANN001
         super().resizeEvent(event)
