@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
@@ -98,6 +98,8 @@ class SplashLoginDialog(LoginDialog):
         QDialog.__init__(self, parent)
         self.setObjectName("splashLoginDialog")
         self.setWindowTitle("Вход")
+        # Полноэкранный режим: флаг до первого show; сам переход — в showEvent.
+        self.setWindowFlag(Qt.WindowType.Window, True)
         self._db_path = db_path
         self.conn = None
         self.session = None
@@ -175,5 +177,11 @@ class SplashLoginDialog(LoginDialog):
 
     def showEvent(self, event) -> None:  # noqa: ANN001, N802
         super().showEvent(event)
-        self.showFullScreen()
+        # Не вызывать showFullScreen() синхронно из showEvent: на Windows
+        # это даёт рекурсию/зависание при первом показе диалога.
+        if not self.isFullScreen():
+            QTimer.singleShot(0, self._enter_fullscreen)
 
+    def _enter_fullscreen(self) -> None:
+        if not self.isFullScreen():
+            self.showFullScreen()
