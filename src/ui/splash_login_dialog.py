@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QPixmap, QResizeEvent
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication, QPixmap, QResizeEvent
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -20,7 +20,10 @@ from PySide6.QtWidgets import (
 
 from ui.auth_dialogs import LoginDialog
 from ui.splash_assets import cover_splash_pixmap, load_splash_pixmap
-from ui.theme import ACCENT, NAVY, TEXT, TEXT_MUTED
+from ui.theme import ACCENT, BORDER, NAVY, TEXT, TEXT_MUTED
+
+_SPLASH_FIELD_BG = "#EDEEE8"
+_SPLASH_FONT_PX = 15  # ~+15% от базовых 13px в theme
 
 
 class _SplashLoginRoot(QWidget):
@@ -121,6 +124,22 @@ class SplashLoginDialog(LoginDialog):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(self._root)
+        self._geometry_applied = False
+
+    def prepare_startup_presentation(self) -> None:
+        """
+        Полноэкранный splash до exec().
+
+        showFullScreen() нельзя вызывать из showEvent на Windows (рекурсия/зависание),
+        поэтому делаем это один раз здесь, до модального exec() в app.run().
+        """
+        if self._geometry_applied:
+            return
+        self._geometry_applied = True
+        screen = QGuiApplication.primaryScreen()
+        if screen is not None:
+            self.setGeometry(screen.availableGeometry())
+        self.showFullScreen()
 
     def _build_form_panel(self) -> QWidget:
         self._login = QLineEdit(objectName="splashLoginUsername")
@@ -128,22 +147,99 @@ class SplashLoginDialog(LoginDialog):
         self._password.setEchoMode(QLineEdit.EchoMode.Password)
 
         form_panel = QWidget(objectName="splashLoginForm")
-        form_panel.setMaximumWidth(360)
+        form_panel.setMaximumWidth(380)
         form_panel.setStyleSheet(
-            "QWidget#splashLoginForm {"
-            "  background: rgba(255, 255, 255, 0.78);"
-            "  border: 1px solid rgba(255, 255, 255, 0.45);"
-            "  border-radius: 10px;"
-            f"  color: {TEXT};"
-            "}"
+            f"""
+            QWidget#splashLoginForm {{
+              background: rgba(255, 255, 255, 0.78);
+              border: 1px solid rgba(255, 255, 255, 0.45);
+              border-radius: 10px;
+              color: {TEXT};
+              font-size: {_SPLASH_FONT_PX}px;
+            }}
+            QWidget#splashLoginForm QLabel {{
+              font-size: {_SPLASH_FONT_PX}px;
+            }}
+            QLabel#splashLoginSubtitle {{
+              color: {TEXT_MUTED};
+              font-size: {_SPLASH_FONT_PX}px;
+              font-weight: 600;
+            }}
+            QLineEdit#splashLoginUsername, QLineEdit#splashLoginPassword {{
+              background: {_SPLASH_FIELD_BG};
+              color: {TEXT};
+              border: 2px solid #C9CAC4;
+              border-radius: 8px;
+              padding: 10px 12px;
+              font-size: {_SPLASH_FONT_PX}px;
+              min-height: 24px;
+            }}
+            QLineEdit#splashLoginUsername:focus, QLineEdit#splashLoginPassword:focus {{
+              border: 2px solid {ACCENT};
+            }}
+            QPushButton#splashLoginSubmitBtn {{
+              background: qlineargradient(
+                x1:0, y1:0, x2:0, y2:1,
+                stop:0 #3A8A7C, stop:1 {ACCENT}
+              );
+              color: #ffffff;
+              border: 1px solid #255548;
+              border-bottom: 3px solid #1F4840;
+              border-radius: 8px;
+              min-height: 42px;
+              min-width: 108px;
+              padding: 0 20px;
+              font-size: {_SPLASH_FONT_PX}px;
+              font-weight: 600;
+            }}
+            QPushButton#splashLoginSubmitBtn:hover {{
+              background: qlineargradient(
+                x1:0, y1:0, x2:0, y2:1,
+                stop:0 #47A595, stop:1 #358272
+              );
+              border-bottom: 3px solid #276B5E;
+            }}
+            QPushButton#splashLoginSubmitBtn:pressed {{
+              background: #265A50;
+              border-bottom: 1px solid #1F4840;
+              padding-top: 2px;
+            }}
+            QPushButton#splashLoginCancelBtn {{
+              background: qlineargradient(
+                x1:0, y1:0, x2:0, y2:1,
+                stop:0 #ffffff, stop:1 #E6E6E1
+              );
+              color: {TEXT};
+              border: 1px solid {BORDER};
+              border-bottom: 3px solid #C4C4BC;
+              border-radius: 8px;
+              min-height: 42px;
+              min-width: 108px;
+              padding: 0 20px;
+              font-size: {_SPLASH_FONT_PX}px;
+              font-weight: 600;
+            }}
+            QPushButton#splashLoginCancelBtn:hover {{
+              background: qlineargradient(
+                x1:0, y1:0, x2:0, y2:1,
+                stop:0 #F8F8F5, stop:1 #DCDCD6
+              );
+              border-color: #B8B8B0;
+              color: {NAVY};
+            }}
+            QPushButton#splashLoginCancelBtn:pressed {{
+              background: #D8D8D2;
+              border-bottom: 1px solid #C4C4BC;
+              padding-top: 2px;
+            }}
+            """
         )
 
         form_layout = QVBoxLayout(form_panel)
         form_layout.setContentsMargins(28, 28, 28, 28)
         form_layout.setSpacing(16)
 
-        subtitle = QLabel("Вход в систему", objectName="splashLoginSubtitle")
-        subtitle.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 13px;")
+        subtitle = QLabel("Вход в программу", objectName="splashLoginSubtitle")
         form_layout.addWidget(subtitle)
 
         fields = QFormLayout()
@@ -177,11 +273,7 @@ class SplashLoginDialog(LoginDialog):
 
     def showEvent(self, event) -> None:  # noqa: ANN001, N802
         super().showEvent(event)
-        # Не вызывать showFullScreen() синхронно из showEvent: на Windows
-        # это даёт рекурсию/зависание при первом показе диалога.
-        if not self.isFullScreen():
-            QTimer.singleShot(0, self._enter_fullscreen)
-
-    def _enter_fullscreen(self) -> None:
-        if not self.isFullScreen():
-            self.showFullScreen()
+        if not self._geometry_applied:
+            self.prepare_startup_presentation()
+        self.raise_()
+        self.activateWindow()

@@ -587,6 +587,14 @@ class MainWindow(QMainWindow):
         self._refresh_branding()
 
     def _logout_and_close(self) -> None:
+        self._release_session()
+        self.close()
+
+    def closeEvent(self, event) -> None:  # noqa: ANN001, N802
+        self._release_session()
+        super().closeEvent(event)
+
+    def _release_session(self) -> None:
         if self._session is not None and self._conn is not None:
             try:
                 self._auth.logout(self._session, self._conn)
@@ -596,7 +604,8 @@ class MainWindow(QMainWindow):
                 self._conn.close()
             except Exception:  # noqa: BLE001
                 pass
-        self.close()
+            self._conn = None
+            self._session = None
 
     def resizeEvent(self, event) -> None:  # noqa: ANN001
         super().resizeEvent(event)

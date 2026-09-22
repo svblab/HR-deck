@@ -59,9 +59,19 @@ def test_cover_splash_pixmap_fills_target_without_distortion(qapp) -> None:  # n
     assert abs(scaled_w / scaled_h - source_ratio) < 0.02
 
 
+def test_splash_login_prepare_startup_presentation_is_fullscreen(
+    qtbot, tmp_path: Path
+) -> None:
+    dlg = SplashLoginDialog(tmp_path / "missing.db")
+    qtbot.addWidget(dlg)
+    dlg.prepare_startup_presentation()
+    assert dlg.isFullScreen()
+
+
 def test_splash_login_dialog_uses_fullscreen_background_layer(qtbot, tmp_path: Path) -> None:
     dlg = SplashLoginDialog(tmp_path / "missing.db")
     qtbot.addWidget(dlg)
+    dlg._geometry_applied = True
     dlg.resize(960, 540)
     dlg.show()
     qtbot.waitExposed(dlg)
@@ -86,6 +96,7 @@ def test_splash_login_dialog_uses_fullscreen_background_layer(qtbot, tmp_path: P
 def test_splash_login_background_recalculates_on_resize(qtbot, tmp_path: Path) -> None:
     dlg = SplashLoginDialog(tmp_path / "missing.db")
     qtbot.addWidget(dlg)
+    dlg._geometry_applied = True
     dlg.show()
     qtbot.waitExposed(dlg)
 

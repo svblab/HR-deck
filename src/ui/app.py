@@ -56,6 +56,7 @@ def run(db_path: Path | None = None) -> int:
         conn, session = setup.conn, setup.session
     else:
         login = SplashLoginDialog(path)
+        login.prepare_startup_presentation()
         if login.exec() != QDialog.DialogCode.Accepted:
             return 1
         conn, session = login.conn, login.session
