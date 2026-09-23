@@ -1,7 +1,6 @@
-"""Read-only employee reconciliation table for directory-sync packages.
+"""Employee reconciliation table for directory-sync packages (ADR-0006 matching).
 
-Absorbs ADR-0006 matching without changes: classify only, never apply.
-Confirm-and-apply is a separate follow-up (EPIC-026 Part 4b step 2).
+Classification is read-only here; persistence is ``EmployeeSyncImportService``.
 """
 
 from __future__ import annotations

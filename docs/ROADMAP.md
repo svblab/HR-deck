@@ -31,7 +31,7 @@
 | EPIC-017 | Комплект документации | ✅ Завершён | [#31](https://github.com/svblab/HR-deck/pull/31) |
 | EPIC-016 | Приёмочное тестирование и стабилизация | ✅ Завершён (см. [`acceptance/EPIC-016-signoff.md`](acceptance/EPIC-016-signoff.md)) | [#33](https://github.com/svblab/HR-deck/pull/33), [#40](https://github.com/svblab/HR-deck/pull/40), [#41](https://github.com/svblab/HR-deck/pull/41), [#47](https://github.com/svblab/HR-deck/pull/47), [#51](https://github.com/svblab/HR-deck/pull/51), [#52](https://github.com/svblab/HR-deck/pull/52), [#53](https://github.com/svblab/HR-deck/pull/53), [#54](https://github.com/svblab/HR-deck/pull/54) |
 | EPIC-018 | Конвертация неструктурированных данных (Механизм 1) | 📋 Запланирован | — |
-| EPIC-019 | TransportKeyStore и transport-state | 📋 Запланирован | — |
+| EPIC-019 | TransportKeyStore и transport-state | ✅ Завершён | [#65](https://github.com/svblab/HR-deck/pull/65), [#100](https://github.com/svblab/HR-deck/pull/100) |
 | EPIC-020 | Transport exchange между установками (Механизм 2) | 📋 Запланирован | — |
 | EPIC-021 | Единый диалог «Работа с базой данных» | 📋 Запланирован | — |
 | EPIC-024 | Опциональные уровни оргструктуры | ✅ Завершён (2026-09-14) | — |
