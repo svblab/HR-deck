@@ -2,7 +2,7 @@
 
 Reconciles branches/departments/divisions/positions by external_id inside a
 SAVEPOINT, verifies no active employee is broken, then commits or rejects the
-whole package. Employee-row reconciliation is Part 4b (out of scope here).
+whole package, then employee rows (Part 4b) in the same transaction.
 """
 
 from __future__ import annotations
@@ -18,8 +18,10 @@ from data.directories import (
     PositionRepository,
 )
 from domain.directory_sync import DirectorySyncConflictError, DirectorySyncPackage
+from domain.employee_reconciliation import EmployeeSyncApplyError, EmployeeSyncConflictError
 from domain.permissions import Permission
 from services.authorization import AuthorizationService
+from services.employee_sync_import import EmployeeSyncImportService
 from services.session import SessionState
 
 Clock = Callable[[], str]
@@ -97,9 +99,20 @@ class DirectorySyncImportService:
                 self._conn.execute(f"RELEASE SAVEPOINT {_SAVEPOINT}")
                 raise DirectorySyncConflictError(broken)
 
+            EmployeeSyncImportService(
+                self._conn,
+                self._session,
+                clock=self._clock,
+                authz=self._authz,
+            ).apply_employees(package, commit=False)
+
             self._conn.execute(f"RELEASE SAVEPOINT {_SAVEPOINT}")
             self._conn.commit()
         except DirectorySyncConflictError:
+            raise
+        except (EmployeeSyncConflictError, EmployeeSyncApplyError):
+            self._conn.execute(f"ROLLBACK TO SAVEPOINT {_SAVEPOINT}")
+            self._conn.execute(f"RELEASE SAVEPOINT {_SAVEPOINT}")
             raise
         except Exception:
             self._conn.execute(f"ROLLBACK TO SAVEPOINT {_SAVEPOINT}")

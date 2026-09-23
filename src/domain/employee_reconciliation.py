@@ -23,3 +23,23 @@ class EmployeeMatchCandidate:
     status: EmployeeMatchStatus
     matched_employee_id: int | None
     candidate_employee_ids: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class EmployeeSyncConflictDetail:
+    external_id: str
+    full_name: str
+    status: EmployeeMatchStatus
+    matched_employee_id: int | None = None
+
+
+class EmployeeSyncConflictError(Exception):
+    """Package employee rows cannot be applied automatically — nothing written."""
+
+    def __init__(self, details: list[EmployeeSyncConflictDetail]) -> None:
+        self.details = details
+        super().__init__(f"{len(details)} employee row(s) blocked sync apply")
+
+
+class EmployeeSyncApplyError(Exception):
+    """Validation failed for one or more employee rows — nothing written."""
