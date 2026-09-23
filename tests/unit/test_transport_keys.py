@@ -54,6 +54,7 @@ def _seed_peer(store: TransportKeyStore) -> tuple[str, int]:
         ("key_id lookup", "lookup_wk_by_key_id"),
         ("Duplex independence", "duplex_directions_independent"),
         ("Lost signing key", "mark_local_signing_lost"),
+        ("Lost current WK", "lost_wk_marks_broken_then_reinit_direction"),
         ("No silent rollback", "historical_wk_not_auto_promoted"),
         ("Replay idempotency", "exact_replay_is_idempotent"),
         ("key_id uniqueness", "wire_key_id_collision_safe"),
@@ -269,6 +270,52 @@ def test_revoke_wk_marks_broken_direction(tmp_path: Path) -> None:
         "SELECT direction_status FROM transport_direction_state WHERE id=?", (direction.id,)
     ).fetchone()[0]
     assert status == "broken"
+
+
+def test_lost_wk_marks_broken_then_reinit_direction(tmp_path: Path) -> None:
+    """ADR-0007 lost current WK: mark LOST → direction broken → manual reinit_direction."""
+    conn, store = _open_store(tmp_path)
+    local_id, peer_id = _seed_peer(store)
+    peer_installation_id = conn.execute(
+        "SELECT peer_installation_id FROM transport_peer_trust WHERE id=?", (peer_id,)
+    ).fetchone()[0]
+    direction = store.ensure_direction(
+        sender_installation_id=local_id,
+        recipient_installation_id=peer_installation_id,
+        peer_trust_id=peer_id,
+    )
+    wk = store.create_wk_key(direction_id=direction.id, wk_role=WkRole.ACTIVE)
+    store.activate_wk_for_direction(
+        direction_id=direction.id, wk_row_id=wk.id, accepted_sequence=3
+    )
+    conn.commit()
+
+    store.revoke_wk(wk.key_id, role=WkRole.LOST)
+    conn.commit()
+    lost_row = conn.execute(
+        "SELECT wk_role FROM transport_wk_keys WHERE key_id=?", (wk.key_id,)
+    ).fetchone()
+    broken = conn.execute(
+        "SELECT direction_status, current_wk_id, accepted_sequence"
+        " FROM transport_direction_state WHERE id=?",
+        (direction.id,),
+    ).fetchone()
+    assert lost_row[0] == WkRole.LOST.value
+    assert broken == ("broken", wk.id, 3)
+
+    store.reinit_direction(direction.id)
+    conn.commit()
+    reinit = conn.execute(
+        "SELECT direction_status, current_wk_id, accepted_sequence"
+        " FROM transport_direction_state WHERE id=?",
+        (direction.id,),
+    ).fetchone()
+    assert reinit == ("reinit_required", None, 0)
+    # Re-init clears chain progress; lost WK row remains (no silent destruction).
+    retained = conn.execute(
+        "SELECT wk_role FROM transport_wk_keys WHERE key_id=?", (wk.key_id,)
+    ).fetchone()[0]
+    assert retained == WkRole.LOST.value
 
 
 def test_activate_wk_insert_order_respects_fk(tmp_path: Path) -> None:

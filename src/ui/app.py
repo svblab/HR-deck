@@ -13,10 +13,11 @@ from data.paths import default_db_path, ensure_user_data_dirs
 from services.bootstrap import BootstrapService
 from services.upgrade import UpgradeError, UpgradeService
 from ui.app_icon import install_app_window_icon
-from ui.auth_dialogs import LoginDialog, SetupDialog
+from ui.auth_dialogs import SetupDialog
 from ui.logging_config import configure_logging, install_excepthook
 from ui.main_window import MainWindow
 from ui.session_activity import install_session_activity_filter
+from ui.splash_login_dialog import SplashLoginDialog
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,8 @@ def run(db_path: Path | None = None) -> int:
             return 1
         conn, session = setup.conn, setup.session
     else:
-        login = LoginDialog(path)
+        login = SplashLoginDialog(path)
+        login.prepare_startup_presentation()
         if login.exec() != QDialog.DialogCode.Accepted:
             return 1
         conn, session = login.conn, login.session

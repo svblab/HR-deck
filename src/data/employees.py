@@ -89,13 +89,19 @@ class EmployeeRepository:
         created_at: str,
         division_id: int | None = None,
         note: str | None = None,
+        hire_date: str | None = None,
+        contacts: str | None = None,
+        home_address: str | None = None,
+        social_insurance_number: str | None = None,
+        needs_org_review: bool = False,
+        is_archived: bool = False,
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO employees ("
             " external_id, full_name, position_id, branch_id, department_id, division_id,"
             " employment_type_id, note, hire_date, contacts, home_address,"
-            " social_insurance_number, is_archived, created_at, updated_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, 0, ?, ?)",
+            " social_insurance_number, needs_org_review, is_archived, created_at, updated_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 external_id,
                 full_name,
@@ -105,6 +111,12 @@ class EmployeeRepository:
                 division_id,
                 employment_type_id,
                 note,
+                hire_date,
+                contacts,
+                home_address,
+                social_insurance_number,
+                int(needs_org_review),
+                int(is_archived),
                 created_at,
                 created_at,
             ),
@@ -141,6 +153,78 @@ class EmployeeRepository:
                 employee_id,
             ),
         )
+
+    def apply_sync_row(
+        self,
+        employee_id: int,
+        *,
+        full_name: str,
+        position_id: int,
+        branch_id: int,
+        department_id: int | None,
+        division_id: int | None,
+        employment_type_id: int,
+        note: str | None,
+        hire_date: str | None,
+        contacts: str | None,
+        home_address: str | None,
+        social_insurance_number: str | None,
+        is_archived: bool,
+        clear_needs_org_review: bool,
+        updated_at: str,
+    ) -> None:
+        needs_org_review = 0 if clear_needs_org_review else None
+        if needs_org_review is not None:
+            self._conn.execute(
+                "UPDATE employees SET"
+                " full_name = ?, position_id = ?, branch_id = ?, department_id = ?,"
+                " division_id = ?, employment_type_id = ?, note = ?, hire_date = ?,"
+                " contacts = ?, home_address = ?, social_insurance_number = ?,"
+                " is_archived = ?, needs_org_review = ?, updated_at = ?"
+                " WHERE id = ?",
+                (
+                    full_name,
+                    position_id,
+                    branch_id,
+                    department_id,
+                    division_id,
+                    employment_type_id,
+                    note,
+                    hire_date,
+                    contacts,
+                    home_address,
+                    social_insurance_number,
+                    int(is_archived),
+                    needs_org_review,
+                    updated_at,
+                    employee_id,
+                ),
+            )
+        else:
+            self._conn.execute(
+                "UPDATE employees SET"
+                " full_name = ?, position_id = ?, branch_id = ?, department_id = ?,"
+                " division_id = ?, employment_type_id = ?, note = ?, hire_date = ?,"
+                " contacts = ?, home_address = ?, social_insurance_number = ?,"
+                " is_archived = ?, updated_at = ?"
+                " WHERE id = ?",
+                (
+                    full_name,
+                    position_id,
+                    branch_id,
+                    department_id,
+                    division_id,
+                    employment_type_id,
+                    note,
+                    hire_date,
+                    contacts,
+                    home_address,
+                    social_insurance_number,
+                    int(is_archived),
+                    updated_at,
+                    employee_id,
+                ),
+            )
 
     def update_sensitive(
         self,
