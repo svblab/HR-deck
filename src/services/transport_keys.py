@@ -18,6 +18,7 @@ from domain.transport import (
     LocalInstallation,
     LocalKeyStatus,
     PackageClassification,
+    PeerTrustRecord,
     TransportKeyError,
     TrustStatus,
     WkKeyRecord,
@@ -133,6 +134,61 @@ class TransportKeyStore:
         if status == TrustStatus.ACTIVE:
             raise TransportKeyError("cannot revoke to active")
         self._repo.set_peer_bootstrap_trust_status(peer_trust_id, status, now=self._clock())
+
+    def get_peer_trust(self, peer_trust_id: int) -> PeerTrustRecord:
+        record = self._repo.get_peer_trust(peer_trust_id)
+        if record is None:
+            raise TransportKeyError(f"unknown peer trust id: {peer_trust_id}")
+        return record
+
+    def get_active_signing_keypair(self) -> tuple[str, bytes]:
+        pair = self._repo.get_active_signing_keypair()
+        if pair is None:
+            raise TransportKeyError("active signing identity is missing")
+        return pair
+
+    def get_active_bootstrap_private_key(self) -> bytes:
+        private = self._repo.get_active_bootstrap_private_key()
+        if private is None:
+            raise TransportKeyError("active bootstrap identity is missing")
+        return private
+
+    def get_direction(self, direction_id: int) -> DirectionState:
+        direction = self._repo.get_direction(direction_id)
+        if direction is None:
+            raise TransportKeyError(f"unknown direction id: {direction_id}")
+        return direction
+
+    def get_current_wk(self, direction_id: int) -> WkKeyRecord | None:
+        direction = self.get_direction(direction_id)
+        if direction.current_wk_id is None:
+            return None
+        return self._repo.get_wk_by_id(direction.current_wk_id)
+
+    def record_outbound_export(
+        self,
+        *,
+        direction_id: int,
+        package_id: str,
+        sequence: int,
+        envelope_key_id: str,
+        established_wk: WkKeyRecord,
+    ) -> None:
+        """Persist outbound export metadata and advance local outbound WK chain."""
+        self.activate_wk_for_direction(
+            direction_id=direction_id,
+            wk_row_id=established_wk.id,
+            accepted_sequence=sequence,
+        )
+        self._repo.insert_package_record(
+            direction_id=direction_id,
+            package_id=package_id,
+            sequence=sequence,
+            classification=PackageClassification.PENDING,
+            envelope_key_id=envelope_key_id,
+            rejection_reason=None,
+            now=self._clock(),
+        )
 
     def ensure_direction(
         self,

@@ -72,6 +72,24 @@ class TransportIdentityStore:
         ).fetchone()
         return None if row is None else str(row[0])
 
+    def get_active_signing_keypair(self) -> tuple[str, bytes] | None:
+        row = self._conn.execute(
+            "SELECT key_fingerprint, private_key FROM transport_local_signing_keys"
+            " WHERE key_status = ? LIMIT 1",
+            (LocalKeyStatus.ACTIVE.value,),
+        ).fetchone()
+        if row is None:
+            return None
+        return str(row[0]), bytes(row[1])
+
+    def get_active_bootstrap_private_key(self) -> bytes | None:
+        row = self._conn.execute(
+            "SELECT private_key FROM transport_local_bootstrap_keys"
+            " WHERE key_status = ? LIMIT 1",
+            (LocalKeyStatus.ACTIVE.value,),
+        ).fetchone()
+        return None if row is None else bytes(row[0])
+
     def supersede_active_signing(self, *, status: LocalKeyStatus, now: str) -> None:
         self._conn.execute(
             "UPDATE transport_local_signing_keys"
