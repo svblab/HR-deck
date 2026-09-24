@@ -95,6 +95,21 @@ class TransportChainStore:
         ).fetchone()
         return None if row is None else _row_direction(row)
 
+    def get_direction_by_peers(
+        self,
+        *,
+        sender_installation_id: str,
+        recipient_installation_id: str,
+    ) -> DirectionState | None:
+        row = self._conn.execute(
+            "SELECT id, sender_installation_id, recipient_installation_id, peer_trust_id,"
+            " accepted_sequence, current_wk_id, direction_status"
+            " FROM transport_direction_state"
+            " WHERE sender_installation_id = ? AND recipient_installation_id = ?",
+            (sender_installation_id, recipient_installation_id),
+        ).fetchone()
+        return None if row is None else _row_direction(row)
+
     def wire_key_id_exists(self, key_id: str) -> bool:
         row = self._conn.execute(
             "SELECT 1 FROM transport_wk_keys WHERE key_id = ? LIMIT 1", (key_id,)

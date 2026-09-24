@@ -15,6 +15,30 @@ class TransportKeyError(Exception):
     """Ошибка TransportKeyStore (ключ, направление, replay)."""
 
 
+class TransportReceiveError(Exception):
+    """Base error for crypto-only transport receive (EPIC-020-C)."""
+
+
+class TransportPackageMalformedError(TransportReceiveError):
+    """Wire bytes could not be parsed as a TransportPackage."""
+
+
+class TransportUntrustedSenderError(TransportReceiveError):
+    """Sender installation is unknown or peer trust is not usable."""
+
+
+class TransportEnvelopeDecryptError(TransportReceiveError):
+    """Envelope AEAD decrypt/authenticate failed."""
+
+
+class TransportSignatureError(TransportReceiveError):
+    """Package signature verification failed."""
+
+
+class TransportPayloadDecryptError(TransportReceiveError):
+    """Payload AEAD decrypt/authenticate failed."""
+
+
 class WkRole(StrEnum):
     ACTIVE = "active"
     HISTORICAL = "historical"
