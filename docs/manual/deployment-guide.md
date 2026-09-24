@@ -47,6 +47,11 @@ sudo apt-get install -f   # если не хватило зависимосте�
 | CLI / ярлык | `/usr/bin/personnel-availability` |
 | SQL-миграции | внутри venv: `…/site-packages/data/migrations/` |
 | Ярлык меню | `/usr/share/applications/personnel-availability.desktop` |
+| Иконка меню | `/usr/share/icons/hicolor/512x512/apps/personnel-availability.png` |
+
+Источник иконки — `src/ui/resources/app_icon.png` (тот же файл, что и для
+иконки окна Qt). В `.desktop` указано `Icon=personnel-availability`. Значок
+на рабочем столе (`~/Desktop`) пакет **не** создаёт — только запись в меню.
 
 Runtime-зависимости Qt/XCB — см. `Depends:` в `packaging/debian/control`.
 Пользователю **не** нужен `pip install`.
@@ -114,7 +119,7 @@ Runbook при сбое миграции — [`maintenance-runbook.md`](maintena
 ## 6. Проверка после установки (checklist)
 
 - [ ] `personnel-availability` запускается без ошибок в терминале.
-- [ ] Ярлык появился в меню приложений.
+- [ ] Ярлык появился в меню приложений (с кастомной иконкой).
 - [ ] Первичная настройка / вход работает.
 - [ ] В `~/.local/share/personnel-availability/` появились `personnel.db`, `.keywrap`,
       каталоги `backups/`, `logs/`, `templates/`.
