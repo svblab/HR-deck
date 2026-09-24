@@ -36,7 +36,7 @@
 | EPIC-021 | Единый диалог «Работа с базой данных» | 📋 Запланирован | — |
 | EPIC-024 | Опциональные уровни оргструктуры | ✅ Завершён (2026-09-14) | — |
 | EPIC-025 | Обязательность департамента/отдела по должности | ✅ Завершён (2026-09-15) | — |
-| EPIC-026 | Стабильная идентичность и синхронизация справочников | 📋 Запланирован (ADR-0010 принята) | — |
+| EPIC-026 | Стабильная идентичность и синхронизация справочников | ✅ Завершён (ADR-0010) | [#69](https://github.com/svblab/HR-deck/pull/69), [#72](https://github.com/svblab/HR-deck/pull/72), [#99](https://github.com/svblab/HR-deck/pull/99) |
 
 ---
 
@@ -625,9 +625,9 @@ EPIC-020 разбивается на implementation slices (отдельные P
 истории статусов (переносится текущее состояние; история локальна).
 
 **Зависимости:** 020-A…020-F как выше; все зависят от **EPIC-019**. **ADR-0007
-принята** (2026-09-11). EPIC-020 **не начинается** по business-import slices,
-пока **ADR-0010 не реализована** **и** `external_id` **не реализован** в коде
-(EPIC-026).
+принята** (2026-09-11). Business-import slices (**020-D+**) требуют
+**EPIC-026** / ADR-0010 и `external_id` в коде — **оба выполнены** (см. EPIC-026
+ниже); crypto slices 020-A…020-C от этого гейта не зависят.
 
 **DoD / трассировка:** тесты ADR-0007 v3 по transport/import/atomicity/replay/
 confirmation/transaction composition;
@@ -732,19 +732,30 @@ audit на каждый export/import/replay; локальный гейт зел
 
 ## EPIC-026 — Стабильная идентичность и синхронизация справочников (ADR-0010)
 
-**Цель.** `external_id` для сотрудников и всех справочников (филиал,
-департамент, отдел, должность); привязка должностей к филиалу; пакетный
-формат экспорта/импорта справочников с потабличной инкрементальностью и
-полным отказом пакета при конфликте с существующими сотрудниками.
+**Статус: Завершён.** ADR-0010 принята (2026-09-14) и реализована на
+`origin/master`. Отменяет ADR-0006. Residual product gaps: **none**
+(closeout audit 2026-09-24; ADR test names in «Как проверяется» partially
+renamed in code — intent covered by equivalent node ids).
 
-**ADR-0010 принята** (2026-09-14), отменяет ADR-0006.
+**Реализовано**
+- Part 1: `positions.branch_id NOT NULL` + employee/position-branch triggers
+  (`0013_position_branch.sql`); UI card/directories filter by branch;
+  branch change clears position.
+- Part 2: `external_id` on branches/departments/divisions/positions/employees
+  (`0014_directory_external_ids.sql`); mint on `create_*`; nonempty backfill.
+- Part 3: directory sync package model + per-table watermarks
+  (`0015_sync_watermarks.sql`); whole-table incremental export.
+- Part 4a/4b: directory + employee sync apply by `external_id`; all-or-nothing
+  reject when live employees would break; reconciliation conflicts on
+  external_id/ФИО mismatch.
 
-**Зависимости.** Требует EPIC-024, EPIC-025 (preview-механизм переиспользуется).
-Транспорт — уже принятая ADR-0007/EPIC-019.
+**Зависимости.** Требовал EPIC-024, EPIC-025. Транспорт — ADR-0007/EPIC-019
+(wire/crypto отдельно в EPIC-020). Разблокирует EPIC-020 **020-D+**.
 
-**DoD / трассировка:** все тесты из таблицы «Как проверяется»
-[`ADR-0010-directory-identity-and-sync.md`](adr/ADR-0010-directory-identity-and-sync.md),
-`PRAGMA foreign_key_check` после миграций, три гейта (ruff/mypy/pytest) зелёные.
+**DoD / трассировка:** acceptance map vs ADR-0010 «Как проверяется» —
+PASS (см. closeout PR); `PRAGMA foreign_key_check` covered in
+`test_adr0010_migration_backfills_external_id_on_nonempty_db`;
+`pytest tests/integration -k adr0010` — 54 passed.
 
 ---
 
