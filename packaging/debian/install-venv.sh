@@ -1,11 +1,12 @@
 #!/bin/bash
-# Установить vendored venv и launcher в staging debian/personnel-availability.
+# Установить vendored venv, launcher и иконку в staging debian/personnel-availability.
 set -euo pipefail
 
 DESTDIR="${1:?usage: install-venv.sh debian/personnel-availability}"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 TARGET="$DESTDIR/opt/personnel-availability"
 INSTALL_VENV="/opt/personnel-availability/venv"
+ICON_SRC="$ROOT/src/ui/resources/app_icon.png"
 
 install -d "$TARGET"
 # Fresh venv in DESTDIR so bin/python* correctly point at system python3
@@ -41,3 +42,12 @@ for script in "$TARGET/venv/bin"/*; do
         sed -i 's/\r$//' "$script"
     fi
 done
+
+# Кастомная иконка меню/панели задач (Icon=personnel-availability в .desktop).
+if [ ! -f "$ICON_SRC" ]; then
+    echo "missing application icon: $ICON_SRC" >&2
+    exit 1
+fi
+install -d "$DESTDIR/usr/share/icons/hicolor/512x512/apps"
+install -m 644 "$ICON_SRC" \
+    "$DESTDIR/usr/share/icons/hicolor/512x512/apps/personnel-availability.png"
