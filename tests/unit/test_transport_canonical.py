@@ -29,6 +29,7 @@ def test_routing_metadata_is_deterministic() -> None:
         envelope_key_id="wk-1",
         sequence=2,
         package_id="pkg-1",
+        next_wk_key_id="wk-2",
     )
     first = build_routing_metadata_bytes(**kwargs)
     second = build_routing_metadata_bytes(**kwargs)
@@ -44,6 +45,7 @@ def test_signing_bytes_include_routing_and_ciphertexts() -> None:
         envelope_key_id="kid-1",
         sequence=1,
         package_id="pkg",
+        next_wk_key_id="wk-next",
     )
     signing = build_signing_bytes(
         protocol_version=1,
@@ -61,6 +63,23 @@ def test_signing_bytes_include_routing_and_ciphertexts() -> None:
     assert b"env" in signing
     assert b"pay" in signing
     assert routing in signing
+
+
+def test_routing_metadata_bytes_include_next_wk_key_id() -> None:
+    from services.transport_canonical import parse_routing_metadata_bytes
+
+    encoded = build_routing_metadata_bytes(
+        protocol_version=1,
+        sender_installation_id="s",
+        recipient_installation_id="r",
+        envelope_key_id="wk-env",
+        sequence=1,
+        package_id="pkg",
+        next_wk_key_id="wk-next-unique",
+    )
+    assert b"wk-next-unique" in encoded
+    parsed = parse_routing_metadata_bytes(encoded)
+    assert parsed.next_wk_key_id == "wk-next-unique"
 
 
 def test_envelope_aad_changes_with_next_wk_key_id() -> None:

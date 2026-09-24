@@ -152,6 +152,7 @@ class TransportExportService:
             envelope_key_id=routing_envelope_key_id,
             sequence=sequence,
             package_id=package_id,
+            next_wk_key_id=next_wk.key_id,
         )
         routing_bytes = build_routing_metadata_bytes(**asdict(routing_metadata))
         signing_bytes = build_signing_bytes(

@@ -102,12 +102,20 @@ class PackageRecord:
 
 @dataclass(frozen=True)
 class RoutingMetadata:
+    """Untrusted cleartext routing until signature + envelope AEAD succeed.
+
+    ``next_wk_key_id`` duplicates the authenticated envelope-AAD field so a
+    recipient can rebuild AAD for ``aead_open`` (ADR-0007: cleartext may
+    duplicate authenticated fields for lookup).
+    """
+
     protocol_version: int
     sender_installation_id: str
     recipient_installation_id: str
     envelope_key_id: str
     sequence: int
     package_id: str
+    next_wk_key_id: str
 
 
 @dataclass(frozen=True)
