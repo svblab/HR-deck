@@ -85,9 +85,10 @@ def _decrypt_export_envelope(
     direction_id: int,
     recipient_bootstrap_private: bytes,
     sender_bootstrap_public: bytes,
-    next_wk_key_id: str,
+    next_wk_key_id: str | None = None,
 ) -> bytes:
     meta = package.routing_metadata
+    resolved_next_wk_key_id = next_wk_key_id or meta.next_wk_key_id
     envelope_aad = build_envelope_aad(
         protocol_version=meta.protocol_version,
         sender_installation_id=meta.sender_installation_id,
@@ -95,7 +96,7 @@ def _decrypt_export_envelope(
         sequence=meta.sequence,
         package_id=meta.package_id,
         envelope_key_id=meta.envelope_key_id,
-        next_wk_key_id=next_wk_key_id,
+        next_wk_key_id=resolved_next_wk_key_id,
     )
     if meta.envelope_key_id == BOOTSTRAP_ENVELOPE_KEY_ID:
         wrap_key = derive_bootstrap_wrap_key(
@@ -128,8 +129,10 @@ def test_first_export_uses_bootstrap_envelope_and_serializes(tmp_path: Path) -> 
 
     assert result.sequence == 1
     assert result.package.routing_metadata.envelope_key_id == BOOTSTRAP_ENVELOPE_KEY_ID
+    assert result.package.routing_metadata.next_wk_key_id
     decoded = deserialize_transport_package(result.wire_bytes)
     assert decoded == result.package
+    assert decoded.routing_metadata.next_wk_key_id == result.package.routing_metadata.next_wk_key_id
 
     signing_bytes = build_signing_bytes(
         protocol_version=TRANSPORT_PROTOCOL_VERSION,
@@ -141,6 +144,7 @@ def test_first_export_uses_bootstrap_envelope_and_serializes(tmp_path: Path) -> 
         sender_signing_fingerprint=store.get_active_signing_keypair()[0],
         envelope_ciphertext=decoded.envelope_ciphertext,
         payload_ciphertext=decoded.payload_ciphertext,
+        next_wk_key_id=decoded.routing_metadata.next_wk_key_id,
     )
     verify_signature(
         public_key=signing_public,
@@ -152,13 +156,13 @@ def test_first_export_uses_bootstrap_envelope_and_serializes(tmp_path: Path) -> 
         "SELECT public_key FROM transport_local_bootstrap_keys WHERE key_status='active' LIMIT 1"
     ).fetchone()[0]
     next_wk_key_id = store.get_current_wk(direction_id).key_id  # type: ignore[union-attr]
+    assert decoded.routing_metadata.next_wk_key_id == next_wk_key_id
     envelope_plain = _decrypt_export_envelope(
         package=decoded,
         store=store,
         direction_id=direction_id,
         recipient_bootstrap_private=recipient_bootstrap_private,
         sender_bootstrap_public=bytes(sender_bootstrap_public),
-        next_wk_key_id=next_wk_key_id,
     )
     sk_material, next_wk_material = _split_envelope_plaintext(envelope_plain)
     payload_aad = build_payload_aad(
@@ -195,6 +199,9 @@ def test_second_export_uses_established_wk_chain(tmp_path: Path) -> None:
     assert second.sequence == 2
     assert second.package.routing_metadata.envelope_key_id == wk1_key_id
     assert second.package.routing_metadata.envelope_key_id != BOOTSTRAP_ENVELOPE_KEY_ID
+    assert second.package.routing_metadata.next_wk_key_id == store.get_current_wk(
+        direction_id
+    ).key_id  # type: ignore[union-attr]
     sender_bootstrap_public = conn.execute(
         "SELECT public_key FROM transport_local_bootstrap_keys WHERE key_status='active' LIMIT 1"
     ).fetchone()[0]
@@ -204,7 +211,6 @@ def test_second_export_uses_established_wk_chain(tmp_path: Path) -> None:
         direction_id=direction_id,
         recipient_bootstrap_private=recipient_bootstrap_private,
         sender_bootstrap_public=bytes(sender_bootstrap_public),
-        next_wk_key_id=store.get_current_wk(direction_id).key_id,  # type: ignore[union-attr]
     )
     sk_material, _ = _split_envelope_plaintext(envelope_plain)
     payload_aad = build_payload_aad(
@@ -236,7 +242,6 @@ def test_export_generates_fresh_sk_per_package(tmp_path: Path) -> None:
             direction_id=direction_id,
             recipient_bootstrap_private=recipient_bootstrap_private,
             sender_bootstrap_public=bytes(sender_bootstrap_public),
-            next_wk_key_id=store.get_current_wk(direction_id).key_id,  # type: ignore[union-attr]
         )
     )
     second = exporter.export_package(direction_id=direction_id, payload=b"b")
@@ -248,7 +253,6 @@ def test_export_generates_fresh_sk_per_package(tmp_path: Path) -> None:
             direction_id=direction_id,
             recipient_bootstrap_private=recipient_bootstrap_private,
             sender_bootstrap_public=bytes(sender_bootstrap_public),
-            next_wk_key_id=store.get_current_wk(direction_id).key_id,  # type: ignore[union-attr]
         )
     )
     assert sk_first != sk_second
@@ -287,6 +291,7 @@ def test_tampered_signature_fails_verification(tmp_path: Path) -> None:
         sender_signing_fingerprint=store.get_active_signing_keypair()[0],
         envelope_ciphertext=result.package.envelope_ciphertext,
         payload_ciphertext=result.package.payload_ciphertext,
+        next_wk_key_id=result.package.routing_metadata.next_wk_key_id,
     )
     with pytest.raises(SignatureVerificationError):
         verify_signature(

@@ -28,6 +28,7 @@ def _sample_routing_metadata() -> RoutingMetadata:
         envelope_key_id="wk-42",
         sequence=7,
         package_id="pkg-abc",
+        next_wk_key_id="wk-next-43",
     )
 
 
@@ -71,6 +72,7 @@ def test_parse_routing_metadata_rejects_bad_magic() -> None:
         envelope_key_id="k",
         sequence=1,
         package_id="p",
+        next_wk_key_id="wk-next",
     ).replace(MAGIC_ROUTING, b"BAD!\x01", 1)
     with pytest.raises(ValueError, match="routing metadata: bad magic"):
         parse_routing_metadata_bytes(data)
@@ -84,6 +86,7 @@ def test_parse_routing_metadata_rejects_truncated_bytes() -> None:
         envelope_key_id="k",
         sequence=1,
         package_id="p",
+        next_wk_key_id="wk-next",
     )[:-3]
     with pytest.raises(ValueError, match="routing metadata: truncated"):
         parse_routing_metadata_bytes(data)
@@ -98,6 +101,7 @@ def test_parse_routing_metadata_rejects_trailing_garbage() -> None:
             envelope_key_id="k",
             sequence=1,
             package_id="p",
+            next_wk_key_id="wk-next",
         )
         + b"extra"
     )

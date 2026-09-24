@@ -38,7 +38,11 @@ def build_routing_metadata_bytes(
     envelope_key_id: str,
     sequence: int,
     package_id: str,
+    next_wk_key_id: str,
 ) -> bytes:
+    # Deterministic field order (TransportCanonicalV1). ``next_wk_key_id`` is
+    # cleartext for recipient envelope-AAD rebuild; authenticity is via the
+    # package signature (routing blob) and envelope AEAD AAD binding.
     return (
         MAGIC_ROUTING
         + canon_field_u32(protocol_version)
@@ -47,6 +51,7 @@ def build_routing_metadata_bytes(
         + canon_field_utf8(envelope_key_id)
         + canon_field_u32(sequence)
         + canon_field_utf8(package_id)
+        + canon_field_utf8(next_wk_key_id)
     )
 
 
@@ -62,15 +67,22 @@ def build_signing_bytes(
     envelope_ciphertext: bytes,
     payload_ciphertext: bytes,
     routing_metadata_bytes: bytes | None = None,
+    next_wk_key_id: str | None = None,
 ) -> bytes:
-    routing = routing_metadata_bytes or build_routing_metadata_bytes(
-        protocol_version=protocol_version,
-        sender_installation_id=sender_installation_id,
-        recipient_installation_id=recipient_installation_id,
-        envelope_key_id=envelope_key_id,
-        sequence=sequence,
-        package_id=package_id,
-    )
+    if routing_metadata_bytes is None:
+        if next_wk_key_id is None:
+            raise ValueError("next_wk_key_id is required when rebuilding routing bytes")
+        routing = build_routing_metadata_bytes(
+            protocol_version=protocol_version,
+            sender_installation_id=sender_installation_id,
+            recipient_installation_id=recipient_installation_id,
+            envelope_key_id=envelope_key_id,
+            sequence=sequence,
+            package_id=package_id,
+            next_wk_key_id=next_wk_key_id,
+        )
+    else:
+        routing = routing_metadata_bytes
     return (
         MAGIC_SIGNING
         + canon_field_u32(protocol_version)
@@ -183,6 +195,7 @@ def parse_routing_metadata_bytes(data: bytes) -> RoutingMetadata:
     envelope_key_id, offset = _parse_canon_field_utf8(data, offset, context=context)
     sequence, offset = _parse_canon_field_u32(data, offset, context=context)
     package_id, offset = _parse_canon_field_utf8(data, offset, context=context)
+    next_wk_key_id, offset = _parse_canon_field_utf8(data, offset, context=context)
     if offset != len(data):
         raise ValueError(f"{context}: trailing garbage")
     return RoutingMetadata(
@@ -192,6 +205,7 @@ def parse_routing_metadata_bytes(data: bytes) -> RoutingMetadata:
         envelope_key_id=envelope_key_id,
         sequence=sequence,
         package_id=package_id,
+        next_wk_key_id=next_wk_key_id,
     )
 
 
