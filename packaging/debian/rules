@@ -26,6 +26,3 @@ override_dh_auto_install:
 
 override_dh_auto_test:
 	# Тесты выполняются в CI; сборка пакета не запускает pytest.
-
-override_dh_installdesktop:
-	dh_installdesktop debian/personnel-availability.desktop
