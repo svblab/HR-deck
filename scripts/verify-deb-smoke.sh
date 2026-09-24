@@ -1,5 +1,5 @@
 #!/bin/bash
-# Smoke-проверка установленного .deb (EPIC-015): shebang, импорты, Qt offscreen.
+# Smoke-проверка установленного .deb (EPIC-015): shebang, импорты, Qt offscreen, иконка.
 set -euo pipefail
 
 export QT_QPA_PLATFORM=offscreen
@@ -7,9 +7,11 @@ export QT_QPA_PLATFORM=offscreen
 PY=/opt/personnel-availability/venv/bin/python
 ENTRY=/opt/personnel-availability/venv/bin/personnel-availability
 LAUNCHER=/usr/bin/personnel-availability
+DESKTOP=/usr/share/applications/personnel-availability.desktop
+ICON=/usr/share/icons/hicolor/512x512/apps/personnel-availability.png
 EXPECTED_SHEBANG='#!/opt/personnel-availability/venv/bin/python'
 
-for path in "$LAUNCHER" "$ENTRY" "$PY"; do
+for path in "$LAUNCHER" "$ENTRY" "$PY" "$DESKTOP" "$ICON"; do
   if [ ! -e "$path" ]; then
     echo "missing required path: $path" >&2
     ls -la /opt/personnel-availability/venv/bin >&2 || true
@@ -30,6 +32,12 @@ if grep -a $'\r' "$LAUNCHER" >/dev/null; then
   od -An -tx1 "$LAUNCHER" | head -2 >&2
   exit 1
 fi
+
+grep -q '^Icon=personnel-availability$' "$DESKTOP" || {
+  echo "desktop entry must use Icon=personnel-availability" >&2
+  cat "$DESKTOP" >&2
+  exit 1
+}
 
 "$PY" -c "
 import argon2  # noqa: F401
