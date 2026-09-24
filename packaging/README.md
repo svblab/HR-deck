@@ -39,12 +39,19 @@ Debian 12 **не** поставляет `python3-pyside6*` и `sqlcipher3` в ap
 |---|---|
 | Программа | `/opt/personnel-availability/venv/` + `/usr/bin/personnel-availability` |
 | SQL-миграции | `venv/.../site-packages/data/migrations/` (package data) |
+| Ярлык меню | `/usr/share/applications/personnel-availability.desktop` |
+| Иконка меню | `/usr/share/icons/hicolor/512x512/apps/personnel-availability.png` (из `src/ui/resources/app_icon.png`) |
 | Данные пользователя | `~/.local/share/personnel-availability/` (`personnel.db`, keywrap) |
 | Резервные копии | `~/.local/share/personnel-availability/backups/` |
 | Файловые логи | `~/.local/share/personnel-availability/logs/` |
 | Шаблоны отчётов | `~/.local/share/personnel-availability/templates/` |
 
 Переопределение каталога данных: `$PERSONNEL_AVAILABILITY_DATA`.
+
+**Иконка:** в `.desktop` указано `Icon=personnel-availability`. При установке
+копируется кастомный PNG (512×512) в тему hicolor; `postinst` обновляет
+`update-desktop-database` и `gtk-update-icon-cache`. Значок на `~/Desktop`
+пакет **не** создаёт — только запись в меню приложений.
 
 ## Обновление
 
