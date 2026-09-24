@@ -67,6 +67,12 @@ class TransportKeyStore:
         installation_id = self._repo.create_local_installation(display_label=display_label, now=now)
         return LocalInstallation(installation_id, display_label)
 
+    def get_local_installation(self) -> LocalInstallation:
+        existing = self._repo.get_local_installation()
+        if existing is None:
+            raise TransportKeyError("local installation is missing")
+        return existing
+
     def generate_local_signing_identity(self) -> str:
         if self._repo.get_active_signing_fingerprint() is not None:
             raise TransportKeyError("active signing identity already exists")
@@ -141,6 +147,14 @@ class TransportKeyStore:
             raise TransportKeyError(f"unknown peer trust id: {peer_trust_id}")
         return record
 
+    def get_peer_trust_by_installation_id(self, peer_installation_id: str) -> PeerTrustRecord:
+        record = self._repo.get_peer_trust_by_installation_id(peer_installation_id)
+        if record is None:
+            raise TransportKeyError(
+                f"unknown peer installation id: {peer_installation_id}"
+            )
+        return record
+
     def get_active_signing_keypair(self) -> tuple[str, bytes]:
         pair = self._repo.get_active_signing_keypair()
         if pair is None:
@@ -157,6 +171,22 @@ class TransportKeyStore:
         direction = self._repo.get_direction(direction_id)
         if direction is None:
             raise TransportKeyError(f"unknown direction id: {direction_id}")
+        return direction
+
+    def get_direction_by_peers(
+        self,
+        *,
+        sender_installation_id: str,
+        recipient_installation_id: str,
+    ) -> DirectionState:
+        direction = self._repo.get_direction_by_peers(
+            sender_installation_id=sender_installation_id,
+            recipient_installation_id=recipient_installation_id,
+        )
+        if direction is None:
+            raise TransportKeyError(
+                "unknown direction for sender/recipient pair"
+            )
         return direction
 
     def get_current_wk(self, direction_id: int) -> WkKeyRecord | None:

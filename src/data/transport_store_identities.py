@@ -160,6 +160,30 @@ class TransportIdentityStore:
             bootstrap_trust_status=TrustStatus(row[8]),
         )
 
+    def get_peer_trust_by_installation_id(
+        self, peer_installation_id: str
+    ) -> PeerTrustRecord | None:
+        row = self._conn.execute(
+            "SELECT id, peer_installation_id, display_label,"
+            " signing_public_key, signing_key_fingerprint, signing_trust_status,"
+            " bootstrap_public_key, bootstrap_key_fingerprint, bootstrap_trust_status"
+            " FROM transport_peer_trust WHERE peer_installation_id = ?",
+            (peer_installation_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return PeerTrustRecord(
+            id=int(row[0]),
+            peer_installation_id=str(row[1]),
+            display_label=row[2],
+            signing_public_key=bytes(row[3]),
+            signing_key_fingerprint=str(row[4]),
+            signing_trust_status=TrustStatus(row[5]),
+            bootstrap_public_key=bytes(row[6]),
+            bootstrap_key_fingerprint=str(row[7]),
+            bootstrap_trust_status=TrustStatus(row[8]),
+        )
+
     def set_peer_signing_trust_status(
         self, peer_trust_id: int, status: TrustStatus, *, now: str
     ) -> None:
