@@ -194,7 +194,12 @@ class TransportExportService:
 
 
 class TransportExportAdminService:
-    """Admin-only export facade with authorization, audit, and commit."""
+    """Authorized export facade: IMPORT_EXPORT gate, audit, and commit.
+
+    Key/trust administration remains on ``TransportKeyAdminService``
+    (``Permission.MANAGE_ENCRYPTION_KEYS``). Ordinary package export uses
+    ``Permission.IMPORT_EXPORT`` per ADR-0007.
+    """
 
     def __init__(
         self,
@@ -211,15 +216,16 @@ class TransportExportAdminService:
         self._audit = UserActionLogRepository(conn)
         self._clock = self._export._store._clock  # noqa: SLF001
 
-    def _require_admin(self) -> None:
+    def _require_export_permission(self) -> None:
         self._session.require_unlocked()
-        self._authz.require(self._session.role, Permission.MANAGE_ENCRYPTION_KEYS)
+        self._authz.require(self._session.role, Permission.IMPORT_EXPORT)
 
     def export_package(self, *, direction_id: int, payload: bytes) -> TransportExportResult:
-        self._require_admin()
+        self._require_export_permission()
         now = self._clock()
         try:
             result = self._export.export_package(direction_id=direction_id, payload=payload)
+            meta = result.package.routing_metadata
             self._audit.record(
                 account_id=self._session.account_id,
                 action_type="transport.package.export",
@@ -229,6 +235,8 @@ class TransportExportAdminService:
                 details=(
                     f"package_id={result.package_id} sequence={result.sequence}"
                     f" direction_id={direction_id}"
+                    f" envelope_key_id={meta.envelope_key_id}"
+                    f" recipient_installation_id={meta.recipient_installation_id}"
                 ),
                 created_at=now,
             )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -17,19 +18,23 @@ from data.transport_crypto import (
     generate_signing_keypair,
     verify_signature,
 )
+from domain.permissions import RoleCode
 from domain.transport import (
     BOOTSTRAP_ENVELOPE_KEY_ID,
     TRANSPORT_PROTOCOL_VERSION,
     PackageClassification,
     TransportKeyError,
 )
+from services.authorization import AuthorizationError
+from services.bootstrap import BootstrapService
+from services.session import SessionState
 from services.transport_canonical import (
     build_envelope_aad,
     build_payload_aad,
     build_signing_bytes,
     deserialize_transport_package,
 )
-from services.transport_export import TransportExportService
+from services.transport_export import TransportExportAdminService, TransportExportService
 from services.transport_keys import TransportKeyStore
 
 
@@ -289,6 +294,112 @@ def test_tampered_signature_fails_verification(tmp_path: Path) -> None:
             message=signing_bytes,
             signature=bytes(tampered),
         )
+
+
+def _open_admin_conn(tmp_path: Path):
+    conn, session, _code = BootstrapService(
+        clock=lambda: "2026-09-12T00:00:00Z"
+    ).initial_administrator_setup(
+        login="admin",
+        password="AdminPass-1",
+        db_path=tmp_path / "app.db",
+    )
+    store = TransportKeyStore(conn, clock=lambda: "2026-09-12T00:00:00Z")
+    return conn, session, store
+
+
+def _direction_snapshot(conn, direction_id: int) -> tuple[int, int | None, int, int]:
+    row = conn.execute(
+        "SELECT accepted_sequence, current_wk_id FROM transport_direction_state WHERE id = ?",
+        (direction_id,),
+    ).fetchone()
+    packages = conn.execute(
+        "SELECT COUNT(*) FROM transport_package_records WHERE direction_id = ?",
+        (direction_id,),
+    ).fetchone()[0]
+    wks = conn.execute(
+        "SELECT COUNT(*) FROM transport_wk_keys WHERE direction_id = ?",
+        (direction_id,),
+    ).fetchone()[0]
+    return int(row[0]), row[1], int(packages), int(wks)
+
+
+def test_admin_export_allows_hr_import_export_permission(tmp_path: Path) -> None:
+    conn, admin_session, store = _open_admin_conn(tmp_path)
+    direction_id, _ = _bootstrap_direction(store, conn)
+    hr = SessionState(
+        account_id=admin_session.account_id,
+        login="hr",
+        role=RoleCode.HR_EMPLOYEE,
+        master_key=admin_session.master_key,
+        locked=False,
+    )
+    facade = TransportExportAdminService(conn, hr, store=store)
+    result = facade.export_package(direction_id=direction_id, payload=b"hr-payload")
+    assert result.sequence == 1
+    audit = conn.execute(
+        "SELECT action_type, result, details FROM user_action_log"
+        " WHERE action_type = 'transport.package.export' ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert audit is not None
+    assert audit[0] == "transport.package.export"
+    assert audit[1] == "success"
+    assert f"package_id={result.package_id}" in audit[2]
+    assert f"sequence={result.sequence}" in audit[2]
+    assert f"direction_id={direction_id}" in audit[2]
+    assert "envelope_key_id=" in audit[2]
+
+
+def test_admin_export_rejects_observer(tmp_path: Path) -> None:
+    conn, admin_session, store = _open_admin_conn(tmp_path)
+    direction_id, _ = _bootstrap_direction(store, conn)
+    observer = SessionState(
+        account_id=admin_session.account_id,
+        login="obs",
+        role=RoleCode.OBSERVER,
+        master_key=admin_session.master_key,
+        locked=False,
+    )
+    facade = TransportExportAdminService(conn, observer, store=store)
+    with pytest.raises(AuthorizationError):
+        facade.export_package(direction_id=direction_id, payload=b"x")
+    assert _direction_snapshot(conn, direction_id) == (0, None, 0, 0)
+
+
+def test_failed_export_does_not_advance_transport_state(tmp_path: Path) -> None:
+    conn, admin_session, store = _open_admin_conn(tmp_path)
+    direction_id, _ = _bootstrap_direction(store, conn)
+    facade = TransportExportAdminService(conn, admin_session, store=store)
+    with (
+        patch(
+            "services.transport_export.serialize_transport_package",
+            side_effect=RuntimeError("serialize boom"),
+        ),
+        pytest.raises(RuntimeError, match="serialize boom"),
+    ):
+        facade.export_package(direction_id=direction_id, payload=b"payload")
+    assert _direction_snapshot(conn, direction_id) == (0, None, 0, 0)
+    audit_count = conn.execute(
+        "SELECT COUNT(*) FROM user_action_log WHERE action_type = 'transport.package.export'"
+    ).fetchone()[0]
+    assert audit_count == 0
+
+
+def test_failed_persistence_does_not_leave_package_record(tmp_path: Path) -> None:
+    conn, admin_session, store = _open_admin_conn(tmp_path)
+    direction_id, _ = _bootstrap_direction(store, conn)
+    facade = TransportExportAdminService(conn, admin_session, store=store)
+    with (
+        patch.object(
+            store,
+            "record_outbound_export",
+            side_effect=RuntimeError("persist boom"),
+        ),
+        pytest.raises(RuntimeError, match="persist boom"),
+    ):
+        facade.export_package(direction_id=direction_id, payload=b"payload")
+    # create_wk_key may insert a HISTORICAL row before persist; rollback must discard it.
+    assert _direction_snapshot(conn, direction_id) == (0, None, 0, 0)
 
 
 def _split_envelope_plaintext(envelope_plain: bytes) -> tuple[bytes, bytes]:
