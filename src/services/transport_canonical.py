@@ -126,6 +126,11 @@ def build_payload_aad(
     )
 
 
+def build_envelope_plaintext(*, sk_material: bytes, next_wk_material: bytes) -> bytes:
+    """Canonical cleartext inside a transport envelope (SK_n + WK_{n+1} material)."""
+    return canon_field_bytes(sk_material) + canon_field_bytes(next_wk_material)
+
+
 def build_bootstrap_hkdf_info(
     *,
     sender_installation_id: str,

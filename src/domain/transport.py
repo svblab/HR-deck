@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 ENTITY_TRANSPORT = "transport"
+TRANSPORT_PROTOCOL_VERSION = 1
+# Cleartext routing envelope_key_id when the envelope uses bootstrap wrap (package #1).
+BOOTSTRAP_ENVELOPE_KEY_ID = "bootstrap"
 
 
 class TransportKeyError(Exception):
