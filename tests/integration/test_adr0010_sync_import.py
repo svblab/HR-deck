@@ -541,3 +541,84 @@ def test_adr0010_apply_rejects_package_when_referenced_parent_is_missing_locally
         importer.apply_package(package)
     assert _dump_directories(conn) == before
     conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_build_directory_plan_detects_breakage_without_writes(
+    tmp_path: Path,
+) -> None:
+    """Projected-state breakage: plan-only call must not mutate directories."""
+    conn, session = _open(tmp_path)
+    directories, employees, importer = _services(conn, session)
+    branch_id = directories.create_branch("Филиал")
+    pos_id = directories.create_position(branch_id, "Бухгалтер")
+    employees.create_employee(
+        EmployeeCreateInput(
+            full_name="Иванов Иван",
+            position_id=pos_id,
+            branch_id=branch_id,
+            department_id=None,
+            division_id=None,
+            employment_type_id=1,
+        )
+    )
+    branch = BranchRepository(conn).get(branch_id)
+    pos = PositionRepository(conn).get(pos_id)
+    assert branch is not None and pos is not None
+    before = _dump_directories(conn)
+    package = DirectorySyncPackage(
+        tables={
+            "branches": [
+                _branch_row(
+                    package_id=branch_id,
+                    external_id=branch.external_id,
+                    name=branch.name,
+                )
+            ],
+            "positions": [
+                _pos_row(
+                    package_id=pos_id,
+                    external_id=pos.external_id,
+                    branch_external_id=branch.external_id,
+                    name=pos.name,
+                    department_required=True,
+                )
+            ],
+        }
+    )
+    plan = importer.build_directory_plan(package)
+    assert not plan.is_clean
+    assert any(name == "Иванов Иван" for _, name in plan.broken_employees)
+    assert _dump_directories(conn) == before
+    still = PositionRepository(conn).get(pos_id)
+    assert still is not None
+    assert still.department_required is False
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_build_directory_plan_zero_writes_on_clean_rename(
+    tmp_path: Path,
+) -> None:
+    conn, session = _open(tmp_path)
+    directories, _employees, importer = _services(conn, session)
+    branch_id = directories.create_branch("Старое")
+    local = BranchRepository(conn).get(branch_id)
+    assert local is not None
+    before = _dump_directories(conn)
+    package = DirectorySyncPackage(
+        tables={
+            "branches": [
+                _branch_row(
+                    package_id=1,
+                    external_id=local.external_id,
+                    name="Новое",
+                )
+            ]
+        }
+    )
+    plan = importer.build_directory_plan(package)
+    assert plan.is_clean
+    assert plan.branch_updates
+    assert _dump_directories(conn) == before
+    conn.close()

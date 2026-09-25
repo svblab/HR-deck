@@ -1,10 +1,16 @@
-"""Apply employee rows from a directory sync package (ADR-0010 Part 4b)."""
+"""Apply employee rows from a directory sync package (ADR-0010 Part 4b).
+
+Plan/apply split (ADR-0010 addendum): ``build_employee_plan`` is pure
+(no writes); ``apply_employee_plan`` performs writes. ``apply_employees``
+is a thin build+apply wrapper for existing callers.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from data.db import Connection
 from data.directories import (
@@ -16,7 +22,12 @@ from data.directories import (
 from data.employees import EmployeeRecord, EmployeeRepository
 from data.repositories import UserActionLogRepository
 from domain.directory_sync import DirectorySyncPackage
-from domain.employee import EmployeeCreateInput
+from domain.employee import (
+    EmployeeCreateInput,
+    EmployeeValidationError,
+    clean_full_name,
+    validate_employee_org,
+)
 from domain.employee_reconciliation import (
     EmployeeMatchCandidate,
     EmployeeMatchStatus,
@@ -24,11 +35,20 @@ from domain.employee_reconciliation import (
     EmployeeSyncConflictDetail,
     EmployeeSyncConflictError,
 )
+from domain.org_structure import (
+    DepartmentRef,
+    DivisionRef,
+    validate_position_branch,
+    validate_position_requirements,
+)
 from domain.permissions import Permission
 from services.authorization import AuthorizationService
 from services.employee_reconciliation import EmployeeReconciliationService
-from services.employees import EmployeeService
+from services.employees import EmployeeError, EmployeeService
 from services.session import SessionState
+
+if TYPE_CHECKING:
+    from services.directory_sync_import import DirectoryPlan
 
 Clock = Callable[[], str]
 
@@ -59,6 +79,26 @@ class _ResolvedSyncRow:
     is_archived: bool
 
 
+@dataclass(frozen=True)
+class _EmployeePlanItem:
+    match: EmployeeMatchCandidate
+    # package_row kept for apply-time re-resolve against DB after directory writes.
+    package_row: dict[str, object]
+
+
+@dataclass
+class EmployeePlan:
+    """Pure employee apply plan (no DB writes performed to produce it)."""
+
+    items: list[_EmployeePlanItem] = field(default_factory=list)
+    conflicts: list[EmployeeSyncConflictDetail] = field(default_factory=list)
+    validation_errors: list[str] = field(default_factory=list)
+
+    @property
+    def is_clean(self) -> bool:
+        return not self.conflicts and not self.validation_errors
+
+
 class EmployeeSyncImportService:
     """Validate and apply package employee rows after directory reconciliation."""
 
@@ -85,15 +125,79 @@ class EmployeeSyncImportService:
             conn, session, authz=self._authz, clock=self._clock
         )
 
-    def apply_employees(self, package: DirectorySyncPackage, *, commit: bool = True) -> None:
-        rows = package.tables.get("employees", [])
-        if not rows:
-            return
+    def build_employee_plan(
+        self,
+        package: DirectorySyncPackage,
+        directory_plan: DirectoryPlan | None = None,
+    ) -> EmployeePlan:
+        """Pure: classification + projected resolve. No SAVEPOINT, no writes."""
         self._require_hr()
+        rows = package.tables.get("employees", [])
+        plan = EmployeePlan()
+        if not rows:
+            return plan
+        try:
+            self._ensure_unique_external_ids(rows)
+        except EmployeeSyncApplyError as exc:
+            plan.validation_errors.append(str(exc))
+            return plan
+
+        matches = self._reconcile.build_reconciliation(package)
+        conflicts = self._collect_blocking_matches(matches)
+        if conflicts:
+            plan.conflicts = conflicts
+            return plan
+
+        for match in matches:
+            try:
+                self._validate_row_projected(match.package_row, directory_plan)
+            except ValueError as exc:
+                plan.validation_errors.append(str(exc))
+                continue
+            except EmployeeError as exc:
+                plan.validation_errors.append(str(exc))
+                continue
+            plan.items.append(_EmployeePlanItem(match=match, package_row=match.package_row))
+        return plan
+
+    def apply_employee_plan(self, plan: EmployeePlan, *, commit: bool = True) -> None:
+        """Write employee ops from an already-built plan."""
+        self._require_hr()
+        if plan.conflicts:
+            raise EmployeeSyncConflictError(list(plan.conflicts))
+        if plan.validation_errors:
+            raise EmployeeSyncApplyError("; ".join(plan.validation_errors))
+        if not plan.items:
+            return
+
+        def _write() -> None:
+            now = self._clock()
+            can_edit_sensitive = self._authz.check(
+                self._session.role, Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS
+            )
+            for item in plan.items:
+                row = self._resolve_row(item.package_row)
+                if item.match.status == EmployeeMatchStatus.NEW:
+                    self._create_row(row, now=now, can_edit_sensitive=can_edit_sensitive)
+                elif item.match.status == EmployeeMatchStatus.EXACT:
+                    assert item.match.matched_employee_id is not None
+                    local = self._employees.get(item.match.matched_employee_id)
+                    if local is None:
+                        raise EmployeeSyncApplyError(
+                            f"employee id {item.match.matched_employee_id} "
+                            "disappeared during apply"
+                        )
+                    self._update_row(
+                        local,
+                        row,
+                        now=now,
+                        can_edit_sensitive=can_edit_sensitive,
+                    )
+
         if commit:
             self._conn.execute(f"SAVEPOINT {_SAVEPOINT}")
             try:
-                self._apply_employees(package)
+                _write()
                 self._conn.execute(f"RELEASE SAVEPOINT {_SAVEPOINT}")
                 self._conn.commit()
             except (EmployeeSyncConflictError, EmployeeSyncApplyError):
@@ -105,44 +209,186 @@ class EmployeeSyncImportService:
                 self._conn.execute(f"RELEASE SAVEPOINT {_SAVEPOINT}")
                 raise
         else:
-            self._apply_employees(package)
+            _write()
 
-    def _apply_employees(self, package: DirectorySyncPackage) -> None:
+    def apply_employees(self, package: DirectorySyncPackage, *, commit: bool = True) -> None:
+        """Thin wrapper: build plan then apply (preserves Part 4b callers)."""
         rows = package.tables.get("employees", [])
-        self._ensure_unique_external_ids(rows)
-        matches = self._reconcile.build_reconciliation(package)
-        self._reject_blocking_matches(matches)
+        if not rows:
+            return
+        plan = self.build_employee_plan(package, directory_plan=None)
+        if plan.conflicts:
+            raise EmployeeSyncConflictError(list(plan.conflicts))
+        if plan.validation_errors:
+            raise EmployeeSyncApplyError("; ".join(plan.validation_errors))
+        self.apply_employee_plan(plan, commit=commit)
 
-        resolved: list[tuple[EmployeeMatchCandidate, _ResolvedSyncRow]] = []
-        validation_errors: list[str] = []
-        for match in matches:
-            try:
-                resolved.append((match, self._resolve_row(match.package_row)))
-            except ValueError as exc:
-                validation_errors.append(str(exc))
-        if validation_errors:
-            raise EmployeeSyncApplyError("; ".join(validation_errors))
-
-        now = self._clock()
-        can_edit_sensitive = self._authz.check(
-            self._session.role, Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS
+    def _validate_row_projected(
+        self,
+        package_row: dict[str, object],
+        directory_plan: DirectoryPlan | None,
+    ) -> None:
+        """Validate org refs using directory plan projection when provided."""
+        branch_ext = str(package_row["branch_external_id"])
+        pos_ext = str(package_row["position_external_id"])
+        branch_id, branch_archived = self._lookup_branch(branch_ext, directory_plan)
+        position_id, pos = self._lookup_position(pos_ext, directory_plan)
+        if branch_archived:
+            raise ValueError(f"archived branch cannot be assigned ({branch_ext!r})")
+        if pos.is_archived:
+            raise ValueError(f"archived position cannot be assigned ({pos_ext!r})")
+        department_id, dept = self._lookup_optional_department(
+            package_row.get("department_external_id"),
+            branch_id=branch_id,
+            directory_plan=directory_plan,
         )
-        for match, row in resolved:
-            if match.status == EmployeeMatchStatus.NEW:
-                self._create_row(row, now=now, can_edit_sensitive=can_edit_sensitive)
-            elif match.status == EmployeeMatchStatus.EXACT:
-                assert match.matched_employee_id is not None
-                local = self._employees.get(match.matched_employee_id)
-                if local is None:
-                    raise EmployeeSyncApplyError(
-                        f"employee id {match.matched_employee_id} disappeared during apply"
+        division_id, div = self._lookup_optional_division(
+            package_row.get("division_external_id"),
+            branch_id=branch_id,
+            department_id=department_id,
+            directory_plan=directory_plan,
+        )
+        employment_type_id = int(package_row["employment_type_id"])
+        # Employment types are seed data; validate via service when IDs are real.
+        # Provisional directory ids (<0) skip DB getters; use domain validators.
+        note_raw = package_row.get("note")
+        note = str(note_raw).strip() if note_raw else None
+        if note == "":
+            note = None
+        full_name = clean_full_name(str(package_row["full_name"]))
+        try:
+            validate_employee_org(
+                branch_id=branch_id,
+                department_id=department_id,
+                division_id=division_id,
+                department=(
+                    DepartmentRef(id=dept.id, branch_id=dept.branch_id) if dept else None
+                ),
+                division=(
+                    DivisionRef(
+                        id=div.id,
+                        branch_id=div.branch_id,
+                        department_id=div.department_id,
                     )
-                self._update_row(
-                    local,
-                    row,
-                    now=now,
-                    can_edit_sensitive=can_edit_sensitive,
+                    if div
+                    else None
+                ),
+            )
+            validate_position_requirements(
+                department_id=department_id,
+                division_id=division_id,
+                department_required=pos.department_required,
+                division_required=pos.division_required,
+            )
+            validate_position_branch(
+                employee_branch_id=branch_id,
+                position_branch_id=pos.branch_id,
+            )
+        except EmployeeValidationError as exc:
+            raise EmployeeError(str(exc)) from exc
+        if branch_id > 0 and position_id > 0:
+            # Real DB ids: also run service validation (employment type, etc.).
+            dept_arg = (
+                department_id
+                if department_id is None or department_id > 0
+                else None
+            )
+            div_arg = (
+                division_id if division_id is None or division_id > 0 else None
+            )
+            self._employee_service.validate_card_input(
+                EmployeeCreateInput(
+                    full_name=full_name,
+                    position_id=position_id,
+                    branch_id=branch_id,
+                    department_id=dept_arg,
+                    division_id=div_arg,
+                    employment_type_id=employment_type_id,
+                    note=note,
                 )
+            )
+
+    def _lookup_branch(
+        self, external_id: str, directory_plan: DirectoryPlan | None
+    ) -> tuple[int, bool]:
+        if directory_plan is not None and external_id in directory_plan.branch_ids:
+            bid = directory_plan.branch_ids[external_id]
+            rec = directory_plan.projected_branches[bid]
+            return bid, rec.is_archived
+        record = self._branches.get_by_external_id(external_id)
+        if record is None:
+            raise ValueError(f"cannot resolve branch external_id {external_id!r}")
+        return record.id, record.is_archived
+
+    def _lookup_position(
+        self, external_id: str, directory_plan: DirectoryPlan | None
+    ):
+        if directory_plan is not None and external_id in directory_plan.position_ids:
+            pid = directory_plan.position_ids[external_id]
+            return pid, directory_plan.projected_positions[pid]
+        record = self._positions.get_by_external_id(external_id)
+        if record is None:
+            raise ValueError(f"cannot resolve position external_id {external_id!r}")
+        return record.id, record
+
+    def _lookup_optional_department(
+        self,
+        value: object,
+        *,
+        branch_id: int,
+        directory_plan: DirectoryPlan | None,
+    ):
+        if value is None or value == "":
+            return None, None
+        ext = str(value)
+        if directory_plan is not None and ext in directory_plan.department_ids:
+            did = directory_plan.department_ids[ext]
+            rec = directory_plan.projected_departments[did]
+            if rec.branch_id != branch_id:
+                raise ValueError(f"department external_id {ext!r} belongs to another branch")
+            if rec.is_archived:
+                raise ValueError(f"archived department cannot be assigned ({ext!r})")
+            return did, rec
+        record = self._departments.get_by_external_id(ext)
+        if record is None:
+            raise ValueError(f"cannot resolve department external_id {ext!r}")
+        if record.branch_id != branch_id:
+            raise ValueError(f"department external_id {ext!r} belongs to another branch")
+        return record.id, record
+
+    def _lookup_optional_division(
+        self,
+        value: object,
+        *,
+        branch_id: int,
+        department_id: int | None,
+        directory_plan: DirectoryPlan | None,
+    ):
+        if value is None or value == "":
+            return None, None
+        ext = str(value)
+        if directory_plan is not None and ext in directory_plan.division_ids:
+            vid = directory_plan.division_ids[ext]
+            rec = directory_plan.projected_divisions[vid]
+            if rec.branch_id != branch_id:
+                raise ValueError(f"division external_id {ext!r} belongs to another branch")
+            if rec.department_id != department_id:
+                raise ValueError(
+                    f"division external_id {ext!r} is not under the resolved department"
+                )
+            if rec.is_archived:
+                raise ValueError(f"archived division cannot be assigned ({ext!r})")
+            return vid, rec
+        record = self._divisions.get_by_external_id(ext)
+        if record is None:
+            raise ValueError(f"cannot resolve division external_id {ext!r}")
+        if record.branch_id != branch_id:
+            raise ValueError(f"division external_id {ext!r} belongs to another branch")
+        if record.department_id != department_id:
+            raise ValueError(
+                f"division external_id {ext!r} is not under the resolved department"
+            )
+        return record.id, record
 
     def _create_row(
         self, row: _ResolvedSyncRow, *, now: str, can_edit_sensitive: bool
@@ -188,10 +434,6 @@ class EmployeeSyncImportService:
         social = (
             row.social_insurance_number if can_edit_sensitive else local.social_insurance_number
         )
-        # ADR-0009: needs_org_review clears on the next successful compliant
-        # save. A validated sync apply is that save — even when other fields
-        # are already identical (idempotent re-apply). Package needs_org_review
-        # is never imported (ADR-0010: flag is local / manual-directory only).
         fields_match = self._row_matches_local(local, row, home=home, social=social)
         if fields_match and not local.needs_org_review:
             return
@@ -358,10 +600,12 @@ class EmployeeSyncImportService:
             seen.add(external_id)
 
     @staticmethod
-    def _reject_blocking_matches(matches: list[EmployeeMatchCandidate]) -> None:
+    def _collect_blocking_matches(
+        matches: list[EmployeeMatchCandidate],
+    ) -> list[EmployeeSyncConflictDetail]:
         blocked: list[EmployeeSyncConflictDetail] = []
         for match in matches:
-            if match.status in _BLOCKING:
+            if match.status in _BLOCKING or match.status not in _APPLYABLE:
                 blocked.append(
                     EmployeeSyncConflictDetail(
                         external_id=str(match.package_row["external_id"]),
@@ -370,17 +614,7 @@ class EmployeeSyncImportService:
                         matched_employee_id=match.matched_employee_id,
                     )
                 )
-            elif match.status not in _APPLYABLE:
-                blocked.append(
-                    EmployeeSyncConflictDetail(
-                        external_id=str(match.package_row["external_id"]),
-                        full_name=str(match.package_row["full_name"]),
-                        status=match.status,
-                        matched_employee_id=match.matched_employee_id,
-                    )
-                )
-        if blocked:
-            raise EmployeeSyncConflictError(blocked)
+        return blocked
 
     def _require_hr(self) -> None:
         self._session.require_unlocked()
@@ -388,4 +622,4 @@ class EmployeeSyncImportService:
         self._authz.require(self._session.role, Permission.MANAGE_EMPLOYEES)
 
 
-__all__ = ["EmployeeSyncImportService"]
+__all__ = ["EmployeePlan", "EmployeeSyncImportService"]
