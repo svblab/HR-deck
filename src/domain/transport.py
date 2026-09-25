@@ -39,6 +39,14 @@ class TransportPayloadDecryptError(TransportReceiveError):
     """Payload AEAD decrypt/authenticate failed."""
 
 
+class TransportApplyError(Exception):
+    """Base error for atomic transport apply (EPIC-020-E)."""
+
+
+class TransportApplyNotReadyError(TransportApplyError):
+    """Validated package is not READY_FOR_APPLY or failed pre-apply guards."""
+
+
 class WkRole(StrEnum):
     ACTIVE = "active"
     HISTORICAL = "historical"
