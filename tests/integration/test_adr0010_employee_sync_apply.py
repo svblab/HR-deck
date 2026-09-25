@@ -704,3 +704,36 @@ def test_adr0010_apply_sensitive_fields_require_edit_permission(tmp_path: Path) 
     assert updated.home_address == "ул. Тестовая, 1"
     assert updated.social_insurance_number == "123-456-789 00"
     conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_build_employee_plan_conflict_zero_writes(tmp_path: Path) -> None:
+    conn, session = _open(tmp_path)
+    directories, employees, sync, _importer = _services(conn, session)
+    org = _seed_org(directories)
+    emp_id = _create_employee(employees, org, full_name="Иванов Иван Иванович")
+    record = EmployeeRepository(conn).get(emp_id)
+    assert record is not None
+    before_name = record.full_name
+    before_count = _count_employees(conn)
+    package = DirectorySyncPackage(
+        tables={
+            "employees": [
+                _employee_row(
+                    conn,
+                    org,
+                    external_id=record.external_id,
+                    full_name="Петров Пётр Петрович",
+                )
+            ]
+        }
+    )
+    plan = sync.build_employee_plan(package, directory_plan=None)
+    assert not plan.is_clean
+    assert plan.conflicts
+    assert plan.conflicts[0].status.value == "conflict"
+    assert _count_employees(conn) == before_count
+    still = EmployeeRepository(conn).get(emp_id)
+    assert still is not None
+    assert still.full_name == before_name
+    conn.close()
