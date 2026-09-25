@@ -12,9 +12,9 @@ import pytest
 from data.directories import BranchRepository
 from domain.transport import PackageClassification, TransportApplyNotReadyError, WkRole
 from services.bootstrap import BootstrapService
-from services.transport_import_validation import FreshnessClass
 from services.transport_import_apply import TransportImportApplyService
 from services.transport_import_validation import (
+    FreshnessClass,
     TransportImportValidationService,
     ValidationDisposition,
     ValidationResult,
@@ -223,9 +223,11 @@ def test_apply_atomicity_rolls_back_directory_on_employee_fail(tmp_path: Path) -
     def _boom(_plan, *, commit=True):
         raise RuntimeError("forced employee apply failure")
 
-    with patch.object(apply_svc._employees, "apply_employee_plan", side_effect=_boom):
-        with pytest.raises(RuntimeError, match="forced employee"):
-            apply_svc.apply_validated_package(decrypted, validation)
+    with (
+        patch.object(apply_svc._employees, "apply_employee_plan", side_effect=_boom),
+        pytest.raises(RuntimeError, match="forced employee"),
+    ):
+        apply_svc.apply_validated_package(decrypted, validation)
 
     assert conn.execute("SELECT COUNT(*) FROM branches").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM transport_package_records").fetchone()[0] == 0

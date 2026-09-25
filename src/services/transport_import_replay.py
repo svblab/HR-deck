@@ -41,14 +41,14 @@ class TransportImportReplayService:
         self._session = session
         self._store = store or TransportKeyStore(conn, clock=clock)
         self._authz = authz or AuthorizationService()
-        self._clock = self._store._clock  # noqa: SLF001
+        self._clock = self._store._clock
         self._audit = UserActionLogRepository(conn)
 
     def observe_replay(self, decrypted: DecryptedTransportPackage) -> ReplayObserveResult:
         """Record replay observation (last_seen_at + audit); idempotent."""
         self._require_import_export()
         now = self._clock()
-        repo = self._store._repo  # noqa: SLF001
+        repo = self._store._repo
         existing = repo.find_package(decrypted.package_id)
         if existing is None:
             raise TransportKeyError(

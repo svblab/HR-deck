@@ -95,7 +95,7 @@ class TransportImportApplyService:
         self._session = session
         self._store = store or TransportKeyStore(conn, clock=clock)
         self._authz = authz or AuthorizationService()
-        self._clock = self._store._clock  # noqa: SLF001
+        self._clock = self._store._clock
         self._directories = DirectorySyncImportService(
             conn, session, clock=clock, authz=self._authz
         )
@@ -164,7 +164,7 @@ class TransportImportApplyService:
     def _persist_package_acceptance(
         self, decrypted: DecryptedTransportPackage, *, now: str
     ) -> None:
-        repo = self._store._repo  # noqa: SLF001
+        repo = self._store._repo
         existing = repo.find_package(decrypted.package_id)
         if existing is not None:
             raise TransportKeyError(f"package_id already used: {decrypted.package_id}")
@@ -185,7 +185,7 @@ class TransportImportApplyService:
     def _advance_transport_state(
         self, decrypted: DecryptedTransportPackage, *, now: str
     ) -> None:
-        repo = self._store._repo  # noqa: SLF001
+        repo = self._store._repo
         current = self._store.get_current_wk(decrypted.direction_id)
         predecessor = current.key_id if current is not None else None
         if repo.wire_key_id_exists(decrypted.next_wk_key_id):
@@ -221,7 +221,7 @@ class TransportImportApplyService:
         if not validation.employee_plan.is_clean:
             raise TransportApplyNotReadyError("employee plan is not clean")
 
-        repo = self._store._repo  # noqa: SLF001
+        repo = self._store._repo
         existing = repo.find_package(decrypted.package_id)
         if (
             existing is not None
