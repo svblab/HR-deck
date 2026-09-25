@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
+from sqlcipher3 import dbapi2 as sqlcipher
 
 from data.db import connect, create_database, generate_master_key, table_columns
 from data.migrations import (
     apply_pending_migrations,
     current_version,
+    default_migrations_dir,
     expected_migration_versions,
 )
 from tests.fixtures.synthetic import seed_synthetic_org
@@ -41,7 +44,38 @@ REQUIRED_TABLES = {
     "transport_direction_state",
     "transport_wk_keys",
     "transport_package_records",
+    "import_sessions",
+    "import_session_rows",
 }
+
+IMPORT_CONVERSION_TABLES = {
+    "import_sessions",
+    "import_session_rows",
+}
+
+_IMPORT_SESSION_COLUMNS = {
+    "id",
+    "file_content_hash",
+    "last_accessed_at",
+}
+
+_IMPORT_SESSION_ROW_COLUMNS = {
+    "id",
+    "session_id",
+    "source_row_number",
+    "values_json",
+}
+
+_NOW = "2026-09-25T12:00:00Z"
+
+
+def _migrations_through(version: int, root: Path) -> Path:
+    target = root / "migrations"
+    target.mkdir(parents=True, exist_ok=True)
+    for path in sorted(default_migrations_dir().glob("*.sql")):
+        if int(path.name[:4]) <= version:
+            shutil.copy(path, target / path.name)
+    return target
 
 RESERVED_EMPLOYEE_COLUMNS = {
     "hire_date",
@@ -118,3 +152,95 @@ def test_reapply_migrations_on_nonempty_preserves_data(tmp_path: Path) -> None:
     ).fetchone()
     assert twin is not None and twin[0] == 2
     conn2.close()
+
+
+@pytest.mark.acceptance
+def test_migration_0018_import_conversion_sessions_on_nonempty_db(tmp_path: Path) -> None:
+    """ADR-0012: migration 0018 applies on a seeded DB and creates staging tables."""
+    key = generate_master_key()
+    path = tmp_path / "app.db"
+    mig_v17 = _migrations_through(17, tmp_path)
+    conn = create_database(path, key)
+    assert apply_pending_migrations(conn, migrations_dir=mig_v17) == list(range(1, 18))
+    ids = seed_synthetic_org(conn)
+    emp_name = conn.execute(
+        "SELECT full_name FROM employees WHERE id = ?", (ids["employee_a_id"],)
+    ).fetchone()[0]
+    conn.close()
+
+    mig_v18 = _migrations_through(18, tmp_path / "v18apply")
+    conn2 = connect(path, key)
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_v18)
+    assert applied == [18]
+    assert current_version(conn2) == 18
+
+    tables = {
+        r[0]
+        for r in conn2.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+    }
+    assert IMPORT_CONVERSION_TABLES <= tables
+    assert table_columns(conn2, "import_sessions") == _IMPORT_SESSION_COLUMNS
+    assert table_columns(conn2, "import_session_rows") == _IMPORT_SESSION_ROW_COLUMNS
+    assert conn2.execute(
+        "SELECT full_name FROM employees WHERE id = ?", (ids["employee_a_id"],)
+    ).fetchone()[0] == emp_name
+
+    index_row = conn2.execute(
+        "SELECT name FROM sqlite_master"
+        " WHERE type = 'index' AND tbl_name = 'import_sessions'"
+        " AND name = 'idx_import_sessions_last_accessed_at'"
+    ).fetchone()
+    assert index_row is not None
+
+    conn2.close()
+
+
+@pytest.mark.acceptance
+def test_migration_0018_import_conversion_constraints(tmp_path: Path) -> None:
+    """ADR-0012: uniqueness, FK, and ON DELETE CASCADE on import conversion tables."""
+    key = generate_master_key()
+    conn = create_database(tmp_path / "app.db", key)
+    apply_pending_migrations(conn)
+    assert current_version(conn) == expected_migration_versions()[-1]
+
+    conn.execute(
+        "INSERT INTO import_sessions (file_content_hash, last_accessed_at)"
+        " VALUES (?, ?)",
+        ("abc123", _NOW),
+    )
+    session_id = conn.execute("SELECT id FROM import_sessions").fetchone()[0]
+    conn.execute(
+        "INSERT INTO import_session_rows (session_id, source_row_number, values_json)"
+        " VALUES (?, ?, ?)",
+        (session_id, 2, "{}"),
+    )
+    conn.commit()
+
+    with pytest.raises(sqlcipher.IntegrityError):
+        conn.execute(
+            "INSERT INTO import_sessions (file_content_hash, last_accessed_at)"
+            " VALUES (?, ?)",
+            ("abc123", _NOW),
+        )
+
+    with pytest.raises(sqlcipher.IntegrityError):
+        conn.execute(
+            "INSERT INTO import_session_rows (session_id, source_row_number, values_json)"
+            " VALUES (?, ?, ?)",
+            (session_id, 2, "{}"),
+        )
+
+    with pytest.raises(sqlcipher.IntegrityError):
+        conn.execute(
+            "INSERT INTO import_session_rows (session_id, source_row_number, values_json)"
+            " VALUES (?, ?, ?)",
+            (999, 3, "{}"),
+        )
+
+    conn.execute("DELETE FROM import_sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    remaining = conn.execute("SELECT COUNT(*) FROM import_session_rows").fetchone()[0]
+    assert remaining == 0
+    conn.close()
