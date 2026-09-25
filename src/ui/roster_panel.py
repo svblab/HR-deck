@@ -37,6 +37,7 @@ from services.template_library import TemplateLibraryService
 from ui.board_widget import BoardWidget
 from ui.employee_card_form import EmployeeCardDialog
 from ui.employee_popup import EmployeePopupDialog
+from ui.conversion_wizard_dialog import run_conversion_wizard_flow
 from ui.import_export_dialog import run_export_flow, run_import_flow
 from ui.reports_dialog import ReportsDialog
 from ui.table_widget import TableWidget
@@ -129,13 +130,17 @@ class RosterPanel(QWidget):
             self._session.role, Permission.IMPORT_EXPORT
         )
         self._import_btn = QPushButton("Импорт", objectName="importEmployeesBtn")
+        self._conversion_btn = QPushButton("Конвертация", objectName="conversionEmployeesBtn")
         self._export_btn = QPushButton("Экспорт", objectName="exportEmployeesBtn")
         io_enabled = bool(can_io and self._employees and self._directories)
         self._import_btn.setVisible(io_enabled)
+        self._conversion_btn.setVisible(io_enabled)
         self._export_btn.setVisible(io_enabled)
         self._import_btn.setEnabled(io_enabled)
+        self._conversion_btn.setEnabled(io_enabled)
         self._export_btn.setEnabled(io_enabled)
         self._import_btn.clicked.connect(self._open_import)
+        self._conversion_btn.clicked.connect(self._open_conversion)
         self._export_btn.clicked.connect(self._open_export)
         self._reports_btn = QPushButton("Отчёты", objectName="reportsBtn")
         can_reports = self._session is not None and has_permission(
@@ -168,6 +173,7 @@ class RosterPanel(QWidget):
         self._table_btn.clicked.connect(lambda: self._set_view(1))
         row1.addWidget(self._add_btn)
         row1.addWidget(self._import_btn)
+        row1.addWidget(self._conversion_btn)
         row1.addWidget(self._export_btn)
         row1.addWidget(self._reports_btn)
         row1.addWidget(self._directories_btn)
@@ -403,6 +409,20 @@ class RosterPanel(QWidget):
         if self._employees is None or self._directories is None or self._session is None:
             return
         if run_import_flow(self, self._employees, self._directories, self._session):
+            self.reload()
+
+    def _open_conversion(self) -> None:
+        if self._employees is None or self._directories is None or self._session is None:
+            return
+        conn = self._employees._conn  # noqa: SLF001 — shared SQLCipher connection for UI flows
+        if run_conversion_wizard_flow(
+            self,
+            conn,
+            self._session,
+            self._employees,
+            self._directories,
+            status_history=self._status_history,
+        ):
             self.reload()
 
     def _open_export(self) -> None:
