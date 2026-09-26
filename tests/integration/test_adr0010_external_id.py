@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 from data.db import Connection, connect, create_database, generate_master_key
-from data.migrations import apply_pending_migrations, current_version, default_migrations_dir
+from data.migrations import (
+    apply_pending_migrations,
+    current_version,
+    default_migrations_dir,
+    expected_migration_versions,
+)
 from domain.employee import EmployeeCreateInput
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryService
@@ -113,8 +118,9 @@ def test_adr0010_migration_backfills_external_id_on_nonempty_db(tmp_path: Path) 
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [14, 15, 16, 17]
-    assert current_version(conn2) == 17
+    pending = [v for v in expected_migration_versions() if v > 13]
+    assert applied == pending
+    assert current_version(conn2) == pending[-1]
 
     all_ids: list[str] = []
     for table in _EXTERNAL_ID_TABLES:
