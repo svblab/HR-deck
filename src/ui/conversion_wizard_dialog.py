@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -229,6 +228,13 @@ class ConversionWizardDialog(QDialog):
         note = self._card.findChild(QLineEdit, "fieldNote")
         if not all((name, position, branch, department, division, employment, note)):
             return None, ["форма"]
+        assert name is not None
+        assert position is not None
+        assert branch is not None
+        assert department is not None
+        assert division is not None
+        assert employment is not None
+        assert note is not None
         missing: list[str] = []
         if not name.text().strip():
             missing.append("ФИО")
@@ -294,8 +300,8 @@ class ConversionWizardDialog(QDialog):
         )
         for widget in dialog.findChildren(QLineEdit):
             widget.setEnabled(False)
-        for widget in dialog.findChildren(QComboBox):
-            widget.setEnabled(False)
+        for combo_widget in dialog.findChildren(QComboBox):
+            combo_widget.setEnabled(False)
         archive = dialog.findChild(QPushButton, "archiveEmployeeBtn")
         if archive is not None:
             archive.hide()

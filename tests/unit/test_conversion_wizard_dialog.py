@@ -146,7 +146,8 @@ def test_invalid_save_stays_on_row(qtbot, tmp_path: Path, monkeypatch) -> None:
         "warning",
         lambda *_a, text="", **_k: warnings.append(str(text)) or QMessageBox.StandardButton.Ok,
     )
-    qtbot.mouseClick(dialog.findChild(QPushButton, "conversionWizardSaveBtn"), Qt.MouseButton.LeftButton)
+    save_btn = dialog.findChild(QPushButton, "conversionWizardSaveBtn")
+    qtbot.mouseClick(save_btn, Qt.MouseButton.LeftButton)
     assert saves == []
     assert len(sessions.list_rows(session_id)) == 1
     assert warnings
@@ -177,7 +178,8 @@ def test_save_advances_to_next_row(qtbot, tmp_path: Path) -> None:
     qtbot.addWidget(dialog)
     _fill_required_card(dialog, ids)
     dialog._card.findChild(QLineEdit, "fieldFullName").setText("Первый")
-    qtbot.mouseClick(dialog.findChild(QPushButton, "conversionWizardSaveBtn"), Qt.MouseButton.LeftButton)
+    save_btn = dialog.findChild(QPushButton, "conversionWizardSaveBtn")
+    qtbot.mouseClick(save_btn, Qt.MouseButton.LeftButton)
     remaining = sessions.list_rows(session_id)
     assert len(remaining) == 1
     assert json.loads(remaining[0].values_json)["full_name"] == "Второй"
@@ -207,7 +209,8 @@ def test_skip_calls_service_and_advances(qtbot, tmp_path: Path) -> None:
     )
     qtbot.addWidget(dialog)
     before_emp = conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
-    qtbot.mouseClick(dialog.findChild(QPushButton, "conversionWizardSkipBtn"), Qt.MouseButton.LeftButton)
+    skip_btn = dialog.findChild(QPushButton, "conversionWizardSkipBtn")
+    qtbot.mouseClick(skip_btn, Qt.MouseButton.LeftButton)
     assert conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == before_emp
     assert len(sessions.list_rows(session_id)) == 1
     conn.close()
@@ -323,7 +326,11 @@ def test_skip_service_failure_does_not_advance(qtbot, tmp_path: Path, monkeypatc
     from services.employee_conversion import EmployeeConversionError
 
     conn, session, employees, directories, sessions, conversion, ids = _open(tmp_path)
-    session_id = _stage_session(sessions, conn, rows=[{"full_name": "Первый"}, {"full_name": "Второй"}])
+    session_id = _stage_session(
+        sessions,
+        conn,
+        rows=[{"full_name": "Первый"}, {"full_name": "Второй"}],
+    )
     dialog = ConversionWizardDialog(
         conn,
         session,

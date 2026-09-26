@@ -10,7 +10,7 @@ from pathlib import Path
 
 from data.db import Connection
 from data.import_sessions import ImportSessionRepository
-from domain.import_conversion import build_staged_row_values, file_content_hash
+from domain.import_conversion import build_staged_row_values, file_content_hash, stale_cutoff
 from domain.permissions import Permission
 from services.authorization import AuthorizationError, AuthorizationService
 from services.employee_files import EmployeeFileError, read_tabular
@@ -55,6 +55,7 @@ class ImportConversionIngestService:
 
     def ingest_file(self, source_path: Path | str) -> ImportConversionIngestResult:
         self._require()
+        self._sessions.delete_stale_before(stale_cutoff(self._clock()))
         path = Path(source_path)
         try:
             raw_bytes = path.read_bytes()

@@ -120,7 +120,7 @@ def test_purge_all_removes_sessions_and_rows(repo: ImportSessionRepository) -> N
 def test_delete_stale_before_cutoff(repo: ImportSessionRepository) -> None:
     old_id = repo.create_session(file_content_hash=_HASH_A, last_accessed_at=_T0)
     recent_id = repo.create_session(file_content_hash=_HASH_B, last_accessed_at=_T2)
-    old_row = repo.insert_row(session_id=old_id, source_row_number=2, values_json=_JSON_ONE)
+    repo.insert_row(session_id=old_id, source_row_number=2, values_json=_JSON_ONE)
     recent_row = repo.insert_row(
         session_id=recent_id, source_row_number=3, values_json=_JSON_TWO
     )

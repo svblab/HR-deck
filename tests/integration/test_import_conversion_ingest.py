@@ -170,6 +170,37 @@ def test_different_raw_bytes_create_different_sessions(tmp_path: Path) -> None:
 
 
 @pytest.mark.acceptance
+def test_ingest_lazy_cleanup_removes_stale_sessions(tmp_path: Path) -> None:
+    _T_NOW = "2026-09-25T10:00:00Z"
+    _STALE = "2026-08-20T10:00:00Z"
+    clock = lambda: _T_NOW  # noqa: E731
+    conn, session, _code = BootstrapService(clock=clock).initial_administrator_setup(
+        db_path=tmp_path / "app.db", login="admin", password="AdminPass-1"
+    )
+    seed_synthetic_org(conn)
+    sessions = ImportSessionRepository(conn)
+    stale_id = sessions.create_session(file_content_hash="b" * 64, last_accessed_at=_STALE)
+    sessions.insert_row(
+        session_id=stale_id,
+        source_row_number=2,
+        values_json='{"full_name": "Старый"}',
+    )
+    conn.commit()
+    ingest = ImportConversionIngestService(
+        conn, session, sessions=sessions, clock=clock
+    )
+    path = tmp_path / "fresh.csv"
+    path.write_text("ФИО\nНовый\n", encoding="utf-8")
+
+    result = ingest.ingest_file(path)
+
+    assert sessions.get_by_file_content_hash("b" * 64) is None
+    assert result.staged_row_count == 1
+    assert len(sessions.list_rows(result.session_id)) == 1
+    conn.close()
+
+
+@pytest.mark.acceptance
 def test_ingest_failure_rolls_back_session_and_rows(tmp_path: Path, monkeypatch) -> None:
     conn, _session, ingest, sessions = _open(tmp_path)
     path = tmp_path / "staff.csv"

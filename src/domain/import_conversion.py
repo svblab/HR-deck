@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 
 from domain.employee_import import cell_text, map_headers
 
@@ -38,4 +39,11 @@ def build_staged_row_values(
     return staged
 
 
-__all__ = ["build_staged_row_values", "file_content_hash"]
+def stale_cutoff(now_iso: str, *, days: int = 30) -> str:
+    """ISO-8601 'Z' timestamp `days` before `now_iso`, same format as last_accessed_at."""
+    now = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
+    cutoff = now - timedelta(days=days)
+    return cutoff.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+__all__ = ["build_staged_row_values", "file_content_hash", "stale_cutoff"]
