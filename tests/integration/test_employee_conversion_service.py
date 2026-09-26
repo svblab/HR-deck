@@ -32,7 +32,9 @@ def _open(tmp_path: Path):
     return conn, session, employees, sessions, conversion, ids
 
 
-def _employee_payload(ids: dict[str, int], *, full_name: str = "Новый Сотрудник") -> EmployeeCreateInput:
+def _employee_payload(
+    ids: dict[str, int], *, full_name: str = "Новый Сотрудник"
+) -> EmployeeCreateInput:
     return EmployeeCreateInput(
         full_name=full_name,
         position_id=ids["position_engineer_id"],

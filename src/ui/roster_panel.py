@@ -35,9 +35,9 @@ from services.standard_reports import StandardReportService
 from services.status_history import StatusHistoryService
 from services.template_library import TemplateLibraryService
 from ui.board_widget import BoardWidget
+from ui.conversion_wizard_dialog import run_conversion_wizard_flow
 from ui.employee_card_form import EmployeeCardDialog
 from ui.employee_popup import EmployeePopupDialog
-from ui.conversion_wizard_dialog import run_conversion_wizard_flow
 from ui.import_export_dialog import run_export_flow, run_import_flow
 from ui.reports_dialog import ReportsDialog
 from ui.table_widget import TableWidget
