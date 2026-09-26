@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtWidgets import (
@@ -15,32 +16,37 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from data.db import Connection
 from domain.permissions import Permission, has_permission
 from services.authorization import AuthorizationError
 from services.backup import BackupError, BackupService
 from services.session import SessionState
 
+OnRestored = Callable[[Connection], None]
 
-class BackupDialog(QDialog):
+
+class BackupOperationsWidget(QWidget):
+    """Панель создания/восстановления копии — в диалоге или вкладке EPIC-021."""
+
     def __init__(
         self,
         backup: BackupService,
         session: SessionState,
         *,
-        on_restored=None,
+        on_restored: OnRestored | None = None,
+        restore_closes_dialog: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._backup = backup
         self._session = session
         self._on_restored = on_restored
+        self._restore_closes_dialog = restore_closes_dialog
         self._can_create = has_permission(session.role, Permission.CREATE_BACKUP)
         self._can_restore = has_permission(session.role, Permission.RESTORE_BACKUP)
-        self.setObjectName("backupDialog")
-        self.setWindowTitle("Резервное копирование")
-        self.setModal(True)
-        self.setMinimumWidth(480)
+        self.setObjectName("backupOperationsWidget")
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(
             QLabel(
                 "Резервная копия — зашифрованный файл базы и sidecar keywrap (ADR-0002). "
@@ -104,4 +110,36 @@ class BackupDialog(QDialog):
             "Восстановление",
             "База восстановлена и прошла проверку целостности.",
         )
-        self.accept()
+        if self._restore_closes_dialog:
+            dialog = self.window()
+            if isinstance(dialog, QDialog):
+                dialog.accept()
+
+
+class BackupDialog(QDialog):
+    def __init__(
+        self,
+        backup: BackupService,
+        session: SessionState,
+        *,
+        on_restored: OnRestored | None = None,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("backupDialog")
+        self.setWindowTitle("Резервное копирование")
+        self.setModal(True)
+        self.setMinimumWidth(480)
+        layout = QVBoxLayout(self)
+        self._operations = BackupOperationsWidget(
+            backup,
+            session,
+            on_restored=on_restored,
+            restore_closes_dialog=True,
+            parent=self,
+        )
+        layout.addWidget(self._operations)
+
+    def _restore(self) -> None:
+        """Test hook and legacy access to restore action."""
+        self._operations._restore()

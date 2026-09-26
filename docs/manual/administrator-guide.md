@@ -85,7 +85,9 @@
 
 ## 5. Резервное копирование и восстановление
 
-Кнопка **⚙** (настройки) → диалог резервного копирования (`ui/backup_dialog.py`).
+Кнопка **💾** «Работа с базой данных» в шапке главного окна → вкладка
+**«Резервное копирование»** (`ui/database_operations_dialog.py`,
+`ui/backup_dialog.py`). Доступна только роли **Администратор** (см. EPIC-021).
 
 ### 5.1. Создание копии
 
@@ -123,4 +125,4 @@
 | Bootstrap / recovery | `services/bootstrap.py` |
 | Журнал действий | `services/user_action_log.py` |
 | Шаблоны | `services/template_library.py` |
-| Бэкап | `services/backup.py`, `data/backup_io.py` |
+| Бэкап | `services/backup.py`, `data/backup_io.py`, `ui/database_operations_dialog.py` |

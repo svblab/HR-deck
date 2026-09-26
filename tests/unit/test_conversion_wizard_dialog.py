@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QToolButton,
     QWidget,
 )
 
@@ -26,7 +27,7 @@ from services.employees import EmployeeService
 from services.import_conversion_ingest import ImportConversionIngestResult
 from tests.fixtures.synthetic import seed_synthetic_org
 from ui.conversion_wizard_dialog import ConversionWizardDialog, run_conversion_wizard_flow
-from ui.roster_panel import RosterPanel
+from ui.main_window import MainWindow
 
 
 def _open(tmp_path: Path):
@@ -76,20 +77,14 @@ def _select(card, object_name: str, entity_id: int) -> None:
 
 
 @pytest.mark.acceptance
-def test_roster_conversion_button_visible_with_import_permissions(qtbot, tmp_path: Path) -> None:
-    conn, session, employees, directories, _s, _c, _ids = _open(tmp_path)
-    from services.roster import RosterService
-
-    panel = RosterPanel(
-        RosterService(conn, session),
-        employees=employees,
-        directories=directories,
-        session=session,
-    )
-    qtbot.addWidget(panel)
-    panel.show()
-    btn = panel.findChild(QPushButton, "conversionEmployeesBtn")
-    assert btn is not None and btn.isEnabled()
+def test_main_window_database_operations_entry_with_import_permissions(
+    qtbot, tmp_path: Path
+) -> None:
+    conn, session, _employees, _directories, _s, _c, _ids = _open(tmp_path)
+    window = MainWindow(conn=conn, session=session, db_path=tmp_path / "app.db")
+    qtbot.addWidget(window)
+    tool_btn = window.findChild(QToolButton, "databaseOperationsBtn")
+    assert tool_btn is not None and tool_btn.isEnabled()
     conn.close()
 
 

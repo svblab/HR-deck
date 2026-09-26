@@ -57,7 +57,7 @@ def run_conversion_wizard_flow(
     status_history: StatusHistoryService | None = None,
     clock: Clock | None = None,
 ) -> bool:
-    """Temporary EPIC-018 entry point until EPIC-021 shell."""
+    """Entry point for EPIC-021 «Конвертация данных» tab (ADR-0012)."""
     path, _filter = QFileDialog.getOpenFileName(
         parent,
         "Конвертация данных",
