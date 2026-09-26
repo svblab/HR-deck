@@ -10,6 +10,7 @@ from typing import NoReturn
 
 from data.accounts import AccountRepository, SettingsRepository
 from data.db import Connection, connect
+from data.import_sessions import ImportSessionRepository
 from data.keywrap import (
     KeywrapError,
     find_account_wrap,
@@ -104,6 +105,7 @@ class AuthenticationService:
                 message="login success",
                 created_at=self._clock(),
             )
+            ImportSessionRepository(conn).purge_all()
             conn.commit()
             return conn, session
         except AuthenticationError:
@@ -181,6 +183,7 @@ class AuthenticationService:
             entity_type="account",
             entity_id=session.account_id,
         )
+        ImportSessionRepository(conn).purge_all()
         conn.commit()
         session.lock(clear_key=True)
 

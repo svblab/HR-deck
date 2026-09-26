@@ -79,7 +79,7 @@ class EmployeeService:
         self._require(Permission.MANAGE_EMPLOYEES)
         return self._validate_input(data)
 
-    def create_employee(self, data: EmployeeCreateInput) -> int:
+    def create_employee(self, data: EmployeeCreateInput, *, commit: bool = True) -> int:
         self._require(Permission.MANAGE_EMPLOYEES)
         payload = self._validate_input(data)
         now = self._clock()
@@ -99,6 +99,7 @@ class EmployeeService:
                 created_at=now,
             ),
             details=self._details(payload),
+            commit=commit,
         )
 
     def get_employee(self, employee_id: int) -> EmployeeCard:
@@ -386,6 +387,7 @@ class EmployeeService:
         mutate: Callable[[], int | None],
         entity_id: int | None = None,
         details: str | None = None,
+        commit: bool = True,
     ) -> int:
         now = self._clock()
         try:
@@ -402,7 +404,8 @@ class EmployeeService:
                 entity_id=new_id,
                 details=details,
             )
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
             return new_id
         except Exception:
             self._conn.rollback()

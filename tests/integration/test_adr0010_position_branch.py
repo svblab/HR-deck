@@ -11,7 +11,12 @@ import sqlcipher3
 
 from data.db import Connection, connect, create_database, generate_master_key
 from data.employees import EmployeeRepository
-from data.migrations import apply_pending_migrations, current_version, default_migrations_dir
+from data.migrations import (
+    apply_pending_migrations,
+    current_version,
+    default_migrations_dir,
+    expected_migration_versions,
+)
 from domain.employee import EmployeeCreateInput
 from services.bootstrap import BootstrapService
 from services.directories import DirectoryError, DirectoryService
@@ -89,8 +94,9 @@ def test_adr0010_migration_succeeds_on_empty_positions_table(tmp_path: Path) -> 
 
     conn2 = connect(path, key)
     applied = apply_pending_migrations(conn2)
-    assert applied == [13, 14, 15, 16, 17]
-    assert current_version(conn2) == 17
+    pending = [v for v in expected_migration_versions() if v > 12]
+    assert applied == pending
+    assert current_version(conn2) == pending[-1]
     cols = {row[1] for row in conn2.execute("PRAGMA table_info(positions)").fetchall()}
     assert "branch_id" in cols
     conn2.close()
