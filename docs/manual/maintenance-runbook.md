@@ -15,7 +15,7 @@
 ### Шаги
 
 1. Войти как **Администратор**.
-2. **⚙** → **Создать копию…**
+2. **💾** «Работа с базой данных» → вкладка **Резервное копирование** → **Создать копию…**
 3. Указать каталог (удобно: `~/.local/share/personnel-availability/backups/`).
 4. Дождаться сообщения об успехе.
 
@@ -43,7 +43,7 @@
 ### Шаги
 
 1. **Закройте** приложение на всех сеансах.
-2. Войти как Администратор → **⚙** → **Восстановить…**
+2. Войти как Администратор → **💾** «Работа с базой данных» → **Резервное копирование** → **Восстановить…**
 3. Выбрать файл `.db` **проверенной** копии (рядом должен быть `.keywrap`).
 4. Прочитать предупреждение → **Да**.
 5. Система автоматически:
@@ -133,6 +133,6 @@
 | Сценарий | Модуль |
 |---|---|
 | Startup / partial / interrupted restore | `data/backup_io.py` |
-| Backup / restore UI | `services/backup.py`, `ui/backup_dialog.py` |
+| Backup / restore UI | `services/backup.py`, `ui/database_operations_dialog.py`, `ui/backup_dialog.py` |
 | Upgrade + rollback | `services/upgrade.py`, `ui/app.py` |
 | Recovery code | `services/bootstrap.py` |

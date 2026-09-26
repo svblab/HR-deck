@@ -39,13 +39,16 @@ from services.user_action_log import UserActionLogService
 from ui.action_log_dialog import ActionLogDialog
 from ui.archive_dialog import ArchiveDialog
 from ui.auth_dialogs import AccountsDialog, LoginDialog, SettingsDialog, UnlockDialog
-from ui.backup_dialog import BackupDialog
 from ui.company_logo import (
     LOGO_BADGE_OUTER_HEIGHT,
     LOGO_BADGE_OUTER_WIDTH,
     TITLE_BAR_HEIGHT,
     logo_badge_content_size,
     scale_company_logo_pixmap,
+)
+from ui.database_operations_dialog import (
+    DatabaseOperationsDialog,
+    can_open_database_operations,
 )
 from ui.roster_panel import RosterPanel
 from ui.session_activity import install_session_activity_filter
@@ -111,7 +114,7 @@ class MainWindow(QMainWindow):
         self._switch_user_btn: QToolButton | None = None
         self._accounts_btn: QToolButton | None = None
         self._log_btn: QToolButton | None = None
-        self._settings_btn: QToolButton | None = None
+        self._database_ops_btn: QToolButton | None = None
         self._program_settings_btn: QToolButton | None = None
         self._archive_btn: QToolButton | None = None
         self._brand_logo: QLabel | None = None
@@ -225,11 +228,11 @@ class MainWindow(QMainWindow):
         self._archive_btn.setToolTip("Архив")
         self._archive_btn.clicked.connect(self._open_archive)
 
-        settings_btn = QToolButton(objectName="titleIconBtn")
-        settings_btn.setText("💾")
-        settings_btn.setToolTip("Резервное копирование")
-        settings_btn.clicked.connect(self._open_backup)
-        self._settings_btn = settings_btn
+        database_ops_btn = QToolButton(objectName="databaseOperationsBtn")
+        database_ops_btn.setText("💾")
+        database_ops_btn.setToolTip("Работа с базой данных")
+        database_ops_btn.clicked.connect(self._open_database_operations)
+        self._database_ops_btn = database_ops_btn
         self._switch_user_btn = QToolButton(objectName="switchUserBtn")
         self._switch_user_btn.setText("⇄")
         self._switch_user_btn.setToolTip("Сменить пользователя")
@@ -242,7 +245,7 @@ class MainWindow(QMainWindow):
         right.addWidget(self._log_btn)
         right.addWidget(self._program_settings_btn)
         right.addWidget(self._archive_btn)
-        right.addWidget(settings_btn)
+        right.addWidget(database_ops_btn)
         right.addWidget(self._switch_user_btn)
         right.addWidget(exit_btn)
         layout.addLayout(right)
@@ -308,17 +311,14 @@ class MainWindow(QMainWindow):
             )
             btn.setVisible(allowed)
             btn.setEnabled(allowed)
-        if self._settings_btn is not None:
-            can_backup = bool(
+        if self._database_ops_btn is not None:
+            can_database_ops = bool(
                 has_session
                 and self._session is not None
-                and (
-                    self._authz.check(self._session.role, Permission.CREATE_BACKUP)
-                    or self._authz.check(self._session.role, Permission.RESTORE_BACKUP)
-                )
+                and can_open_database_operations(self._session)
             )
-            self._settings_btn.setVisible(can_backup)
-            self._settings_btn.setEnabled(can_backup)
+            self._database_ops_btn.setVisible(can_database_ops)
+            self._database_ops_btn.setEnabled(can_database_ops)
         if self._program_settings_btn is not None:
             can_program_settings = bool(
                 has_session
@@ -552,18 +552,34 @@ class MainWindow(QMainWindow):
         assert self._session is not None
         ActionLogDialog(UserActionLogService(self._conn, self._session), self).exec()
 
-    def _open_backup(self) -> None:
+    def _open_database_operations(self) -> None:
         if not self._require_unlocked() or self._db_path is None:
             return
         assert self._conn is not None
         assert self._session is not None
-        service = BackupService(self._conn, self._session, db_path=self._db_path)
-        BackupDialog(
-            service,
+        if not can_open_database_operations(self._session):
+            return
+        status_history = StatusHistoryService(self._conn, self._session)
+        employees = EmployeeService(
+            self._conn, self._session, status_history=status_history
+        )
+        directories = DirectoryService(self._conn, self._session)
+        backup = BackupService(self._conn, self._session, db_path=self._db_path)
+        DatabaseOperationsDialog(
+            self._conn,
             self._session,
+            backup=backup,
+            employees=employees,
+            directories=directories,
+            status_history=status_history,
             on_restored=self._replace_connection,
+            on_data_changed=self._on_database_operations_data_changed,
             parent=self,
         ).exec()
+
+    def _on_database_operations_data_changed(self) -> None:
+        if self._roster is not None:
+            self._roster.reload()
 
     def _replace_connection(self, conn: Connection) -> None:
         self._conn = conn
