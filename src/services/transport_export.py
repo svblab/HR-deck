@@ -48,6 +48,7 @@ class TransportExportResult:
     package: TransportPackage
     wire_bytes: bytes
     package_id: str
+    generation: int
     sequence: int
     direction_id: int
 
@@ -64,6 +65,7 @@ class TransportExportService:
         *,
         direction_id: int,
         payload: bytes,
+        force_bootstrap: bool = False,
     ) -> TransportExportResult:
         """
         Build and persist outbound transport state for one package.
@@ -71,7 +73,12 @@ class TransportExportService:
         ``payload`` is opaque application bytes; this service does not interpret it.
         """
         direction = self._store.get_direction(direction_id)
-        if direction.direction_status != DirectionStatus.ACTIVE:
+        if direction.direction_status == DirectionStatus.BROKEN:
+            raise TransportKeyError(f"direction not exportable: {direction.direction_status}")
+        if direction.direction_status == DirectionStatus.REINIT_REQUIRED:
+            if direction.accepted_sequence != 0:
+                raise TransportKeyError("reinit direction awaiting first bootstrap export")
+        elif direction.direction_status != DirectionStatus.ACTIVE:
             raise TransportKeyError(f"direction not exportable: {direction.direction_status}")
 
         peer = self._store.get_peer_trust(direction.peer_trust_id)
@@ -87,20 +94,37 @@ class TransportExportService:
             raise TransportKeyError("direction recipient does not match peer trust")
 
         signing_fingerprint, signing_private = self._store.get_active_signing_keypair()
-        sequence = direction.accepted_sequence + 1
+        generation = direction.generation
+        max_seq = self._store._repo.max_accepted_sequence(direction_id, generation)
+        sequence = max(direction.accepted_sequence, max_seq) + 1
+        if direction.direction_status == DirectionStatus.REINIT_REQUIRED and sequence != 1:
+            raise TransportKeyError("reinit direction requires bootstrap export at sequence 1")
         package_id = str(uuid.uuid4())
 
         sk_material = generate_sk_material()
         current_wk = self._store.get_current_wk(direction_id)
-        predecessor_key_id = current_wk.key_id if current_wk is not None else None
+        if force_bootstrap and current_wk is not None and sequence != 1:
+            raise TransportKeyError("force_bootstrap only valid for first package of generation")
+        use_bootstrap = current_wk is None or force_bootstrap
+        if direction.direction_status == DirectionStatus.REINIT_REQUIRED and not use_bootstrap:
+            raise TransportKeyError("reinit direction requires bootstrap envelope")
+        predecessor_key_id: str | None
+        if use_bootstrap:
+            predecessor_key_id = None
+        elif current_wk is not None:
+            predecessor_key_id = current_wk.key_id
+        else:
+            predecessor_key_id = None
         next_wk = self._store.create_wk_key(
             direction_id=direction_id,
             wk_role=WkRole.HISTORICAL,
             predecessor_key_id=predecessor_key_id,
+            generation_established=generation if use_bootstrap else None,
         )
 
         payload_aad = build_payload_aad(
             protocol_version=TRANSPORT_PROTOCOL_VERSION,
+            generation=generation,
             sender_installation_id=direction.sender_installation_id,
             recipient_installation_id=direction.recipient_installation_id,
             sequence=sequence,
@@ -116,7 +140,7 @@ class TransportExportService:
             sk_material=sk_material,
             next_wk_material=next_wk.wk_key_material,
         )
-        if current_wk is None:
+        if use_bootstrap:
             routing_envelope_key_id = BOOTSTRAP_ENVELOPE_KEY_ID
             bootstrap_private = self._store.get_active_bootstrap_private_key()
             wrap_key = derive_bootstrap_wrap_key(
@@ -127,11 +151,14 @@ class TransportExportService:
                 package_id=package_id,
             )
         else:
+            if current_wk is None:
+                raise TransportKeyError("missing current WK for non-bootstrap export")
             routing_envelope_key_id = current_wk.key_id
             wrap_key = current_wk.wk_key_material
 
         envelope_aad = build_envelope_aad(
             protocol_version=TRANSPORT_PROTOCOL_VERSION,
+            generation=generation,
             sender_installation_id=direction.sender_installation_id,
             recipient_installation_id=direction.recipient_installation_id,
             sequence=sequence,
@@ -147,6 +174,7 @@ class TransportExportService:
 
         routing_metadata = RoutingMetadata(
             protocol_version=TRANSPORT_PROTOCOL_VERSION,
+            generation=generation,
             sender_installation_id=direction.sender_installation_id,
             recipient_installation_id=direction.recipient_installation_id,
             envelope_key_id=routing_envelope_key_id,
@@ -157,6 +185,7 @@ class TransportExportService:
         routing_bytes = build_routing_metadata_bytes(**asdict(routing_metadata))
         signing_bytes = build_signing_bytes(
             protocol_version=TRANSPORT_PROTOCOL_VERSION,
+            generation=generation,
             sender_installation_id=direction.sender_installation_id,
             recipient_installation_id=direction.recipient_installation_id,
             sequence=sequence,
@@ -180,6 +209,7 @@ class TransportExportService:
         self._store.record_outbound_export(
             direction_id=direction_id,
             package_id=package_id,
+            generation=generation,
             sequence=sequence,
             envelope_key_id=routing_envelope_key_id,
             established_wk=next_wk,
@@ -189,6 +219,7 @@ class TransportExportService:
             package=package,
             wire_bytes=wire_bytes,
             package_id=package_id,
+            generation=generation,
             sequence=sequence,
             direction_id=direction_id,
         )
@@ -221,11 +252,21 @@ class TransportExportAdminService:
         self._session.require_unlocked()
         self._authz.require(self._session.role, Permission.IMPORT_EXPORT)
 
-    def export_package(self, *, direction_id: int, payload: bytes) -> TransportExportResult:
+    def export_package(
+        self,
+        *,
+        direction_id: int,
+        payload: bytes,
+        force_bootstrap: bool = False,
+    ) -> TransportExportResult:
         self._require_export_permission()
         now = self._clock()
         try:
-            result = self._export.export_package(direction_id=direction_id, payload=payload)
+            result = self._export.export_package(
+                direction_id=direction_id,
+                payload=payload,
+                force_bootstrap=force_bootstrap,
+            )
             meta = result.package.routing_metadata
             self._audit.record(
                 account_id=self._session.account_id,
@@ -234,7 +275,8 @@ class TransportExportAdminService:
                 entity_id=direction_id,
                 result="success",
                 details=(
-                    f"package_id={result.package_id} sequence={result.sequence}"
+                    f"package_id={result.package_id} generation={result.generation}"
+                    f" sequence={result.sequence}"
                     f" direction_id={direction_id}"
                     f" envelope_key_id={meta.envelope_key_id}"
                     f" recipient_installation_id={meta.recipient_installation_id}"

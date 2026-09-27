@@ -78,6 +78,18 @@ class TransportKeyAdminService:
         )
         return result[0], result[1]
 
+    def reinit_direction(self, direction_id: int) -> None:
+        def run() -> int:
+            self._store.reinit_direction(direction_id)
+            return direction_id
+
+        self._mutate(
+            action="transport.direction.reinit",
+            entity_id=direction_id,
+            details=f"direction_id={direction_id} generation bump",
+            fn=run,
+        )
+
     def register_peer(
         self,
         *,

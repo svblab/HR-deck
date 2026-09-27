@@ -24,6 +24,7 @@ def test_canon_field_u32_rejects_out_of_range() -> None:
 def test_routing_metadata_is_deterministic() -> None:
     kwargs = dict(
         protocol_version=1,
+        generation=0,
         sender_installation_id="aaa",
         recipient_installation_id="bbb",
         envelope_key_id="wk-1",
@@ -40,6 +41,7 @@ def test_routing_metadata_is_deterministic() -> None:
 def test_signing_bytes_include_routing_and_ciphertexts() -> None:
     routing = build_routing_metadata_bytes(
         protocol_version=1,
+        generation=0,
         sender_installation_id="sender",
         recipient_installation_id="recipient",
         envelope_key_id="kid-1",
@@ -49,6 +51,7 @@ def test_signing_bytes_include_routing_and_ciphertexts() -> None:
     )
     signing = build_signing_bytes(
         protocol_version=1,
+        generation=0,
         sender_installation_id="sender",
         recipient_installation_id="recipient",
         sequence=1,
@@ -70,6 +73,7 @@ def test_routing_metadata_bytes_include_next_wk_key_id() -> None:
 
     encoded = build_routing_metadata_bytes(
         protocol_version=1,
+        generation=0,
         sender_installation_id="s",
         recipient_installation_id="r",
         envelope_key_id="wk-env",
@@ -85,6 +89,7 @@ def test_routing_metadata_bytes_include_next_wk_key_id() -> None:
 def test_envelope_aad_changes_with_next_wk_key_id() -> None:
     base = dict(
         protocol_version=1,
+        generation=0,
         sender_installation_id="s",
         recipient_installation_id="r",
         sequence=3,
@@ -99,6 +104,7 @@ def test_envelope_aad_changes_with_next_wk_key_id() -> None:
 def test_payload_aad_unique_per_sequence() -> None:
     common = dict(
         protocol_version=1,
+        generation=0,
         sender_installation_id="s",
         recipient_installation_id="r",
         package_id="p",

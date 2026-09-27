@@ -210,6 +210,7 @@ def test_exact_replay_is_idempotent(tmp_path: Path) -> None:
     result1 = store.record_package_acceptance(
         direction_id=direction.id,
         package_id="pkg-1",
+        generation=0,
         sequence=1,
         envelope_key_id="wk-wire-1",
         next_wk=next_wk,
@@ -220,6 +221,7 @@ def test_exact_replay_is_idempotent(tmp_path: Path) -> None:
     result2 = store.record_package_acceptance(
         direction_id=direction.id,
         package_id="pkg-1",
+        generation=0,
         sequence=1,
         envelope_key_id="wk-wire-1",
     )
@@ -296,21 +298,21 @@ def test_lost_wk_marks_broken_then_reinit_direction(tmp_path: Path) -> None:
         "SELECT wk_role FROM transport_wk_keys WHERE key_id=?", (wk.key_id,)
     ).fetchone()
     broken = conn.execute(
-        "SELECT direction_status, current_wk_id, accepted_sequence"
+        "SELECT direction_status, current_wk_id, accepted_sequence, generation"
         " FROM transport_direction_state WHERE id=?",
         (direction.id,),
     ).fetchone()
     assert lost_row[0] == WkRole.LOST.value
-    assert broken == ("broken", wk.id, 3)
+    assert broken == ("broken", wk.id, 3, 0)
 
     store.reinit_direction(direction.id)
     conn.commit()
     reinit = conn.execute(
-        "SELECT direction_status, current_wk_id, accepted_sequence"
+        "SELECT direction_status, current_wk_id, accepted_sequence, generation"
         " FROM transport_direction_state WHERE id=?",
         (direction.id,),
     ).fetchone()
-    assert reinit == ("reinit_required", None, 0)
+    assert reinit == ("reinit_required", None, 0, 1)
     # Re-init clears chain progress; lost WK row remains (no silent destruction).
     retained = conn.execute(
         "SELECT wk_role FROM transport_wk_keys WHERE key_id=?", (wk.key_id,)

@@ -1,4 +1,4 @@
-"""TransportCanonicalV1 deterministic encoding (EPIC-019 Phase 0 §3)."""
+"""TransportCanonicalV1/V2 deterministic encoding (EPIC-019 / generation addendum)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,10 @@ MAGIC_ENVELOPE_AAD = b"HRENV\x01"
 MAGIC_PAYLOAD_AAD = b"HRPAY\x01"
 MAGIC_PACKAGE = b"HRPK\x01"
 BOOTSTRAP_HKDF_INFO_PREFIX = b"HRTR-bootstrap-wrap-v1"
+
+
+def wire_includes_generation(protocol_version: int) -> bool:
+    return protocol_version >= 2
 
 
 def canon_field_bytes(payload: bytes) -> bytes:
@@ -30,9 +34,17 @@ def canon_field_u32(value: int) -> bytes:
     return value.to_bytes(4, "big")
 
 
+def _protocol_generation_prefix(protocol_version: int, generation: int) -> bytes:
+    buf = canon_field_u32(protocol_version)
+    if wire_includes_generation(protocol_version):
+        buf += canon_field_u32(generation)
+    return buf
+
+
 def build_routing_metadata_bytes(
     *,
     protocol_version: int,
+    generation: int,
     sender_installation_id: str,
     recipient_installation_id: str,
     envelope_key_id: str,
@@ -40,12 +52,9 @@ def build_routing_metadata_bytes(
     package_id: str,
     next_wk_key_id: str,
 ) -> bytes:
-    # Deterministic field order (TransportCanonicalV1). ``next_wk_key_id`` is
-    # cleartext for recipient envelope-AAD rebuild; authenticity is via the
-    # package signature (routing blob) and envelope AEAD AAD binding.
     return (
         MAGIC_ROUTING
-        + canon_field_u32(protocol_version)
+        + _protocol_generation_prefix(protocol_version, generation)
         + canon_field_utf8(sender_installation_id)
         + canon_field_utf8(recipient_installation_id)
         + canon_field_utf8(envelope_key_id)
@@ -58,6 +67,7 @@ def build_routing_metadata_bytes(
 def build_signing_bytes(
     *,
     protocol_version: int,
+    generation: int,
     sender_installation_id: str,
     recipient_installation_id: str,
     sequence: int,
@@ -74,6 +84,7 @@ def build_signing_bytes(
             raise ValueError("next_wk_key_id is required when rebuilding routing bytes")
         routing = build_routing_metadata_bytes(
             protocol_version=protocol_version,
+            generation=generation,
             sender_installation_id=sender_installation_id,
             recipient_installation_id=recipient_installation_id,
             envelope_key_id=envelope_key_id,
@@ -85,7 +96,7 @@ def build_signing_bytes(
         routing = routing_metadata_bytes
     return (
         MAGIC_SIGNING
-        + canon_field_u32(protocol_version)
+        + _protocol_generation_prefix(protocol_version, generation)
         + canon_field_utf8(sender_installation_id)
         + canon_field_utf8(recipient_installation_id)
         + canon_field_u32(sequence)
@@ -101,6 +112,7 @@ def build_signing_bytes(
 def build_envelope_aad(
     *,
     protocol_version: int,
+    generation: int,
     sender_installation_id: str,
     recipient_installation_id: str,
     sequence: int,
@@ -110,7 +122,7 @@ def build_envelope_aad(
 ) -> bytes:
     return (
         MAGIC_ENVELOPE_AAD
-        + canon_field_u32(protocol_version)
+        + _protocol_generation_prefix(protocol_version, generation)
         + canon_field_utf8(sender_installation_id)
         + canon_field_utf8(recipient_installation_id)
         + canon_field_u32(sequence)
@@ -123,6 +135,7 @@ def build_envelope_aad(
 def build_payload_aad(
     *,
     protocol_version: int,
+    generation: int,
     sender_installation_id: str,
     recipient_installation_id: str,
     sequence: int,
@@ -130,7 +143,7 @@ def build_payload_aad(
 ) -> bytes:
     return (
         MAGIC_PAYLOAD_AAD
-        + canon_field_u32(protocol_version)
+        + _protocol_generation_prefix(protocol_version, generation)
         + canon_field_utf8(sender_installation_id)
         + canon_field_utf8(recipient_installation_id)
         + canon_field_u32(sequence)
@@ -190,6 +203,10 @@ def parse_routing_metadata_bytes(data: bytes) -> RoutingMetadata:
         raise ValueError(f"{context}: bad magic")
     offset = len(MAGIC_ROUTING)
     protocol_version, offset = _parse_canon_field_u32(data, offset, context=context)
+    if wire_includes_generation(protocol_version):
+        generation, offset = _parse_canon_field_u32(data, offset, context=context)
+    else:
+        generation = 0
     sender_installation_id, offset = _parse_canon_field_utf8(data, offset, context=context)
     recipient_installation_id, offset = _parse_canon_field_utf8(data, offset, context=context)
     envelope_key_id, offset = _parse_canon_field_utf8(data, offset, context=context)
@@ -200,6 +217,7 @@ def parse_routing_metadata_bytes(data: bytes) -> RoutingMetadata:
         raise ValueError(f"{context}: trailing garbage")
     return RoutingMetadata(
         protocol_version=protocol_version,
+        generation=generation,
         sender_installation_id=sender_installation_id,
         recipient_installation_id=recipient_installation_id,
         envelope_key_id=envelope_key_id,

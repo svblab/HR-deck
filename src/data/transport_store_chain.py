@@ -15,6 +15,16 @@ from domain.transport import (
     WkRole,
 )
 
+_DIRECTION_SELECT = (
+    "SELECT id, sender_installation_id, recipient_installation_id, peer_trust_id,"
+    " generation, accepted_sequence, current_wk_id, direction_status"
+)
+
+_WK_SELECT = (
+    "SELECT id, key_id, direction_id, sequence_established, generation_established,"
+    " wk_key_material, wk_role, predecessor_key_id"
+)
+
 
 def _row_wk(row: Any) -> WkKeyRecord:
     return WkKeyRecord(
@@ -22,9 +32,10 @@ def _row_wk(row: Any) -> WkKeyRecord:
         key_id=str(row[1]),
         direction_id=int(row[2]),
         sequence_established=row[3],
-        wk_key_material=bytes(row[4]),
-        wk_role=WkRole(row[5]),
-        predecessor_key_id=row[6],
+        generation_established=row[4],
+        wk_key_material=bytes(row[5]),
+        wk_role=WkRole(row[6]),
+        predecessor_key_id=row[7],
     )
 
 
@@ -34,9 +45,10 @@ def _row_direction(row: Any) -> DirectionState:
         sender_installation_id=str(row[1]),
         recipient_installation_id=str(row[2]),
         peer_trust_id=int(row[3]),
-        accepted_sequence=int(row[4]),
-        current_wk_id=row[5],
-        direction_status=DirectionStatus(row[6]),
+        generation=int(row[4]),
+        accepted_sequence=int(row[5]),
+        current_wk_id=row[6],
+        direction_status=DirectionStatus(row[7]),
     )
 
 
@@ -53,9 +65,7 @@ class TransportChainStore:
         now: str,
     ) -> DirectionState:
         row = self._conn.execute(
-            "SELECT id, sender_installation_id, recipient_installation_id, peer_trust_id,"
-            " accepted_sequence, current_wk_id, direction_status"
-            " FROM transport_direction_state"
+            f"{_DIRECTION_SELECT} FROM transport_direction_state"
             " WHERE sender_installation_id = ? AND recipient_installation_id = ?",
             (sender_installation_id, recipient_installation_id),
         ).fetchone()
@@ -64,8 +74,8 @@ class TransportChainStore:
         cur = self._conn.execute(
             "INSERT INTO transport_direction_state ("
             " sender_installation_id, recipient_installation_id, peer_trust_id,"
-            " accepted_sequence, direction_status, created_at, updated_at"
-            ") VALUES (?, ?, ?, 0, ?, ?, ?)",
+            " generation, accepted_sequence, direction_status, created_at, updated_at"
+            ") VALUES (?, ?, ?, 0, 0, ?, ?, ?)",
             (
                 sender_installation_id,
                 recipient_installation_id,
@@ -81,6 +91,7 @@ class TransportChainStore:
             sender_installation_id=sender_installation_id,
             recipient_installation_id=recipient_installation_id,
             peer_trust_id=peer_trust_id,
+            generation=0,
             accepted_sequence=0,
             current_wk_id=None,
             direction_status=DirectionStatus.ACTIVE,
@@ -88,9 +99,7 @@ class TransportChainStore:
 
     def get_direction(self, direction_id: int) -> DirectionState | None:
         row = self._conn.execute(
-            "SELECT id, sender_installation_id, recipient_installation_id, peer_trust_id,"
-            " accepted_sequence, current_wk_id, direction_status"
-            " FROM transport_direction_state WHERE id = ?",
+            f"{_DIRECTION_SELECT} FROM transport_direction_state WHERE id = ?",
             (direction_id,),
         ).fetchone()
         return None if row is None else _row_direction(row)
@@ -102,9 +111,7 @@ class TransportChainStore:
         recipient_installation_id: str,
     ) -> DirectionState | None:
         row = self._conn.execute(
-            "SELECT id, sender_installation_id, recipient_installation_id, peer_trust_id,"
-            " accepted_sequence, current_wk_id, direction_status"
-            " FROM transport_direction_state"
+            f"{_DIRECTION_SELECT} FROM transport_direction_state"
             " WHERE sender_installation_id = ? AND recipient_installation_id = ?",
             (sender_installation_id, recipient_installation_id),
         ).fetchone()
@@ -125,17 +132,19 @@ class TransportChainStore:
         wk_role: WkRole,
         sequence_established: int | None,
         predecessor_key_id: str | None,
+        generation_established: int | None = None,
         now: str,
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO transport_wk_keys ("
-            " key_id, direction_id, sequence_established, wk_key_material, wk_role,"
-            " predecessor_key_id, created_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?)",
+            " key_id, direction_id, sequence_established, generation_established,"
+            " wk_key_material, wk_role, predecessor_key_id, created_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 key_id,
                 direction_id,
                 sequence_established,
+                generation_established,
                 wk_key_material,
                 wk_role.value,
                 predecessor_key_id,
@@ -146,18 +155,14 @@ class TransportChainStore:
 
     def lookup_wk_by_key_id(self, key_id: str) -> WkKeyRecord | None:
         row = self._conn.execute(
-            "SELECT id, key_id, direction_id, sequence_established, wk_key_material,"
-            " wk_role, predecessor_key_id"
-            " FROM transport_wk_keys WHERE key_id = ?",
+            f"{_WK_SELECT} FROM transport_wk_keys WHERE key_id = ?",
             (key_id,),
         ).fetchone()
         return None if row is None else _row_wk(row)
 
     def get_wk_by_id(self, wk_row_id: int) -> WkKeyRecord | None:
         row = self._conn.execute(
-            "SELECT id, key_id, direction_id, sequence_established, wk_key_material,"
-            " wk_role, predecessor_key_id"
-            " FROM transport_wk_keys WHERE id = ?",
+            f"{_WK_SELECT} FROM transport_wk_keys WHERE id = ?",
             (wk_row_id,),
         ).fetchone()
         return None if row is None else _row_wk(row)
@@ -183,19 +188,24 @@ class TransportChainStore:
         wk_row_id: int,
         accepted_sequence: int,
         now: str,
+        activate: bool = True,
     ) -> None:
-        self._conn.execute(
-            "UPDATE transport_direction_state"
-            " SET current_wk_id = ?, accepted_sequence = ?, updated_at = ?, direction_status = ?"
-            " WHERE id = ?",
-            (
-                wk_row_id,
-                accepted_sequence,
-                now,
-                DirectionStatus.ACTIVE.value,
-                direction_id,
-            ),
-        )
+        status = DirectionStatus.ACTIVE.value if activate else None
+        if status is not None:
+            self._conn.execute(
+                "UPDATE transport_direction_state"
+                " SET current_wk_id = ?, accepted_sequence = ?, updated_at = ?,"
+                " direction_status = ?"
+                " WHERE id = ?",
+                (wk_row_id, accepted_sequence, now, status, direction_id),
+            )
+        else:
+            self._conn.execute(
+                "UPDATE transport_direction_state"
+                " SET current_wk_id = ?, accepted_sequence = ?, updated_at = ?"
+                " WHERE id = ?",
+                (wk_row_id, accepted_sequence, now, direction_id),
+            )
 
     def set_direction_status(self, direction_id: int, status: DirectionStatus, *, now: str) -> None:
         self._conn.execute(
@@ -207,15 +217,19 @@ class TransportChainStore:
     def reset_direction_chain(self, direction_id: int, *, now: str) -> None:
         self._conn.execute(
             "UPDATE transport_direction_state"
-            " SET accepted_sequence = 0, current_wk_id = NULL,"
-            " direction_status = ?, updated_at = ?"
+            " SET generation = generation + 1,"
+            " accepted_sequence = 0,"
+            " current_wk_id = NULL,"
+            " direction_status = ?,"
+            " updated_at = ?"
             " WHERE id = ?",
             (DirectionStatus.REINIT_REQUIRED.value, now, direction_id),
         )
 
     def find_package(self, package_id: str) -> PackageRecord | None:
         row = self._conn.execute(
-            "SELECT id, direction_id, package_id, sequence, classification, envelope_key_id"
+            "SELECT id, direction_id, package_id, generation, sequence, classification,"
+            " envelope_key_id"
             " FROM transport_package_records WHERE package_id = ?",
             (package_id,),
         ).fetchone()
@@ -225,16 +239,17 @@ class TransportChainStore:
             id=int(row[0]),
             direction_id=int(row[1]),
             package_id=str(row[2]),
-            sequence=int(row[3]),
-            classification=PackageClassification(row[4]),
-            envelope_key_id=row[5],
+            generation=int(row[3]),
+            sequence=int(row[4]),
+            classification=PackageClassification(row[5]),
+            envelope_key_id=row[6],
         )
 
-    def max_accepted_sequence(self, direction_id: int) -> int:
+    def max_accepted_sequence(self, direction_id: int, generation: int) -> int:
         row = self._conn.execute(
             "SELECT COALESCE(MAX(sequence), 0) FROM transport_package_records"
-            " WHERE direction_id = ? AND classification = ?",
-            (direction_id, PackageClassification.ACCEPTED.value),
+            " WHERE direction_id = ? AND generation = ? AND classification = ?",
+            (direction_id, generation, PackageClassification.ACCEPTED.value),
         ).fetchone()
         return int(row[0]) if row is not None else 0
 
@@ -243,6 +258,7 @@ class TransportChainStore:
         *,
         direction_id: int,
         package_id: str,
+        generation: int,
         sequence: int,
         classification: PackageClassification,
         envelope_key_id: str | None,
@@ -252,12 +268,13 @@ class TransportChainStore:
     ) -> int:
         cur = self._conn.execute(
             "INSERT INTO transport_package_records ("
-            " direction_id, package_id, sequence, classification, rejection_reason,"
-            " envelope_key_id, first_seen_at, last_seen_at, accepted_at"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " direction_id, package_id, generation, sequence, classification,"
+            " rejection_reason, envelope_key_id, first_seen_at, last_seen_at, accepted_at"
+            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 direction_id,
                 package_id,
+                generation,
                 sequence,
                 classification.value,
                 rejection_reason,

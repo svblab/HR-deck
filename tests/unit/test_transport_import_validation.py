@@ -75,6 +75,7 @@ def _decrypted(
         sender_installation_id="sender",
         recipient_installation_id="recipient",
         direction_id=direction_id,
+        generation=0,
         sequence=sequence,
         package_id=package_id,
         envelope_key_id="bootstrap",
@@ -109,6 +110,7 @@ def test_classify_exact_replay(tmp_path: Path) -> None:
     store.record_package_acceptance(
         direction_id=direction_id,
         package_id=package_id,
+        generation=0,
         sequence=1,
         envelope_key_id="bootstrap",
         next_wk=None,
@@ -134,14 +136,16 @@ def test_classify_exact_replay(tmp_path: Path) -> None:
 def test_classify_stale_sequence(tmp_path: Path) -> None:
     conn, session, store = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
-    store.record_package_acceptance(
-        direction_id=direction_id,
-        package_id=str(uuid.uuid4()),
-        sequence=3,
-        envelope_key_id="bootstrap",
-        next_wk=None,
-        accepted_sequence=3,
-    )
+    for seq in (1, 2, 3):
+        store.record_package_acceptance(
+            direction_id=direction_id,
+            package_id=str(uuid.uuid4()),
+            generation=0,
+            sequence=seq,
+            envelope_key_id="bootstrap",
+            next_wk=None,
+            accepted_sequence=seq,
+        )
     conn.commit()
     before = _snapshot_transport(conn, direction_id)
 

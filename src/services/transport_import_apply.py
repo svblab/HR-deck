@@ -14,6 +14,7 @@ from data.repositories import UserActionLogRepository
 from domain.employee_reconciliation import EmployeeMatchStatus
 from domain.permissions import Permission
 from domain.transport import (
+    BOOTSTRAP_ENVELOPE_KEY_ID,
     ENTITY_TRANSPORT,
     PackageClassification,
     TransportApplyNotReadyError,
@@ -168,12 +169,17 @@ class TransportImportApplyService:
         existing = repo.find_package(decrypted.package_id)
         if existing is not None:
             raise TransportKeyError(f"package_id already used: {decrypted.package_id}")
-        max_seq = repo.max_accepted_sequence(decrypted.direction_id)
-        if decrypted.sequence <= max_seq:
+        direction = self._store.get_direction(decrypted.direction_id)
+        if decrypted.generation != direction.generation:
+            raise TransportKeyError("generation mismatch on package acceptance")
+        max_seq = repo.max_accepted_sequence(decrypted.direction_id, decrypted.generation)
+        expected = max(direction.accepted_sequence, max_seq) + 1
+        if decrypted.sequence != expected:
             raise TransportKeyError("stale or consumed sequence")
         repo.insert_package_record(
             direction_id=decrypted.direction_id,
             package_id=decrypted.package_id,
+            generation=decrypted.generation,
             sequence=decrypted.sequence,
             classification=PackageClassification.ACCEPTED,
             envelope_key_id=decrypted.envelope_key_id,
@@ -187,7 +193,8 @@ class TransportImportApplyService:
     ) -> None:
         repo = self._store._repo
         current = self._store.get_current_wk(decrypted.direction_id)
-        predecessor = current.key_id if current is not None else None
+        use_bootstrap = decrypted.envelope_key_id == BOOTSTRAP_ENVELOPE_KEY_ID
+        predecessor = None if use_bootstrap else (current.key_id if current is not None else None)
         if repo.wire_key_id_exists(decrypted.next_wk_key_id):
             raise TransportKeyError(
                 f"wire key_id collision: {decrypted.next_wk_key_id}"
@@ -199,6 +206,7 @@ class TransportImportApplyService:
             wk_role=WkRole.HISTORICAL,
             sequence_established=None,
             predecessor_key_id=predecessor,
+            generation_established=decrypted.generation if use_bootstrap else None,
             now=now,
         )
         self._store.activate_wk_for_direction(
@@ -232,9 +240,11 @@ class TransportImportApplyService:
             )
 
         direction = self._store.get_direction(decrypted.direction_id)
-        max_seq = repo.max_accepted_sequence(decrypted.direction_id)
-        ceiling = max(direction.accepted_sequence, max_seq)
-        if decrypted.sequence <= ceiling:
+        if decrypted.generation != direction.generation:
+            raise TransportApplyNotReadyError("generation mismatch")
+        max_seq = repo.max_accepted_sequence(decrypted.direction_id, decrypted.generation)
+        expected = max(direction.accepted_sequence, max_seq) + 1
+        if decrypted.sequence != expected:
             raise TransportApplyNotReadyError("stale or out-of-sequence package")
 
     def _require_import_export(self) -> None:

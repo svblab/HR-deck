@@ -200,11 +200,19 @@ class TransportKeyStore:
         *,
         direction_id: int,
         package_id: str,
+        generation: int,
         sequence: int,
         envelope_key_id: str,
         established_wk: WkKeyRecord,
     ) -> None:
         """Persist outbound export metadata and advance local outbound WK chain."""
+        direction = self.get_direction(direction_id)
+        if generation != direction.generation:
+            raise TransportKeyError("generation mismatch on outbound export")
+        max_seq = self._repo.max_accepted_sequence(direction_id, generation)
+        expected = max(direction.accepted_sequence, max_seq) + 1
+        if sequence != expected:
+            raise TransportKeyError("stale or out-of-sequence export")
         self.activate_wk_for_direction(
             direction_id=direction_id,
             wk_row_id=established_wk.id,
@@ -213,6 +221,7 @@ class TransportKeyStore:
         self._repo.insert_package_record(
             direction_id=direction_id,
             package_id=package_id,
+            generation=generation,
             sequence=sequence,
             classification=PackageClassification.PENDING,
             envelope_key_id=envelope_key_id,
@@ -248,6 +257,7 @@ class TransportKeyStore:
         wk_role: WkRole,
         sequence_established: int | None = None,
         predecessor_key_id: str | None = None,
+        generation_established: int | None = None,
         wk_material: bytes | None = None,
         wire_key_id: str | None = None,
     ) -> WkKeyRecord:
@@ -263,6 +273,7 @@ class TransportKeyStore:
             wk_role=wk_role,
             sequence_established=sequence_established,
             predecessor_key_id=predecessor_key_id,
+            generation_established=generation_established,
             now=now,
         )
         record = self._repo.get_wk_by_id(row_id)
@@ -287,9 +298,12 @@ class TransportKeyStore:
             raise TransportKeyError("wk direction mismatch")
         now = self._clock()
         self._repo.retire_active_wk_for_direction(direction_id, now=now)
+        direction = self.get_direction(direction_id)
         self._conn.execute(
-            "UPDATE transport_wk_keys SET wk_role = ?, sequence_established = ? WHERE id = ?",
-            (WkRole.ACTIVE.value, accepted_sequence, wk_row_id),
+            "UPDATE transport_wk_keys SET wk_role = ?, sequence_established = ?,"
+            " generation_established = COALESCE(generation_established, ?)"
+            " WHERE id = ?",
+            (WkRole.ACTIVE.value, accepted_sequence, direction.generation, wk_row_id),
         )
         self._repo.set_direction_current_wk(
             direction_id,
@@ -319,6 +333,7 @@ class TransportKeyStore:
         *,
         direction_id: int,
         package_id: str,
+        generation: int,
         sequence: int,
         envelope_key_id: str | None,
         next_wk: WkKeyRecord | None = None,
@@ -331,8 +346,12 @@ class TransportKeyStore:
                 return AcceptPackageResult(existing.id, None, replay=True)
             raise TransportKeyError(f"package_id already used: {package_id}")
 
-        max_seq = self._repo.max_accepted_sequence(direction_id)
-        if sequence <= max_seq:
+        direction = self.get_direction(direction_id)
+        if generation != direction.generation:
+            raise TransportKeyError("generation mismatch on package acceptance")
+        max_seq = self._repo.max_accepted_sequence(direction_id, generation)
+        expected = max(direction.accepted_sequence, max_seq) + 1
+        if sequence != expected:
             raise TransportKeyError("stale or consumed sequence")
 
         now = self._clock()
@@ -348,6 +367,7 @@ class TransportKeyStore:
         record_id = self._repo.insert_package_record(
             direction_id=direction_id,
             package_id=package_id,
+            generation=generation,
             sequence=sequence,
             classification=PackageClassification.ACCEPTED,
             envelope_key_id=envelope_key_id,
@@ -362,6 +382,7 @@ class TransportKeyStore:
         *,
         direction_id: int,
         package_id: str,
+        generation: int,
         sequence: int,
         envelope_key_id: str | None,
         reason: str,
@@ -369,6 +390,7 @@ class TransportKeyStore:
         return self._repo.insert_package_record(
             direction_id=direction_id,
             package_id=package_id,
+            generation=generation,
             sequence=sequence,
             classification=PackageClassification.REJECTED,
             envelope_key_id=envelope_key_id,

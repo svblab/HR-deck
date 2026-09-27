@@ -52,6 +52,7 @@ class DecryptedTransportPackage:
     sender_installation_id: str
     recipient_installation_id: str
     direction_id: int
+    generation: int
     sequence: int
     package_id: str
     envelope_key_id: str
@@ -114,7 +115,18 @@ class TransportReceiveService:
             )
         except TransportKeyError as exc:
             raise TransportUntrustedSenderError(str(exc)) from exc
-        if direction.direction_status != DirectionStatus.ACTIVE:
+        if direction.direction_status == DirectionStatus.BROKEN:
+            raise TransportUntrustedSenderError(
+                f"direction not receivable: {direction.direction_status}"
+            )
+        if meta.generation != direction.generation:
+            raise TransportUntrustedSenderError("package generation mismatch")
+        if direction.direction_status == DirectionStatus.REINIT_REQUIRED:
+            if meta.sequence != 1 or meta.envelope_key_id != BOOTSTRAP_ENVELOPE_KEY_ID:
+                raise TransportUntrustedSenderError(
+                    "direction awaiting bootstrap first package of new generation"
+                )
+        elif direction.direction_status != DirectionStatus.ACTIVE:
             raise TransportUntrustedSenderError(
                 f"direction not receivable: {direction.direction_status}"
             )
@@ -124,6 +136,7 @@ class TransportReceiveService:
         routing_bytes = build_routing_metadata_bytes(**asdict(meta))
         signing_bytes = build_signing_bytes(
             protocol_version=meta.protocol_version,
+            generation=meta.generation,
             sender_installation_id=meta.sender_installation_id,
             recipient_installation_id=meta.recipient_installation_id,
             sequence=meta.sequence,
@@ -163,6 +176,7 @@ class TransportReceiveService:
 
         envelope_aad = build_envelope_aad(
             protocol_version=meta.protocol_version,
+            generation=meta.generation,
             sender_installation_id=meta.sender_installation_id,
             recipient_installation_id=meta.recipient_installation_id,
             sequence=meta.sequence,
@@ -186,6 +200,7 @@ class TransportReceiveService:
 
         payload_aad = build_payload_aad(
             protocol_version=meta.protocol_version,
+            generation=meta.generation,
             sender_installation_id=meta.sender_installation_id,
             recipient_installation_id=meta.recipient_installation_id,
             sequence=meta.sequence,
@@ -205,6 +220,7 @@ class TransportReceiveService:
             sender_installation_id=meta.sender_installation_id,
             recipient_installation_id=meta.recipient_installation_id,
             direction_id=direction.id,
+            generation=meta.generation,
             sequence=meta.sequence,
             package_id=meta.package_id,
             envelope_key_id=meta.envelope_key_id,
@@ -247,7 +263,8 @@ class TransportReceiveAdminService:
                 entity_id=result.direction_id,
                 result="success",
                 details=(
-                    f"package_id={result.package_id} sequence={result.sequence}"
+                    f"package_id={result.package_id} generation={result.generation}"
+                    f" sequence={result.sequence}"
                     f" direction_id={result.direction_id}"
                     f" envelope_key_id={result.envelope_key_id}"
                     f" sender_installation_id={result.sender_installation_id}"

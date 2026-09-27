@@ -91,6 +91,7 @@ def _decrypt_export_envelope(
     resolved_next_wk_key_id = next_wk_key_id or meta.next_wk_key_id
     envelope_aad = build_envelope_aad(
         protocol_version=meta.protocol_version,
+        generation=meta.generation,
         sender_installation_id=meta.sender_installation_id,
         recipient_installation_id=meta.recipient_installation_id,
         sequence=meta.sequence,
@@ -136,6 +137,7 @@ def test_first_export_uses_bootstrap_envelope_and_serializes(tmp_path: Path) -> 
 
     signing_bytes = build_signing_bytes(
         protocol_version=TRANSPORT_PROTOCOL_VERSION,
+        generation=decoded.routing_metadata.generation,
         sender_installation_id=decoded.routing_metadata.sender_installation_id,
         recipient_installation_id=decoded.routing_metadata.recipient_installation_id,
         sequence=decoded.routing_metadata.sequence,
@@ -167,6 +169,7 @@ def test_first_export_uses_bootstrap_envelope_and_serializes(tmp_path: Path) -> 
     sk_material, next_wk_material = _split_envelope_plaintext(envelope_plain)
     payload_aad = build_payload_aad(
         protocol_version=TRANSPORT_PROTOCOL_VERSION,
+        generation=decoded.routing_metadata.generation,
         sender_installation_id=decoded.routing_metadata.sender_installation_id,
         recipient_installation_id=decoded.routing_metadata.recipient_installation_id,
         sequence=decoded.routing_metadata.sequence,
@@ -215,6 +218,7 @@ def test_second_export_uses_established_wk_chain(tmp_path: Path) -> None:
     sk_material, _ = _split_envelope_plaintext(envelope_plain)
     payload_aad = build_payload_aad(
         protocol_version=TRANSPORT_PROTOCOL_VERSION,
+        generation=second.package.routing_metadata.generation,
         sender_installation_id=second.package.routing_metadata.sender_installation_id,
         recipient_installation_id=second.package.routing_metadata.recipient_installation_id,
         sequence=second.package.routing_metadata.sequence,
@@ -283,6 +287,7 @@ def test_tampered_signature_fails_verification(tmp_path: Path) -> None:
     tampered[0] ^= 0x01
     signing_bytes = build_signing_bytes(
         protocol_version=TRANSPORT_PROTOCOL_VERSION,
+        generation=result.package.routing_metadata.generation,
         sender_installation_id=result.package.routing_metadata.sender_installation_id,
         recipient_installation_id=result.package.routing_metadata.recipient_installation_id,
         sequence=result.package.routing_metadata.sequence,
