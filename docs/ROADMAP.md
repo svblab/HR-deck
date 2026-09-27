@@ -30,10 +30,10 @@
 | EPIC-015 | Поставка под Linux | ✅ Завершён | [#28](https://github.com/svblab/HR-deck/pull/28) |
 | EPIC-017 | Комплект документации | ✅ Завершён | [#31](https://github.com/svblab/HR-deck/pull/31) |
 | EPIC-016 | Приёмочное тестирование и стабилизация | ✅ Завершён (см. [`acceptance/EPIC-016-signoff.md`](acceptance/EPIC-016-signoff.md)) | [#33](https://github.com/svblab/HR-deck/pull/33), [#40](https://github.com/svblab/HR-deck/pull/40), [#41](https://github.com/svblab/HR-deck/pull/41), [#47](https://github.com/svblab/HR-deck/pull/47), [#51](https://github.com/svblab/HR-deck/pull/51), [#52](https://github.com/svblab/HR-deck/pull/52), [#53](https://github.com/svblab/HR-deck/pull/53), [#54](https://github.com/svblab/HR-deck/pull/54) |
-| EPIC-018 | Конвертация неструктурированных данных (Механизм 1) | 📋 Запланирован | — |
+| EPIC-018 | Конвертация неструктурированных данных (Механизм 1) | ✅ Завершён | [#112](https://github.com/svblab/HR-deck/pull/112) |
 | EPIC-019 | TransportKeyStore и transport-state | ✅ Завершён | [#65](https://github.com/svblab/HR-deck/pull/65), [#100](https://github.com/svblab/HR-deck/pull/100) |
-| EPIC-020 | Transport exchange между установками (Механизм 2) | 📋 Запланирован | — |
-| EPIC-021 | Единый диалог «Работа с базой данных» | 📋 Запланирован | — |
+| EPIC-020 | Transport exchange между установками (Механизм 2) | ✅ Завершён (020-A…020-F) | [#98](https://github.com/svblab/HR-deck/pull/98), [#103](https://github.com/svblab/HR-deck/pull/103), [#104](https://github.com/svblab/HR-deck/pull/104), [#105](https://github.com/svblab/HR-deck/pull/105), [#109](https://github.com/svblab/HR-deck/pull/109), [#110](https://github.com/svblab/HR-deck/pull/110) |
+| EPIC-021 | Единый диалог «Работа с базой данных» | 🚧 В процессе (каркас + резервное копирование + конвертация готовы; «Импорт данных» ждёт UI EPIC-020) | [#113](https://github.com/svblab/HR-deck/pull/113) |
 | EPIC-024 | Опциональные уровни оргструктуры | ✅ Завершён (2026-09-14) | — |
 | EPIC-025 | Обязательность департамента/отдела по должности | ✅ Завершён (2026-09-15) | — |
 | EPIC-026 | Стабильная идентичность и синхронизация справочников | ✅ Завершён (ADR-0010) | [#69](https://github.com/svblab/HR-deck/pull/69), [#72](https://github.com/svblab/HR-deck/pull/72), [#99](https://github.com/svblab/HR-deck/pull/99) |
@@ -597,27 +597,27 @@ TransportKeyStore / transport-key lifecycle — **EPIC-019**, не дублир�
 
 EPIC-020 разбивается на implementation slices (отдельные PR / DoD):
 
-- **020-A — Формат пакета.** Сериализация `TransportPackage`: untrusted
+- ✅ **020-A — Формат пакета.** Сериализация `TransportPackage`: untrusted
   routing metadata + signature + envelope + ciphertext payload; без
   business-import logic.
-- **020-B — Export (per direction).** Выбор recipient trust, фильтр периода,
+- ✅ **020-B — Export (per direction).** Выбор recipient trust, фильтр периода,
   генерация `SK_n`/`WK_n`, первый пакет направления vs последующие,
   increment direction `sequence`, audit log.
-- **020-C — Crypto receive.** Parse → `key_id` lookup → decrypt envelope →
+- ✅ **020-C — Crypto receive.** Parse → `key_id` lookup → decrypt envelope →
   verify signing identity → decrypt payload; **без** business DB writes.
-- **020-D — Business validation & confirmation gate.** Pre-DB validation всего
+- ✅ **020-D — Business validation & confirmation gate.** Pre-DB validation всего
   payload: **`external_id`+ФИО only** (ADR-0010 / бывш. ADR-0006 boundary —
   no fuzzy reconcile,
   no auto conflict resolve); whitelist, status plans; freshness/replay
   classification; **любая** invalid строка или `ConfirmationRequiredError` →
   **весь пакет** rejected или pending — **без** DB writes и **без**
   transport advance.
-- **020-E — Atomic apply (orchestrator-owned transaction).** Import
+- ✅ **020-E — Atomic apply (orchestrator-owned transaction).** Import
   orchestrator владеет **единственной** DB transaction: full package business
   changes + `StatusHistoryService` (no duplicate on replay) + package/replay
   record + transport-state advance (`WK_{n+1}`, sequence) + audit;
   crypto/validation/confirmation **до** `BEGIN`; **no UI inside** transaction.
-- **020-F — Replay & cleanup.** Exact replay `package_id` — idempotent no-op
+- ✅ **020-F — Replay & cleanup.** Exact replay `package_id` — idempotent no-op
   для business/status/transport; optional replay audit; best-effort delete
   source file after first successful commit only.
 
