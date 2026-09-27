@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 ENTITY_TRANSPORT = "transport"
-TRANSPORT_PROTOCOL_VERSION = 1
+TRANSPORT_PROTOCOL_VERSION = 2
 # Cleartext routing envelope_key_id when the envelope uses bootstrap wrap (package #1).
 BOOTSTRAP_ENVELOPE_KEY_ID = "bootstrap"
 
@@ -93,6 +93,7 @@ class WkKeyRecord:
     key_id: str
     direction_id: int
     sequence_established: int | None
+    generation_established: int | None
     wk_key_material: bytes
     wk_role: WkRole
     predecessor_key_id: str | None
@@ -104,6 +105,7 @@ class DirectionState:
     sender_installation_id: str
     recipient_installation_id: str
     peer_trust_id: int
+    generation: int
     accepted_sequence: int
     current_wk_id: int | None
     direction_status: DirectionStatus
@@ -127,6 +129,7 @@ class PackageRecord:
     id: int
     direction_id: int
     package_id: str
+    generation: int
     sequence: int
     classification: PackageClassification
     envelope_key_id: str | None
@@ -142,6 +145,7 @@ class RoutingMetadata:
     """
 
     protocol_version: int
+    generation: int
     sender_installation_id: str
     recipient_installation_id: str
     envelope_key_id: str
