@@ -18,6 +18,16 @@ personnel-availability      # или: python -m ui
 
 См. `docs/ANCHOR_CORE.md` §5: `src/{domain,data,services,ui,reports}`, `migrations/`, `tests/`, `packaging/`.
 
+## E2E mechanics (dual-peer, headless)
+
+Service-layer validation of transport exchange, backup/restore, one corrupted
+package, EPIC-018 conversion, and EPIC-007 «requires attention» between two
+isolated peers. See [`tests/e2e_mechanics/README.md`](tests/e2e_mechanics/README.md).
+
+```bash
+docker compose -f tests/e2e_mechanics/docker-compose.yml run --rm e2e-runner
+```
+
 ## Документация
 
 Порядок чтения — `docs/README.md`. Текущий эпик — `docs/ROADMAP.md` (EPIC-001).

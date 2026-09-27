@@ -1,0 +1,29 @@
+# Dual-peer E2E mechanics (Transport + Conversion + Requires-attention)
+# Usage:
+#   docker compose -f tests/e2e_mechanics/docker-compose.yml run --rm e2e-runner
+# Optional shorter smoke:
+#   docker compose -f tests/e2e_mechanics/docker-compose.yml run --rm e2e-runner \
+#     --duration-seconds 120
+
+services:
+  e2e-runner:
+    build:
+      context: ../..
+      dockerfile: tests/e2e_mechanics/Dockerfile
+    volumes:
+      - e2e_peer_a:/e2e-data/peer-a
+      - e2e_peer_b:/e2e-data/peer-b
+      - e2e_exchange:/e2e-data/exchange
+      - e2e_work:/e2e-data/work
+      - e2e_report:/e2e-data/report
+    # Packages travel only via the shared e2e_exchange volume (never app networking).
+    network_mode: none
+    environment:
+      QT_QPA_PLATFORM: offscreen
+
+volumes:
+  e2e_peer_a:
+  e2e_peer_b:
+  e2e_exchange:
+  e2e_work:
+  e2e_report:
