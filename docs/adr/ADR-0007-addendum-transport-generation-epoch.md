@@ -1,6 +1,6 @@
 # ADR-0007 Addendum — Transport generation (epoch) per direction
 
-Статус: Предложено  
+Статус: Принято  
 Дата: 2026-09-27  
 Автор: Cursor (draft from Pre-021 transport gate)  
 Затронутый EPIC: EPIC-019, EPIC-020; prerequisite for EPIC-021 import UI  
@@ -110,5 +110,5 @@ freshness из этого addendum.
 
 ## Статус принятия
 
-**Предложено.** Реализация в ветке `epic/EPIC-020-transport-generation-epoch`
-согласована с этим текстом; финальный протокол — после принятия человеком.
+**Принято** 2026-09-27 (человек).  
+Реализация уже в master (PR #115, 8055425). Протокол `(generation, sequence)` считается финальным. EPIC-021 import UI может строиться на этом контракте.
