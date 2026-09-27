@@ -53,6 +53,7 @@ _OBSERVER = frozenset(
     {
         Permission.VIEW_EMPLOYEES,
         Permission.VIEW_STATUSES,
+        Permission.MANAGE_STATUSES,  # ADR-0015: точечное отклонение от ТЗ §4.1
         Permission.VIEW_DIRECTORIES,
         Permission.VIEW_STANDARD_REPORTS,
         Permission.USE_ACTIVE_REPORT_TEMPLATES,
