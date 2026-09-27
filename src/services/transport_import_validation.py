@@ -135,14 +135,15 @@ class TransportImportValidationService:
             return FreshnessClass.STALE
 
         direction = self._store.get_direction(decrypted.direction_id)
-        max_row = self._conn.execute(
-            "SELECT COALESCE(MAX(sequence), 0) FROM transport_package_records"
-            " WHERE direction_id = ? AND classification = ?",
-            (decrypted.direction_id, PackageClassification.ACCEPTED.value),
-        ).fetchone()
-        max_seq = int(max_row[0]) if max_row is not None else 0
-        ceiling = max(direction.accepted_sequence, max_seq)
-        if decrypted.sequence <= ceiling:
+        if decrypted.generation < direction.generation:
+            return FreshnessClass.STALE
+        if decrypted.generation > direction.generation:
+            return FreshnessClass.STALE
+        max_seq = self._store._repo.max_accepted_sequence(
+            decrypted.direction_id, decrypted.generation
+        )
+        expected = max(direction.accepted_sequence, max_seq) + 1
+        if decrypted.sequence != expected:
             return FreshnessClass.STALE
         return FreshnessClass.NEW
 
