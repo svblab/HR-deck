@@ -23,6 +23,7 @@ from services.transport_canonical import (
 def _sample_routing_metadata() -> RoutingMetadata:
     return RoutingMetadata(
         protocol_version=1,
+        generation=0,
         sender_installation_id="sender-install",
         recipient_installation_id="recipient-install",
         envelope_key_id="wk-42",
@@ -67,6 +68,7 @@ def test_transport_package_round_trip() -> None:
 def test_parse_routing_metadata_rejects_bad_magic() -> None:
     data = build_routing_metadata_bytes(
         protocol_version=1,
+        generation=0,
         sender_installation_id="s",
         recipient_installation_id="r",
         envelope_key_id="k",
@@ -81,6 +83,7 @@ def test_parse_routing_metadata_rejects_bad_magic() -> None:
 def test_parse_routing_metadata_rejects_truncated_bytes() -> None:
     data = build_routing_metadata_bytes(
         protocol_version=1,
+        generation=0,
         sender_installation_id="s",
         recipient_installation_id="r",
         envelope_key_id="k",
@@ -96,6 +99,7 @@ def test_parse_routing_metadata_rejects_trailing_garbage() -> None:
     data = (
         build_routing_metadata_bytes(
             protocol_version=1,
+            generation=0,
             sender_installation_id="s",
             recipient_installation_id="r",
             envelope_key_id="k",

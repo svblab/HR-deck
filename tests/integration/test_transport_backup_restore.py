@@ -90,6 +90,7 @@ def _seed_transport_state(conn: Connection) -> dict[str, Any]:
     store.record_package_acceptance(
         direction_id=direction.id,
         package_id="pkg-transport-backup-1",
+        generation=0,
         sequence=1,
         envelope_key_id="wk-envelope-1",
         next_wk=next_wk,

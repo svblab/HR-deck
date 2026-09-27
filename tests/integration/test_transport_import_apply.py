@@ -72,6 +72,7 @@ def _decrypted(
         sender_installation_id="sender",
         recipient_installation_id="recipient",
         direction_id=direction_id,
+        generation=0,
         sequence=sequence,
         package_id=package_id,
         envelope_key_id="bootstrap",
