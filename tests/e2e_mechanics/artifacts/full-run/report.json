@@ -1,0 +1,30 @@
+{
+  "seed": 20260927,
+  "duration_seconds_target": 1440,
+  "duration_seconds_actual": 1446.3264753479993,
+  "started_at": "2026-09-27T20:21:43Z",
+  "finished_at": "2026-09-27T20:45:50Z",
+  "success": true,
+  "failure_message": null,
+  "exports_a_to_b": 253,
+  "exports_b_to_a": 252,
+  "imports_a_to_b_ok": 253,
+  "imports_b_to_a_ok": 252,
+  "corrupted_package_rejections": 1,
+  "conversion_sessions": 261,
+  "conversion_rows_saved": 768,
+  "conversion_rows_skipped": 261,
+  "conversion_fio_collisions_observed": 261,
+  "clarification_raised": 163,
+  "clarification_cleared": 163,
+  "employees_created": 1939,
+  "status_assignments": 501,
+  "restore_verified": true,
+  "notes": [
+    "initial backup A=personnel-20260915T090000Z.db B=personnel-20260915T090000Z.db",
+    "corrupt reject: TransportPackageMalformedError: transport package: truncated field payload (no product rejection audit row; assert unchanged snapshots)",
+    "A restore matches post-bootstrap snapshot",
+    "B restore matches post-bootstrap snapshot",
+    "ticks=501"
+  ]
+}
