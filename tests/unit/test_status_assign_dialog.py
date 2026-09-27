@@ -74,20 +74,34 @@ def test_assign_office_after_expired_vacation(qtbot, tmp_path: Path) -> None:
     conn.close()
 
 
-def test_observer_cannot_save(qtbot, tmp_path: Path) -> None:
+def test_observer_can_save(qtbot, tmp_path: Path) -> None:
+    """ADR-0015: observer with MANAGE_STATUSES can assign via dialog."""
     db, conn, admin, history, statuses, ids, clock = _open(tmp_path)
     obs = _observer(conn, admin, db, clock)
+    obs_history = StatusHistoryService(conn, obs, clock=clock)
     dialog = StatusAssignDialog(
-        StatusHistoryService(conn, obs, clock=clock),
+        obs_history,
         AvailabilityStatusService(conn, obs, clock=clock),
         obs,
         employee_id=ids["employee_a_id"],
         employee_name="A",
     )
     qtbot.addWidget(dialog)
+    status_combo = dialog.findChild(QComboBox, "statusAssignStatus")
+    start = dialog.findChild(QDateEdit, "statusAssignStart")
     save = dialog.findChild(QPushButton, "statusAssignSaveBtn")
-    assert save is not None
-    assert not save.isEnabled()
+    assert status_combo is not None and start is not None and save is not None
+    assert save.isEnabled()
+
+    idx = status_combo.findData(1)
+    assert idx >= 0
+    status_combo.setCurrentIndex(idx)
+    start.setDate(QDate.fromString("2026-08-15", "yyyy-MM-dd"))
+    qtbot.mouseClick(save, Qt.MouseButton.LeftButton)
+
+    assert dialog.result() == dialog.DialogCode.Accepted
+    current = obs_history.current_status(ids["employee_a_id"], as_of="2026-08-15")
+    assert current is not None and current.status_id == 1
     conn.close()
 
 

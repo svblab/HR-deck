@@ -27,10 +27,19 @@ from domain.permissions import Permission, RoleCode, has_permission, permissions
         (RoleCode.HR_EMPLOYEE, Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS, False),
         (RoleCode.OBSERVER, Permission.VIEW_EMPLOYEES, True),
         (RoleCode.OBSERVER, Permission.VIEW_STANDARD_REPORTS, True),
+        (RoleCode.OBSERVER, Permission.VIEW_STATUSES, True),
+        (RoleCode.OBSERVER, Permission.MANAGE_STATUSES, True),  # ADR-0015
         (RoleCode.OBSERVER, Permission.MANAGE_EMPLOYEES, False),
+        (RoleCode.OBSERVER, Permission.MANAGE_DIRECTORIES, False),
+        (RoleCode.OBSERVER, Permission.MANAGE_ACCOUNTS, False),
+        (RoleCode.OBSERVER, Permission.MANAGE_SECURITY_SETTINGS, False),
+        (RoleCode.OBSERVER, Permission.MANAGE_ENCRYPTION_KEYS, False),
+        (RoleCode.OBSERVER, Permission.MANAGE_REPORT_TEMPLATES, False),
         (RoleCode.OBSERVER, Permission.IMPORT_EXPORT, False),
         (RoleCode.OBSERVER, Permission.CREATE_BACKUP, False),
-        (RoleCode.OBSERVER, Permission.MANAGE_ACCOUNTS, False),
+        (RoleCode.OBSERVER, Permission.RESTORE_BACKUP, False),
+        (RoleCode.OBSERVER, Permission.VIEW_SENSITIVE_EMPLOYEE_FIELDS, False),
+        (RoleCode.OBSERVER, Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS, False),
     ],
 )
 def test_role_permission_matrix(role: RoleCode, permission: Permission, allowed: bool) -> None:
@@ -39,6 +48,18 @@ def test_role_permission_matrix(role: RoleCode, permission: Permission, allowed:
 
 def test_administrator_has_all_permissions() -> None:
     assert permissions_for(RoleCode.ADMINISTRATOR) == frozenset(Permission)
+
+
+def test_observer_manage_statuses_only_among_manage() -> None:
+    """ADR-0015: observer gets MANAGE_STATUSES; no other MANAGE_*."""
+    perms = permissions_for(RoleCode.OBSERVER)
+    assert Permission.MANAGE_STATUSES in perms
+    other_manage = {
+        p
+        for p in Permission
+        if p.value.startswith("manage_") and p is not Permission.MANAGE_STATUSES
+    }
+    assert perms.isdisjoint(other_manage)
 
 
 def test_sensitive_not_implied_by_hr_employee() -> None:

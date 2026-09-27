@@ -135,36 +135,15 @@ def _open_card_from_popup() -> None:
     raise AssertionError("EmployeePopupDialog not visible")
 
 
-def _assert_view_only_on_popup_then_card() -> None:
-    for widget in QApplication.topLevelWidgets():
-        if isinstance(widget, EmployeePopupDialog) and widget.isVisible():
-            assert widget.findChild(QAbstractButton, "assignStatusBtn") is None
-            card_btn = widget.findChild(QAbstractButton, "openEmployeeCard")
-            assert card_btn is not None
-
-            def _check_card() -> None:
-                for inner in QApplication.topLevelWidgets():
-                    if isinstance(inner, EmployeeCardDialog) and inner.isVisible():
-                        assert (
-                            inner.findChild(QPushButton, "assignStatusFromCardBtn")
-                            is None
-                        )
-                        inner.reject()
-                        return
-                raise AssertionError("EmployeeCardDialog not visible")
-
-            QTimer.singleShot(0, _check_card)
-            card_btn.click()
-            return
-    raise AssertionError("EmployeePopupDialog not visible")
-
-
 @pytest.mark.acceptance
-@pytest.mark.parametrize("role", [RoleCode.ADMINISTRATOR, RoleCode.HR_EMPLOYEE])
+@pytest.mark.parametrize(
+    "role",
+    [RoleCode.ADMINISTRATOR, RoleCode.HR_EMPLOYEE, RoleCode.OBSERVER],
+)
 def test_search_open_card_assign_status_updates_roster(
     qtbot, tmp_path: Path, role: RoleCode
 ) -> None:
-    """ТЗ §11 / TESTING §5.2 item 2: поиск → карточка → смена статуса (Admin/HR)."""
+    """ТЗ §11 / TESTING §5.2 item 2 + ADR-0015: поиск → карточка → смена статуса."""
     window, conn, _session, ids = _open_window(tmp_path, role=role)
     qtbot.addWidget(window)
     emp_id = ids["employee_a_id"]
@@ -190,18 +169,40 @@ def test_search_open_card_assign_status_updates_roster(
 
 
 @pytest.mark.acceptance
-def test_observer_search_and_card_are_view_only(qtbot, tmp_path: Path) -> None:
-    """ТЗ §11 / TESTING §5.2 item 2: Наблюдатель — поиск и карточка без назначения."""
-    window, conn, _session, ids = _open_window(tmp_path, role=RoleCode.OBSERVER)
+def test_observer_card_fields_remain_view_only(qtbot, tmp_path: Path) -> None:
+    """ADR-0015: observer may assign status but still cannot edit employee card."""
+    window, conn, session, ids = _open_window(tmp_path, role=RoleCode.OBSERVER)
     qtbot.addWidget(window)
     emp_id = ids["employee_a_id"]
-    panel, card = _search_and_find_card(qtbot, window, emp_id)
+    panel = window.findChild(RosterPanel)
+    assert panel is not None
+    assert panel._employees is not None
+    assert panel._directories is not None
 
-    QTimer.singleShot(0, _assert_view_only_on_popup_then_card)
-    card.clicked.emit(emp_id)
+    row = next(r for r in panel._all_rows if r.employee_id == emp_id)
+    popup = EmployeePopupDialog(
+        row,
+        [],
+        session=session,
+        status_history=panel._status_history,
+        availability_statuses=panel._availability_statuses,
+    )
+    qtbot.addWidget(popup)
+    popup.show()
+    assert popup.findChild(QAbstractButton, "assignStatusBtn") is not None
 
-    still = next(r for r in panel._all_rows if r.employee_id == emp_id)
-    assert still.status_id == 1
+    card = EmployeeCardDialog(
+        panel._employees,
+        panel._directories,
+        session,
+        employee_id=emp_id,
+        status_history=panel._status_history,
+        availability_statuses=panel._availability_statuses,
+    )
+    qtbot.addWidget(card)
+    card.show()
+    assert card.findChild(QPushButton, "assignStatusFromCardBtn") is not None
+    assert card.findChild(QPushButton, "saveEmployeeBtn") is None
 
     window.close()
     conn.close()
