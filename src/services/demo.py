@@ -2,13 +2,18 @@
 
 Не затрагивает рабочий каталог данных пользователя.
 Учётные данные только в demo-БД: login=demo / password=demo.
+
+Даты статусов привязаны к date.today() (UTC-календарь), чтобы доска
+оставалась согласованной в любой день показа. При каждом запуске --demo
+база в demo-каталоге пересоздаётся (force reset).
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
 import uuid
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from data.db import Connection, table_columns
@@ -23,9 +28,15 @@ logger = logging.getLogger(__name__)
 DEMO_LOGIN = "demo"
 DEMO_PASSWORD = "demo"
 DEMO_COMPANY_NAME = "Демо-компания (синтетика)"
+DEMO_EMPLOYEE_COUNT = 18
 
-_NOW = "2026-09-28T09:00:00Z"
-_TODAY = date(2026, 9, 28)
+
+def _utc_now_iso() -> str:
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _today() -> date:
+    return datetime.now(UTC).date()
 
 
 def _new_external_id() -> str:
@@ -36,38 +47,38 @@ def _has_external(conn: Connection, table: str) -> bool:
     return "external_id" in table_columns(conn, table)
 
 
-def _insert_branch(conn: Connection, *, branch_id: int, name: str) -> None:
+def _insert_branch(conn: Connection, *, branch_id: int, name: str, now: str) -> None:
     if _has_external(conn, "branches"):
         conn.execute(
             "INSERT INTO branches ("
             " id, external_id, name, is_archived, created_at, updated_at"
             ") VALUES (?, ?, ?, 0, ?, ?)",
-            (branch_id, _new_external_id(), name, _NOW, _NOW),
+            (branch_id, _new_external_id(), name, now, now),
         )
     else:
         conn.execute(
             "INSERT INTO branches (id, name, is_archived, created_at, updated_at) "
             "VALUES (?, ?, 0, ?, ?)",
-            (branch_id, name, _NOW, _NOW),
+            (branch_id, name, now, now),
         )
 
 
 def _insert_department(
-    conn: Connection, *, dept_id: int, branch_id: int, name: str
+    conn: Connection, *, dept_id: int, branch_id: int, name: str, now: str
 ) -> None:
     if _has_external(conn, "departments"):
         conn.execute(
             "INSERT INTO departments ("
             " id, external_id, branch_id, name, is_archived, created_at, updated_at"
             ") VALUES (?, ?, ?, ?, 0, ?, ?)",
-            (dept_id, _new_external_id(), branch_id, name, _NOW, _NOW),
+            (dept_id, _new_external_id(), branch_id, name, now, now),
         )
     else:
         conn.execute(
             "INSERT INTO departments ("
             " id, branch_id, name, is_archived, created_at, updated_at"
             ") VALUES (?, ?, ?, 0, ?, ?)",
-            (dept_id, branch_id, name, _NOW, _NOW),
+            (dept_id, branch_id, name, now, now),
         )
 
 
@@ -78,6 +89,7 @@ def _insert_division(
     branch_id: int,
     department_id: int | None,
     name: str,
+    now: str,
 ) -> None:
     cols = table_columns(conn, "divisions")
     has_ext = "external_id" in cols
@@ -88,34 +100,26 @@ def _insert_division(
             " id, external_id, branch_id, department_id, name, is_archived,"
             " created_at, updated_at"
             ") VALUES (?, ?, ?, ?, ?, 0, ?, ?)",
-            (
-                division_id,
-                _new_external_id(),
-                branch_id,
-                department_id,
-                name,
-                _NOW,
-                _NOW,
-            ),
+            (division_id, _new_external_id(), branch_id, department_id, name, now, now),
         )
     elif has_branch:
         conn.execute(
             "INSERT INTO divisions ("
             " id, branch_id, department_id, name, is_archived, created_at, updated_at"
             ") VALUES (?, ?, ?, ?, 0, ?, ?)",
-            (division_id, branch_id, department_id, name, _NOW, _NOW),
+            (division_id, branch_id, department_id, name, now, now),
         )
     else:
         conn.execute(
             "INSERT INTO divisions ("
             " id, department_id, name, is_archived, created_at, updated_at"
             ") VALUES (?, ?, ?, 0, ?, ?)",
-            (division_id, department_id, name, _NOW, _NOW),
+            (division_id, department_id, name, now, now),
         )
 
 
 def _insert_position(
-    conn: Connection, *, position_id: int, branch_id: int | None, name: str
+    conn: Connection, *, position_id: int, branch_id: int | None, name: str, now: str
 ) -> None:
     cols = table_columns(conn, "positions")
     has_ext = "external_id" in cols
@@ -125,20 +129,20 @@ def _insert_position(
             "INSERT INTO positions ("
             " id, external_id, branch_id, name, is_archived, created_at, updated_at"
             ") VALUES (?, ?, ?, ?, 0, ?, ?)",
-            (position_id, _new_external_id(), branch_id, name, _NOW, _NOW),
+            (position_id, _new_external_id(), branch_id, name, now, now),
         )
     elif has_branch:
         conn.execute(
             "INSERT INTO positions ("
             " id, branch_id, name, is_archived, created_at, updated_at"
             ") VALUES (?, ?, ?, 0, ?, ?)",
-            (position_id, branch_id, name, _NOW, _NOW),
+            (position_id, branch_id, name, now, now),
         )
     else:
         conn.execute(
             "INSERT INTO positions (id, name, is_archived, created_at, updated_at) "
             "VALUES (?, ?, 0, ?, ?)",
-            (position_id, name, _NOW, _NOW),
+            (position_id, name, now, now),
         )
 
 
@@ -153,7 +157,8 @@ def _insert_employee(
     division_id: int | None,
     employment_type_id: int,
     hire_date: str,
-    note: str = "",
+    note: str,
+    now: str,
 ) -> None:
     cols = table_columns(conn, "employees")
     has_ext = "external_id" in cols
@@ -178,8 +183,8 @@ def _insert_employee(
                 f"+7-900-100-{emp_id:02d}-00",
                 f"г. Тестовск, ул. Демо, {emp_id}",
                 f"000-000-000 {emp_id:02d}",
-                _NOW,
-                _NOW,
+                now,
+                now,
             ),
         )
     else:
@@ -202,43 +207,45 @@ def _insert_employee(
                 f"+7-900-100-{emp_id:02d}-00",
                 f"г. Тестовск, ул. Демо, {emp_id}",
                 f"000-000-000 {emp_id:02d}",
-                _NOW,
-                _NOW,
+                now,
+                now,
             ),
         )
 
 
-def seed_demo_org(conn: Connection) -> dict[str, int]:
-    """
-    Заполнить оргструктуру и ~18 сотрудников с разными статусами.
+def seed_demo_org(conn: Connection, *, now: str | None = None) -> dict[str, int]:
+    """Заполнить оргструктуру и 18 сотрудников. Вызывать после миграций."""
+    now = now or _utc_now_iso()
+    _insert_branch(conn, branch_id=1, name="Центральный офис", now=now)
+    _insert_branch(conn, branch_id=2, name="Филиал Север", now=now)
 
-    Возвращает ключевые id. Вызывать после миграций.
-    """
-    _insert_branch(conn, branch_id=1, name="Центральный офис")
-    _insert_branch(conn, branch_id=2, name="Филиал Север")
-
-    _insert_department(conn, dept_id=1, branch_id=1, name="Департамент разработки")
-    _insert_department(conn, dept_id=2, branch_id=1, name="Департамент продаж")
-    _insert_department(conn, dept_id=3, branch_id=2, name="Производство")
+    _insert_department(conn, dept_id=1, branch_id=1, name="Департамент разработки", now=now)
+    _insert_department(conn, dept_id=2, branch_id=1, name="Департамент продаж", now=now)
+    _insert_department(conn, dept_id=3, branch_id=2, name="Производство", now=now)
 
     _insert_division(
-        conn, division_id=1, branch_id=1, department_id=1, name="Отдел платформы"
+        conn, division_id=1, branch_id=1, department_id=1, name="Отдел платформы", now=now
     )
     _insert_division(
-        conn, division_id=2, branch_id=1, department_id=1, name="Отдел QA"
+        conn, division_id=2, branch_id=1, department_id=1, name="Отдел QA", now=now
     )
     _insert_division(
-        conn, division_id=3, branch_id=1, department_id=2, name="Отдел ключевых клиентов"
+        conn,
+        division_id=3,
+        branch_id=1,
+        department_id=2,
+        name="Отдел ключевых клиентов",
+        now=now,
     )
     _insert_division(
-        conn, division_id=4, branch_id=2, department_id=3, name="Цех сборки"
+        conn, division_id=4, branch_id=2, department_id=3, name="Цех сборки", now=now
     )
 
-    _insert_position(conn, position_id=1, branch_id=1, name="Инженер")
-    _insert_position(conn, position_id=2, branch_id=1, name="Аналитик")
-    _insert_position(conn, position_id=3, branch_id=1, name="Менеджер по продажам")
-    _insert_position(conn, position_id=4, branch_id=2, name="Мастер смены")
-    _insert_position(conn, position_id=5, branch_id=1, name="Руководитель отдела")
+    _insert_position(conn, position_id=1, branch_id=1, name="Инженер", now=now)
+    _insert_position(conn, position_id=2, branch_id=1, name="Аналитик", now=now)
+    _insert_position(conn, position_id=3, branch_id=1, name="Менеджер по продажам", now=now)
+    _insert_position(conn, position_id=4, branch_id=2, name="Мастер смены", now=now)
+    _insert_position(conn, position_id=5, branch_id=1, name="Руководитель отдела", now=now)
 
     people: list[tuple] = [
         (1, "Иванов Иван Иванович", 1, 1, 1, 1, 1, "2023-03-01", ""),
@@ -273,6 +280,7 @@ def seed_demo_org(conn: Connection) -> dict[str, int]:
             employment_type_id=row[6],
             hire_date=row[7],
             note=row[8],
+            now=now,
         )
 
     conn.commit()
@@ -283,33 +291,46 @@ def seed_demo_org(conn: Connection) -> dict[str, int]:
     }
 
 
-def _assign_demo_statuses(conn: Connection, session: SessionState) -> None:
-    """Назначить текущие и плановые статусы через сервис (с аудитом)."""
-    svc = StatusHistoryService(conn, session, clock=lambda: _NOW)
+def _assign_demo_statuses(
+    conn: Connection,
+    session: SessionState,
+    *,
+    today: date | None = None,
+    now: str | None = None,
+) -> None:
+    """Назначить статусы относительно «сегодня» (UTC date)."""
+    today = today or _today()
+    now = now or _utc_now_iso()
+    svc = StatusHistoryService(conn, session, clock=lambda: now)
 
-    # status_id: 1 office, 2 remote, 3 trip, 4 sick, 5 vacation, 6 day_off
-    assignments: list[tuple[int, int, str, str | None]] = [
-        (1, 1, "2026-09-01", None),
-        (2, 2, "2026-09-01", None),
-        (3, 5, "2026-09-20", "2026-10-05"),
-        (4, 1, "2026-08-15", None),
-        (5, 3, "2026-09-25", "2026-10-02"),
-        (6, 1, "2026-09-01", None),
-        (7, 1, "2026-09-01", None),
-        (8, 4, "2026-09-22", "2026-09-30"),
-        (9, 2, "2026-09-10", None),
-        (10, 1, "2026-09-01", None),
-        (11, 1, "2026-09-01", None),
-        (12, 6, "2026-09-27", "2026-09-27"),
-        (13, 1, "2026-09-01", None),
-        (14, 5, "2026-09-15", "2026-09-26"),
-        (15, 1, "2026-07-01", "2026-09-20"),
-        (16, 1, "2026-09-01", None),
-        (17, 2, "2026-09-01", None),
-        (18, 1, "2026-09-01", None),
+    # (emp_id, status_id, start_offset_days, end_offset_days | None)
+    # offset < 0 — в прошлом; end None — открытый период
+    # status: 1 office, 2 remote, 3 trip, 4 sick, 5 vacation, 6 day_off
+    plan: list[tuple[int, int, int, int | None]] = [
+        (1, 1, -27, None),  # office open
+        (2, 2, -27, None),  # remote
+        (3, 5, -8, 7),  # vacation spanning today
+        (4, 1, -44, None),
+        (5, 3, -3, 4),  # trip
+        (6, 1, -27, None),
+        (7, 1, -27, None),
+        (8, 4, -6, 2),  # sick
+        (9, 2, -18, None),
+        (10, 1, -27, None),
+        (11, 1, -27, None),
+        (12, 6, -1, -1),  # day_off yesterday → clarification
+        (13, 1, -27, None),
+        (14, 5, -13, -2),  # vacation ended → clarification
+        (15, 1, -89, -8),  # office ended → clarification
+        (16, 1, -27, None),
+        (17, 2, -27, None),
+        (18, 1, -27, None),
     ]
 
-    for emp_id, status_id, start, end in assignments:
+    errors: list[str] = []
+    for emp_id, status_id, start_off, end_off in plan:
+        start = (today + timedelta(days=start_off)).isoformat()
+        end = None if end_off is None else (today + timedelta(days=end_off)).isoformat()
         try:
             svc.assign_status(
                 emp_id,
@@ -319,31 +340,64 @@ def _assign_demo_statuses(conn: Connection, session: SessionState) -> None:
                 confirmed=True,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.warning("demo status assign emp=%s failed: %s", emp_id, exc)
+            msg = f"emp={emp_id} status={status_id}: {exc}"
+            logger.error("demo status assign failed: %s", msg)
+            errors.append(msg)
 
+    # Плановый будущий отпуск Иванова
     try:
         svc.assign_status(
             1,
             status_id=5,
-            start_date=(_TODAY + timedelta(days=14)).isoformat(),
-            end_date=(_TODAY + timedelta(days=28)).isoformat(),
+            start_date=(today + timedelta(days=14)).isoformat(),
+            end_date=(today + timedelta(days=28)).isoformat(),
             note="плановый отпуск",
             confirmed=True,
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("demo future status failed: %s", exc)
+        msg = f"future vacation emp=1: {exc}"
+        logger.error("demo future status failed: %s", msg)
+        errors.append(msg)
+
+    if errors:
+        raise RuntimeError(
+            "demo status seed failed (" + str(len(errors)) + "): " + "; ".join(errors[:3])
+        )
 
 
-def prepare_demo_database(db_path: Path) -> tuple[Connection, SessionState]:
+def reset_demo_database(db_path: Path) -> None:
+    """Удалить demo-БД и keywrap, чтобы следующий prepare собрал seed заново."""
+    path = Path(db_path)
+    from data.keywrap import keywrap_path_for
+
+    wrap = keywrap_path_for(path)
+    for p in (path, wrap):
+        if p.is_file():
+            p.unlink()
+            logger.info("demo reset removed %s", p)
+
+
+def prepare_demo_database(
+    db_path: Path,
+    *,
+    force_reset: bool = True,
+) -> tuple[Connection, SessionState]:
     """
-    Подготовить demo-БД: bootstrap (если нужно) + seed + статусы.
+    Подготовить demo-БД: bootstrap + seed + статусы.
 
-    Возвращает открытую (conn, session) уже залогиненную как demo-админ.
+    По умолчанию force_reset=True — каждый запуск --demo пересоздаёт базу,
+    чтобы даты статусов совпадали с «сегодня» и не оставался битый seed.
     """
     path = Path(db_path)
     ensure_user_data_dirs(path.parent)
 
-    bootstrap = BootstrapService(clock=lambda: _NOW)
+    if force_reset:
+        reset_demo_database(path)
+
+    now = _utc_now_iso()
+    today = _today()
+
+    bootstrap = BootstrapService(clock=lambda: now)
     if bootstrap.needs_setup(path):
         conn, session, _recovery = bootstrap.initial_administrator_setup(
             db_path=path,
@@ -354,7 +408,7 @@ def prepare_demo_database(db_path: Path) -> tuple[Connection, SessionState]:
     else:
         from services.authentication import AuthenticationService
 
-        auth = AuthenticationService(clock=lambda: _NOW)
+        auth = AuthenticationService(clock=lambda: now)
         conn, session = auth.login(
             db_path=path,
             login=DEMO_LOGIN,
@@ -362,18 +416,17 @@ def prepare_demo_database(db_path: Path) -> tuple[Connection, SessionState]:
         )
         logger.info("demo login to existing DB")
 
+    # Без автоблокировки на презентации
+    session.inactivity_timeout_enabled = False
+    session.inactivity_timeout_seconds = 0
+
     count = conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
     if count == 0:
-        seed_demo_org(conn)
-        _assign_demo_statuses(conn, session)
-        try:
-            mgr = AccountManagementService(
-                conn, session, db_path=path, clock=lambda: _NOW
-            )
-            mgr.update_company_profile(company_name=DEMO_COMPANY_NAME)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("demo company profile: %s", exc)
-        logger.info("demo org seeded")
+        seed_demo_org(conn, now=now)
+        _assign_demo_statuses(conn, session, today=today, now=now)
+        mgr = AccountManagementService(conn, session, db_path=path, clock=lambda: now)
+        mgr.update_company_profile(company_name=DEMO_COMPANY_NAME)
+        logger.info("demo org seeded: %s employees as of %s", DEMO_EMPLOYEE_COUNT, today)
     else:
         logger.info("demo DB already has %s employees — skip seed", count)
 
