@@ -23,6 +23,7 @@ from services.session import SessionState
 from services.status_history import StatusHistoryService
 from ui.backup_dialog import BackupOperationsWidget
 from ui.conversion_wizard_dialog import run_conversion_wizard_flow
+from ui.transport_import_dialog import TransportImportPanel
 
 OnRestored = Callable[[Connection], None]
 OnDataChanged = Callable[[], None]
@@ -87,7 +88,7 @@ class DatabaseOperationsDialog(QDialog):
             )
         if self._tabs_visibility["import"]:
             self._tabs.addTab(
-                self._build_import_placeholder_tab(),
+                self._build_import_tab(),
                 "Импорт данных",
             )
         if self._tabs_visibility["backup"]:
@@ -127,17 +128,18 @@ class DatabaseOperationsDialog(QDialog):
         tab_layout.addStretch(1)
         return tab
 
-    def _build_import_placeholder_tab(self) -> QWidget:
+    def _build_import_tab(self) -> QWidget:
         tab = QWidget(objectName="databaseOperationsImportTab")
         tab_layout = QVBoxLayout(tab)
         tab_layout.addWidget(
-            QLabel(
-                "Приём transport-пакетов между установками (EPIC-020) будет доступен "
-                "в следующих срезах. Сервисный слой уже на месте; UI подтверждения "
-                "пакета здесь пока не реализован."
+            TransportImportPanel(
+                self._conn,
+                self._session,
+                self._employees,
+                on_data_changed=self._on_data_changed,
+                parent=tab,
             )
         )
-        tab_layout.addStretch(1)
         return tab
 
     def _start_conversion(self) -> None:
