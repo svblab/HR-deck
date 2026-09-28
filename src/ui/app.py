@@ -8,7 +8,8 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QWidget
 
 from data.backup_io import DatabaseCorruptionError, prepare_database_startup
 from data.paths import default_db_path, ensure_user_data_dirs
@@ -54,6 +55,39 @@ def _demo_requested(cli_demo: bool) -> bool:
     return env in ("1", "true", "yes", "on")
 
 
+def _inject_demo_banner(window: MainWindow) -> None:
+    """Вставить оранжевый баннер под title bar — виден в fullscreen."""
+    layout = getattr(window, "_root_layout", None)
+    if layout is None:
+        logger.warning("demo banner: _root_layout missing")
+        return
+    bar = QWidget(objectName="demoBanner")
+    bar.setFixedHeight(36)
+    bar.setStyleSheet(
+        "QWidget#demoBanner {"
+        "  background-color: #B45309;"
+        "  border-bottom: 1px solid #92400E;"
+        "}"
+        "QLabel#demoBannerLabel {"
+        "  color: #FFFBEB;"
+        "  font-weight: 600;"
+        "  font-size: 13px;"
+        "}"
+    )
+    row = QHBoxLayout(bar)
+    row.setContentsMargins(18, 0, 18, 0)
+    label = QLabel(
+        "РЕЖИМ ДЕМО — синтетические данные · login: demo / password: demo · "
+        "рабочая БД не затронута",
+        objectName="demoBannerLabel",
+    )
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    row.addWidget(label)
+    # index 0 = title bar; insert banner right after it
+    layout.insertWidget(1, bar)
+    window.setWindowTitle("Учёт доступности персонала — ДЕМО")
+
+
 def run(db_path: Path | None = None, *, demo: bool = False) -> int:
     """Создать QApplication, пройти auth-flow и показать главное окно."""
     install_excepthook()
@@ -69,7 +103,6 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
     if is_demo:
         from services.demo import demo_data_dir, demo_db_path, prepare_demo_database
 
-        # Изоляция: в demo всегда свой каталог, --db не подменяет путь на рабочую БД
         if db_path is not None:
             logger.warning("--db ignored in --demo mode; using demo data dir")
         path = demo_db_path()
@@ -137,12 +170,10 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
         conn.close()
         return 1
 
-    window = MainWindow(
-        conn=conn,
-        session=session,
-        db_path=path,
-        is_demo=is_demo,
-    )
+    window = MainWindow(conn=conn, session=session, db_path=path)
+    if is_demo:
+        _inject_demo_banner(window)
+        logger.info("demo mode active: login=demo password=demo")
     window.showFullScreen()
     return app.exec()
 
