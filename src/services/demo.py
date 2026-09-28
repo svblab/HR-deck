@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -304,24 +303,22 @@ def _assign_demo_statuses(
     svc = StatusHistoryService(conn, session, clock=lambda: now)
 
     # (emp_id, status_id, start_offset_days, end_offset_days | None)
-    # offset < 0 — в прошлом; end None — открытый период
-    # status: 1 office, 2 remote, 3 trip, 4 sick, 5 vacation, 6 day_off
     plan: list[tuple[int, int, int, int | None]] = [
-        (1, 1, -27, None),  # office open
-        (2, 2, -27, None),  # remote
-        (3, 5, -8, 7),  # vacation spanning today
+        (1, 1, -27, None),
+        (2, 2, -27, None),
+        (3, 5, -8, 7),
         (4, 1, -44, None),
-        (5, 3, -3, 4),  # trip
+        (5, 3, -3, 4),
         (6, 1, -27, None),
         (7, 1, -27, None),
-        (8, 4, -6, 2),  # sick
+        (8, 4, -6, 2),
         (9, 2, -18, None),
         (10, 1, -27, None),
         (11, 1, -27, None),
-        (12, 6, -1, -1),  # day_off yesterday → clarification
+        (12, 6, -1, -1),
         (13, 1, -27, None),
-        (14, 5, -13, -2),  # vacation ended → clarification
-        (15, 1, -89, -8),  # office ended → clarification
+        (14, 5, -13, -2),
+        (15, 1, -89, -8),
         (16, 1, -27, None),
         (17, 2, -27, None),
         (18, 1, -27, None),
@@ -344,7 +341,6 @@ def _assign_demo_statuses(
             logger.error("demo status assign failed: %s", msg)
             errors.append(msg)
 
-    # Плановый будущий отпуск Иванова
     try:
         svc.assign_status(
             1,
@@ -416,7 +412,6 @@ def prepare_demo_database(
         )
         logger.info("demo login to existing DB")
 
-    # Без автоблокировки на презентации
     session.inactivity_timeout_enabled = False
     session.inactivity_timeout_seconds = 0
 
