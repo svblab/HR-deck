@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -33,16 +34,24 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help=(
             "Режим демо для презентации: временная БД с синтетическими данными, "
-            "авто-вход (login=demo / password=demo). Не затрагивает рабочую БД."
+            "авто-вход (login=demo / password=demo). Не затрагивает рабочую БД. "
+            "Также: env PERSONNEL_AVAILABILITY_DEMO=1."
         ),
     )
     parser.add_argument(
         "--db",
         type=Path,
         default=None,
-        help="Путь к файлу БД (для тестов и отладки)",
+        help="Путь к файлу БД (только для тестов; в --demo игнорируется)",
     )
     return parser.parse_args(argv)
+
+
+def _demo_requested(cli_demo: bool) -> bool:
+    if cli_demo:
+        return True
+    env = os.environ.get("PERSONNEL_AVAILABILITY_DEMO", "").strip().lower()
+    return env in ("1", "true", "yes", "on")
 
 
 def run(db_path: Path | None = None, *, demo: bool = False) -> int:
@@ -58,9 +67,12 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
 
     is_demo = demo
     if is_demo:
-        from services.demo import demo_db_path, prepare_demo_database
+        from services.demo import demo_data_dir, demo_db_path, prepare_demo_database
 
-        path = db_path or demo_db_path()
+        # Изоляция: в demo всегда свой каталог, --db не подменяет путь на рабочую БД
+        if db_path is not None:
+            logger.warning("--db ignored in --demo mode; using demo data dir")
+        path = demo_db_path()
         ensure_user_data_dirs(path.parent)
         try:
             prepare_database_startup(path)
@@ -69,7 +81,7 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
             QMessageBox.critical(None, "Повреждение базы данных (демо)", str(exc))
             return 1
         try:
-            conn, session = prepare_demo_database(path)
+            conn, session = prepare_demo_database(path, force_reset=True)
         except Exception as exc:  # noqa: BLE001
             logger.exception("demo prepare failed")
             QMessageBox.critical(
@@ -78,6 +90,7 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
                 f"Не удалось подготовить демо-базу:\n{exc}",
             )
             return 1
+        logger.info("demo mode: data dir=%s", demo_data_dir())
     else:
         path = db_path or default_db_path()
         ensure_user_data_dirs(path.parent)
@@ -124,18 +137,20 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
         conn.close()
         return 1
 
-    window = MainWindow(conn=conn, session=session, db_path=path)
-    if is_demo:
-        window.setWindowTitle("Учёт доступности персонала — ДЕМО")
-        # Заметка для презентации: баннер UI добавим отдельным коммитом
-        logger.info("demo mode active: login=demo password=demo")
+    window = MainWindow(
+        conn=conn,
+        session=session,
+        db_path=path,
+        is_demo=is_demo,
+    )
     window.showFullScreen()
     return app.exec()
 
 
 def main() -> None:
     args = _parse_args()
-    raise SystemExit(run(db_path=args.db, demo=args.demo))
+    demo = _demo_requested(args.demo)
+    raise SystemExit(run(db_path=args.db, demo=demo))
 
 
 if __name__ == "__main__":
