@@ -124,12 +124,11 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
         conn.close()
         return 1
 
-    window = MainWindow(
-        conn=conn,
-        session=session,
-        db_path=path,
-        is_demo=is_demo,
-    )
+    window = MainWindow(conn=conn, session=session, db_path=path)
+    if is_demo:
+        window.setWindowTitle("Учёт доступности персонала — ДЕМО")
+        # Заметка для презентации: баннер UI добавим отдельным коммитом
+        logger.info("demo mode active: login=demo password=demo")
     window.showFullScreen()
     return app.exec()
 
