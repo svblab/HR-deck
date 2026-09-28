@@ -11,7 +11,10 @@ from dataclasses import dataclass
 
 from data.db import Connection
 from data.repositories import UserActionLogRepository
-from domain.employee_reconciliation import EmployeeMatchStatus
+from domain.employee_reconciliation import (
+    EmployeeMatchResolutionChoice,
+    EmployeeMatchStatus,
+)
 from domain.permissions import Permission
 from domain.transport import (
     BOOTSTRAP_ENVELOPE_KEY_ID,
@@ -109,6 +112,7 @@ class TransportImportApplyService:
         self,
         decrypted: DecryptedTransportPackage,
         validation: ValidationResult,
+        resolutions: dict[str, EmployeeMatchResolutionChoice] | None = None,
     ) -> ApplyResult:
         """Apply business + transport state in one commit; rollback on any error."""
         self._require_import_export()
@@ -123,7 +127,9 @@ class TransportImportApplyService:
 
         try:
             self._directories.apply_directory_plan(directory_plan, commit=False)
-            self._employees.apply_employee_plan(employee_plan, commit=False)
+            self._employees.apply_employee_plan(
+                employee_plan, resolutions, commit=False
+            )
             self._apply_status_history_from_payload(decrypted)
             self._persist_package_acceptance(decrypted, now=now)
             self._advance_transport_state(decrypted, now=now)
@@ -218,7 +224,11 @@ class TransportImportApplyService:
     def _guard_ready(
         self, decrypted: DecryptedTransportPackage, validation: ValidationResult
     ) -> None:
-        if validation.disposition is not ValidationDisposition.READY_FOR_APPLY:
+        ready = validation.disposition in (
+            ValidationDisposition.READY_FOR_APPLY,
+            ValidationDisposition.PENDING_CONFIRMATION,
+        )
+        if not ready:
             raise TransportApplyNotReadyError(
                 f"disposition is {validation.disposition.value}, not ready_for_apply"
             )
@@ -276,8 +286,11 @@ class TransportImportApplyAdminService:
         self,
         decrypted: DecryptedTransportPackage,
         validation: ValidationResult,
+        resolutions: dict[str, EmployeeMatchResolutionChoice] | None = None,
     ) -> ApplyResult:
-        return self._apply.apply_validated_package(decrypted, validation)
+        return self._apply.apply_validated_package(
+            decrypted, validation, resolutions=resolutions
+        )
 
 
 __all__ = [

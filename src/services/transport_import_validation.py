@@ -12,7 +12,6 @@ from enum import StrEnum
 
 from data.db import Connection
 from domain.directory_sync import DirectorySyncPackage
-from domain.employee_reconciliation import EmployeeMatchStatus
 from domain.permissions import Permission
 from domain.transport import PackageClassification, TransportPackageMalformedError
 from services.authorization import AuthorizationService
@@ -21,11 +20,6 @@ from services.employee_sync_import import EmployeePlan, EmployeeSyncImportServic
 from services.session import SessionState
 from services.transport_keys import TransportKeyStore
 from services.transport_receive import DecryptedTransportPackage
-
-_CONFIRMATION_STATUSES = frozenset(
-    {EmployeeMatchStatus.LOW, EmployeeMatchStatus.AMBIGUOUS}
-)
-_HARD_REJECT_STATUSES = frozenset({EmployeeMatchStatus.CONFLICT})
 
 
 class FreshnessClass(StrEnum):
@@ -184,36 +178,33 @@ class TransportImportValidationService:
                 reject_reasons=tuple(employee_plan.validation_errors),
             )
 
-        hard: list[str] = []
-        confirm: list[str] = []
-        for detail in employee_plan.conflicts:
-            msg = (
+        # After ADR-0013: conflicts holds CONFLICT-only; confirmable holds LOW/AMBIGUOUS.
+        if employee_plan.conflicts:
+            hard = tuple(
                 f"{detail.status.value}: external_id={detail.external_id} "
                 f"name={detail.full_name!r}"
+                for detail in employee_plan.conflicts
             )
-            if detail.status in _HARD_REJECT_STATUSES:
-                hard.append(msg)
-            elif detail.status in _CONFIRMATION_STATUSES:
-                confirm.append(msg)
-            else:
-                hard.append(msg)
-
-        if hard:
             return ValidationResult(
                 freshness=freshness,
                 disposition=ValidationDisposition.REJECTED,
                 directory_plan=directory_plan,
                 employee_plan=employee_plan,
-                reject_reasons=tuple(hard),
-                confirmation_reasons=tuple(confirm),
+                reject_reasons=hard,
             )
-        if confirm:
+        if employee_plan.confirmable:
+            confirm = tuple(
+                f"{item.match.status.value}: "
+                f"external_id={item.package_row['external_id']} "
+                f"name={item.package_row['full_name']!r}"
+                for item in employee_plan.confirmable
+            )
             return ValidationResult(
                 freshness=freshness,
                 disposition=ValidationDisposition.PENDING_CONFIRMATION,
                 directory_plan=directory_plan,
                 employee_plan=employee_plan,
-                confirmation_reasons=tuple(confirm),
+                confirmation_reasons=confirm,
             )
         return ValidationResult(
             freshness=freshness,

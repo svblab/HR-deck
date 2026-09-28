@@ -221,7 +221,7 @@ def test_apply_atomicity_rolls_back_directory_on_employee_fail(tmp_path: Path) -
     validation = _validate_ready(conn, session, store, decrypted)
     apply_svc = TransportImportApplyService(conn, session, store=store)
 
-    def _boom(_plan, *, commit=True):
+    def _boom(_plan, _resolutions=None, *, commit=True):
         raise RuntimeError("forced employee apply failure")
 
     with (

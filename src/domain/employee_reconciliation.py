@@ -17,6 +17,20 @@ class EmployeeMatchStatus(StrEnum):
     NEW = "new"  # no external_id match; no candidates at all
 
 
+class EmployeeMatchResolution(StrEnum):
+    """Human decision for LOW/AMBIGUOUS rows (ADR-0013)."""
+
+    ATTACH_EXISTING = "attach_existing"  # same person — update card only
+    CREATE_NEW = "create_new"  # different person — create
+
+
+@dataclass(frozen=True)
+class EmployeeMatchResolutionChoice:
+    action: EmployeeMatchResolution
+    # Required for ATTACH_EXISTING when status is AMBIGUOUS.
+    attach_employee_id: int | None = None
+
+
 @dataclass(frozen=True)
 class EmployeeMatchCandidate:
     package_row: dict[str, object]
@@ -43,3 +57,14 @@ class EmployeeSyncConflictError(Exception):
 
 class EmployeeSyncApplyError(Exception):
     """Validation failed for one or more employee rows — nothing written."""
+
+
+__all__ = [
+    "EmployeeMatchCandidate",
+    "EmployeeMatchResolution",
+    "EmployeeMatchResolutionChoice",
+    "EmployeeMatchStatus",
+    "EmployeeSyncApplyError",
+    "EmployeeSyncConflictDetail",
+    "EmployeeSyncConflictError",
+]

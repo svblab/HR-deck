@@ -30,6 +30,8 @@ from domain.employee import (
 )
 from domain.employee_reconciliation import (
     EmployeeMatchCandidate,
+    EmployeeMatchResolution,
+    EmployeeMatchResolutionChoice,
     EmployeeMatchStatus,
     EmployeeSyncApplyError,
     EmployeeSyncConflictDetail,
@@ -55,13 +57,8 @@ Clock = Callable[[], str]
 _SAVEPOINT = "employee_sync_apply"
 
 _APPLYABLE = frozenset({EmployeeMatchStatus.EXACT, EmployeeMatchStatus.NEW})
-_BLOCKING = frozenset(
-    {
-        EmployeeMatchStatus.CONFLICT,
-        EmployeeMatchStatus.LOW,
-        EmployeeMatchStatus.AMBIGUOUS,
-    }
-)
+_HARD_BLOCKING = frozenset({EmployeeMatchStatus.CONFLICT})
+_CONFIRMABLE = frozenset({EmployeeMatchStatus.LOW, EmployeeMatchStatus.AMBIGUOUS})
 
 
 def _utc_now() -> str:
@@ -92,6 +89,7 @@ class EmployeePlan:
 
     items: list[_EmployeePlanItem] = field(default_factory=list)
     conflicts: list[EmployeeSyncConflictDetail] = field(default_factory=list)
+    confirmable: list[_EmployeePlanItem] = field(default_factory=list)
     validation_errors: list[str] = field(default_factory=list)
 
     @property
@@ -143,12 +141,15 @@ class EmployeeSyncImportService:
             return plan
 
         matches = self._reconcile.build_reconciliation(package)
-        conflicts = self._collect_blocking_matches(matches)
-        if conflicts:
-            plan.conflicts = conflicts
+        hard = self._collect_hard_conflicts(matches)
+        if hard:
+            plan.conflicts = hard
             return plan
 
+        plan.confirmable = self._collect_confirmable(matches)
         for match in matches:
+            if match.status not in _APPLYABLE:
+                continue
             try:
                 self._validate_row_projected(match.package_row, directory_plan)
             except ValueError as exc:
@@ -160,14 +161,44 @@ class EmployeeSyncImportService:
             plan.items.append(_EmployeePlanItem(match=match, package_row=match.package_row))
         return plan
 
-    def apply_employee_plan(self, plan: EmployeePlan, *, commit: bool = True) -> None:
+    def apply_employee_plan(
+        self,
+        plan: EmployeePlan,
+        resolutions: dict[str, EmployeeMatchResolutionChoice] | None = None,
+        *,
+        commit: bool = True,
+    ) -> None:
         """Write employee ops from an already-built plan."""
         self._require_hr()
         if plan.conflicts:
             raise EmployeeSyncConflictError(list(plan.conflicts))
         if plan.validation_errors:
             raise EmployeeSyncApplyError("; ".join(plan.validation_errors))
-        if not plan.items:
+
+        resolved = resolutions or {}
+        if plan.confirmable:
+            unresolved: list[EmployeeSyncConflictDetail] = []
+            for item in plan.confirmable:
+                external_id = str(item.package_row["external_id"])
+                if external_id not in resolved:
+                    unresolved.append(
+                        EmployeeSyncConflictDetail(
+                            external_id=external_id,
+                            full_name=str(item.package_row["full_name"]),
+                            status=item.match.status,
+                            matched_employee_id=item.match.matched_employee_id,
+                        )
+                    )
+            if unresolved:
+                raise EmployeeSyncConflictError(unresolved)
+
+        write_items = list(plan.items)
+        for item in plan.confirmable:
+            external_id = str(item.package_row["external_id"])
+            choice = resolved[external_id]
+            write_items.append(self._resolve_confirmable_item(item, choice))
+
+        if not write_items:
             return
 
         def _write() -> None:
@@ -175,7 +206,7 @@ class EmployeeSyncImportService:
             can_edit_sensitive = self._authz.check(
                 self._session.role, Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS
             )
-            for item in plan.items:
+            for item in write_items:
                 row = self._resolve_row(item.package_row)
                 if item.match.status == EmployeeMatchStatus.NEW:
                     self._create_row(row, now=now, can_edit_sensitive=can_edit_sensitive)
@@ -211,6 +242,49 @@ class EmployeeSyncImportService:
         else:
             _write()
 
+    @staticmethod
+    def _resolve_confirmable_item(
+        item: _EmployeePlanItem,
+        choice: EmployeeMatchResolutionChoice,
+    ) -> _EmployeePlanItem:
+        """Map a human resolution onto an applyable NEW/EXACT plan item.
+
+        ATTACH_EXISTING updates card fields only — does **not** rewrite
+        ``external_id`` (ADR-0013 Option 2).
+        """
+        if choice.action is EmployeeMatchResolution.CREATE_NEW:
+            return _EmployeePlanItem(
+                match=EmployeeMatchCandidate(
+                    package_row=item.package_row,
+                    status=EmployeeMatchStatus.NEW,
+                    matched_employee_id=None,
+                    candidate_employee_ids=(),
+                ),
+                package_row=item.package_row,
+            )
+
+        target_id = choice.attach_employee_id
+        if target_id is None:
+            target_id = item.match.matched_employee_id
+        if target_id is None:
+            raise EmployeeSyncApplyError(
+                "ATTACH_EXISTING requires attach_employee_id or matched_employee_id"
+            )
+        if item.match.status is EmployeeMatchStatus.AMBIGUOUS:
+            if target_id not in item.match.candidate_employee_ids:
+                raise EmployeeSyncApplyError(
+                    f"attach_employee_id {target_id} is not among "
+                    f"candidate_employee_ids {item.match.candidate_employee_ids}"
+                )
+        return _EmployeePlanItem(
+            match=EmployeeMatchCandidate(
+                package_row=item.package_row,
+                status=EmployeeMatchStatus.EXACT,
+                matched_employee_id=target_id,
+                candidate_employee_ids=(),
+            ),
+            package_row=item.package_row,
+        )
     def apply_employees(self, package: DirectorySyncPackage, *, commit: bool = True) -> None:
         """Thin wrapper: build plan then apply (preserves Part 4b callers)."""
         rows = package.tables.get("employees", [])
@@ -600,12 +674,14 @@ class EmployeeSyncImportService:
             seen.add(external_id)
 
     @staticmethod
-    def _collect_blocking_matches(
+    def _collect_hard_conflicts(
         matches: list[EmployeeMatchCandidate],
     ) -> list[EmployeeSyncConflictDetail]:
         blocked: list[EmployeeSyncConflictDetail] = []
         for match in matches:
-            if match.status in _BLOCKING or match.status not in _APPLYABLE:
+            if match.status in _HARD_BLOCKING or (
+                match.status not in _APPLYABLE and match.status not in _CONFIRMABLE
+            ):
                 blocked.append(
                     EmployeeSyncConflictDetail(
                         external_id=str(match.package_row["external_id"]),
@@ -616,10 +692,23 @@ class EmployeeSyncImportService:
                 )
         return blocked
 
+    @staticmethod
+    def _collect_confirmable(
+        matches: list[EmployeeMatchCandidate],
+    ) -> list[_EmployeePlanItem]:
+        return [
+            _EmployeePlanItem(match=match, package_row=match.package_row)
+            for match in matches
+            if match.status in _CONFIRMABLE
+        ]
+
     def _require_hr(self) -> None:
         self._session.require_unlocked()
         self._authz.require(self._session.role, Permission.IMPORT_EXPORT)
         self._authz.require(self._session.role, Permission.MANAGE_EMPLOYEES)
 
 
-__all__ = ["EmployeePlan", "EmployeeSyncImportService"]
+__all__ = [
+    "EmployeePlan",
+    "EmployeeSyncImportService",
+]
