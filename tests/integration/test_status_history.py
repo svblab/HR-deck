@@ -9,7 +9,6 @@ import pytest
 from data.db import Connection
 from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
-from services.authorization import AuthorizationError
 from services.availability_statuses import AvailabilityStatusError, AvailabilityStatusService
 from services.bootstrap import BootstrapService
 from services.session import SessionState
@@ -171,7 +170,8 @@ def test_overlap_rejected_without_confirmed_flow(tmp_path: Path) -> None:
 
 
 @pytest.mark.acceptance
-def test_rbac_hr_manages_observer_read_only(tmp_path: Path) -> None:
+def test_rbac_hr_and_observer_can_assign_status(tmp_path: Path) -> None:
+    """ADR-0015: observer may assign statuses; history remains readable."""
     conn, admin, db = _open_db(tmp_path)
     ids = seed_synthetic_org(conn)
     hr = _hr_session(conn, admin, db)
@@ -180,8 +180,9 @@ def test_rbac_hr_manages_observer_read_only(tmp_path: Path) -> None:
     obs_svc = StatusHistoryService(conn, obs, clock=lambda: "2026-08-26T14:00:01Z")
     hr_svc.assign_status(ids["employee_a_id"], status_id=1, start_date="2026-08-01")
     assert obs_svc.list_history(ids["employee_a_id"])
-    with pytest.raises(AuthorizationError):
-        obs_svc.assign_status(ids["employee_a_id"], status_id=2, start_date="2026-09-01")
+    obs_svc.assign_status(ids["employee_a_id"], status_id=2, start_date="2026-09-01")
+    current = obs_svc.current_status(ids["employee_a_id"], as_of="2026-09-01")
+    assert current is not None and current.status_id == 2
     conn.close()
 
 
