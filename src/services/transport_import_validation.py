@@ -13,6 +13,7 @@ from enum import StrEnum
 from data.db import Connection
 from domain.directory_sync import DirectorySyncPackage
 from domain.employee_reconciliation import EmployeeMatchStatus
+from domain.import_errors import ImportErrorCode, ImportReason
 from domain.permissions import Permission
 from domain.transport import PackageClassification, TransportPackageMalformedError
 from services.authorization import AuthorizationService
@@ -22,10 +23,13 @@ from services.session import SessionState
 from services.transport_keys import TransportKeyStore
 from services.transport_receive import DecryptedTransportPackage
 
-_CONFIRMATION_STATUSES = frozenset(
-    {EmployeeMatchStatus.LOW, EmployeeMatchStatus.AMBIGUOUS}
-)
-_HARD_REJECT_STATUSES = frozenset({EmployeeMatchStatus.CONFLICT})
+
+def _confirmable_code(status: EmployeeMatchStatus) -> ImportErrorCode:
+    if status is EmployeeMatchStatus.LOW:
+        return ImportErrorCode.EMPLOYEE_MATCH_LOW
+    if status is EmployeeMatchStatus.AMBIGUOUS:
+        return ImportErrorCode.EMPLOYEE_MATCH_AMBIGUOUS
+    return ImportErrorCode.EMPLOYEE_MATCH_CONFLICT
 
 
 class FreshnessClass(StrEnum):
@@ -53,8 +57,8 @@ class ValidationResult:
     disposition: ValidationDisposition
     directory_plan: DirectoryPlan | None
     employee_plan: EmployeePlan | None
-    reject_reasons: tuple[str, ...] = ()
-    confirmation_reasons: tuple[str, ...] = ()
+    reject_reasons: tuple[ImportReason, ...] = ()
+    confirmation_reasons: tuple[ImportReason, ...] = ()
 
 
 class TransportImportValidationService:
@@ -96,14 +100,22 @@ class TransportImportValidationService:
                 disposition=ValidationDisposition.REJECTED,
                 directory_plan=None,
                 employee_plan=None,
-                reject_reasons=("stale or out-of-sequence package",),
+                reject_reasons=(
+                    (
+                        ImportErrorCode.PACKAGE_STALE_SEQUENCE,
+                        "stale or out-of-sequence package",
+                    ),
+                ),
             )
 
         package = self._parse_payload(decrypted.payload)
         directory_plan = self._directories.build_directory_plan(package)
         if not directory_plan.is_clean:
-            reasons = tuple(
-                f"employee {emp_id} ({name}) would become invalid"
+            reasons: tuple[ImportReason, ...] = tuple(
+                (
+                    ImportErrorCode.EMPLOYEE_WOULD_BECOME_INVALID,
+                    f"employee {emp_id} ({name}) would become invalid",
+                )
                 for emp_id, name in directory_plan.broken_employees
             )
             return ValidationResult(
@@ -111,7 +123,13 @@ class TransportImportValidationService:
                 disposition=ValidationDisposition.REJECTED,
                 directory_plan=directory_plan,
                 employee_plan=None,
-                reject_reasons=reasons or ("directory plan rejected",),
+                reject_reasons=reasons
+                or (
+                    (
+                        ImportErrorCode.DIRECTORY_PLAN_REJECTED,
+                        "directory plan rejected",
+                    ),
+                ),
             )
 
         employee_plan = self._employees.build_employee_plan(package, directory_plan)
@@ -184,36 +202,39 @@ class TransportImportValidationService:
                 reject_reasons=tuple(employee_plan.validation_errors),
             )
 
-        hard: list[str] = []
-        confirm: list[str] = []
-        for detail in employee_plan.conflicts:
-            msg = (
-                f"{detail.status.value}: external_id={detail.external_id} "
-                f"name={detail.full_name!r}"
+        # After ADR-0013: conflicts holds CONFLICT-only; confirmable holds LOW/AMBIGUOUS.
+        if employee_plan.conflicts:
+            hard = tuple(
+                (
+                    ImportErrorCode.EMPLOYEE_MATCH_CONFLICT,
+                    f"{detail.status.value}: external_id={detail.external_id} "
+                    f"name={detail.full_name!r}",
+                )
+                for detail in employee_plan.conflicts
             )
-            if detail.status in _HARD_REJECT_STATUSES:
-                hard.append(msg)
-            elif detail.status in _CONFIRMATION_STATUSES:
-                confirm.append(msg)
-            else:
-                hard.append(msg)
-
-        if hard:
             return ValidationResult(
                 freshness=freshness,
                 disposition=ValidationDisposition.REJECTED,
                 directory_plan=directory_plan,
                 employee_plan=employee_plan,
-                reject_reasons=tuple(hard),
-                confirmation_reasons=tuple(confirm),
+                reject_reasons=hard,
             )
-        if confirm:
+        if employee_plan.confirmable:
+            confirm = tuple(
+                (
+                    _confirmable_code(item.match.status),
+                    f"{item.match.status.value}: "
+                    f"external_id={item.package_row['external_id']} "
+                    f"name={item.package_row['full_name']!r}",
+                )
+                for item in employee_plan.confirmable
+            )
             return ValidationResult(
                 freshness=freshness,
                 disposition=ValidationDisposition.PENDING_CONFIRMATION,
                 directory_plan=directory_plan,
                 employee_plan=employee_plan,
-                confirmation_reasons=tuple(confirm),
+                confirmation_reasons=confirm,
             )
         return ValidationResult(
             freshness=freshness,

@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from data.directories import BranchRepository
+from domain.import_errors import ImportErrorCode
 from domain.transport import PackageClassification, TransportApplyNotReadyError, WkRole
 from services.bootstrap import BootstrapService
 from services.transport_import_apply import TransportImportApplyService
@@ -162,7 +163,7 @@ def test_apply_not_ready_disposition_writes_nothing(tmp_path: Path) -> None:
         disposition=ValidationDisposition.REJECTED,
         directory_plan=None,
         employee_plan=None,
-        reject_reasons=("test",),
+        reject_reasons=((ImportErrorCode.DIRECTORY_PLAN_REJECTED, "test"),),
     )
     decrypted = _decrypted(
         direction_id=direction_id, sequence=1, package_id=str(uuid.uuid4())
@@ -221,7 +222,7 @@ def test_apply_atomicity_rolls_back_directory_on_employee_fail(tmp_path: Path) -
     validation = _validate_ready(conn, session, store, decrypted)
     apply_svc = TransportImportApplyService(conn, session, store=store)
 
-    def _boom(_plan, *, commit=True):
+    def _boom(_plan, _resolutions=None, *, commit=True):
         raise RuntimeError("forced employee apply failure")
 
     with (

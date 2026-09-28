@@ -30,11 +30,14 @@ from domain.employee import (
 )
 from domain.employee_reconciliation import (
     EmployeeMatchCandidate,
+    EmployeeMatchResolution,
+    EmployeeMatchResolutionChoice,
     EmployeeMatchStatus,
     EmployeeSyncApplyError,
     EmployeeSyncConflictDetail,
     EmployeeSyncConflictError,
 )
+from domain.import_errors import CodedImportError, ImportErrorCode, ImportReason
 from domain.org_structure import (
     DepartmentRef,
     DivisionRef,
@@ -55,13 +58,8 @@ Clock = Callable[[], str]
 _SAVEPOINT = "employee_sync_apply"
 
 _APPLYABLE = frozenset({EmployeeMatchStatus.EXACT, EmployeeMatchStatus.NEW})
-_BLOCKING = frozenset(
-    {
-        EmployeeMatchStatus.CONFLICT,
-        EmployeeMatchStatus.LOW,
-        EmployeeMatchStatus.AMBIGUOUS,
-    }
-)
+_HARD_BLOCKING = frozenset({EmployeeMatchStatus.CONFLICT})
+_CONFIRMABLE = frozenset({EmployeeMatchStatus.LOW, EmployeeMatchStatus.AMBIGUOUS})
 
 
 def _utc_now() -> str:
@@ -92,7 +90,8 @@ class EmployeePlan:
 
     items: list[_EmployeePlanItem] = field(default_factory=list)
     conflicts: list[EmployeeSyncConflictDetail] = field(default_factory=list)
-    validation_errors: list[str] = field(default_factory=list)
+    confirmable: list[_EmployeePlanItem] = field(default_factory=list)
+    validation_errors: list[ImportReason] = field(default_factory=list)
 
     @property
     def is_clean(self) -> bool:
@@ -138,36 +137,73 @@ class EmployeeSyncImportService:
             return plan
         try:
             self._ensure_unique_external_ids(rows)
-        except EmployeeSyncApplyError as exc:
-            plan.validation_errors.append(str(exc))
+        except CodedImportError as exc:
+            plan.validation_errors.append((exc.code, exc.message))
             return plan
 
         matches = self._reconcile.build_reconciliation(package)
-        conflicts = self._collect_blocking_matches(matches)
-        if conflicts:
-            plan.conflicts = conflicts
+        hard = self._collect_hard_conflicts(matches)
+        if hard:
+            plan.conflicts = hard
             return plan
 
+        plan.confirmable = self._collect_confirmable(matches)
         for match in matches:
+            if match.status not in _APPLYABLE:
+                continue
             try:
                 self._validate_row_projected(match.package_row, directory_plan)
-            except ValueError as exc:
-                plan.validation_errors.append(str(exc))
+            except CodedImportError as exc:
+                plan.validation_errors.append((exc.code, exc.message))
                 continue
             except EmployeeError as exc:
-                plan.validation_errors.append(str(exc))
+                plan.validation_errors.append(
+                    (ImportErrorCode.EMPLOYEE_CARD_INVALID, str(exc))
+                )
                 continue
             plan.items.append(_EmployeePlanItem(match=match, package_row=match.package_row))
         return plan
 
-    def apply_employee_plan(self, plan: EmployeePlan, *, commit: bool = True) -> None:
+    def apply_employee_plan(
+        self,
+        plan: EmployeePlan,
+        resolutions: dict[str, EmployeeMatchResolutionChoice] | None = None,
+        *,
+        commit: bool = True,
+    ) -> None:
         """Write employee ops from an already-built plan."""
         self._require_hr()
         if plan.conflicts:
             raise EmployeeSyncConflictError(list(plan.conflicts))
         if plan.validation_errors:
-            raise EmployeeSyncApplyError("; ".join(plan.validation_errors))
-        if not plan.items:
+            raise EmployeeSyncApplyError(
+                "; ".join(message for _code, message in plan.validation_errors)
+            )
+
+        resolved = resolutions or {}
+        if plan.confirmable:
+            unresolved: list[EmployeeSyncConflictDetail] = []
+            for item in plan.confirmable:
+                external_id = str(item.package_row["external_id"])
+                if external_id not in resolved:
+                    unresolved.append(
+                        EmployeeSyncConflictDetail(
+                            external_id=external_id,
+                            full_name=str(item.package_row["full_name"]),
+                            status=item.match.status,
+                            matched_employee_id=item.match.matched_employee_id,
+                        )
+                    )
+            if unresolved:
+                raise EmployeeSyncConflictError(unresolved)
+
+        write_items = list(plan.items)
+        for item in plan.confirmable:
+            external_id = str(item.package_row["external_id"])
+            choice = resolved[external_id]
+            write_items.append(self._resolve_confirmable_item(item, choice))
+
+        if not write_items:
             return
 
         def _write() -> None:
@@ -175,7 +211,7 @@ class EmployeeSyncImportService:
             can_edit_sensitive = self._authz.check(
                 self._session.role, Permission.EDIT_SENSITIVE_EMPLOYEE_FIELDS
             )
-            for item in plan.items:
+            for item in write_items:
                 row = self._resolve_row(item.package_row)
                 if item.match.status == EmployeeMatchStatus.NEW:
                     self._create_row(row, now=now, can_edit_sensitive=can_edit_sensitive)
@@ -211,6 +247,49 @@ class EmployeeSyncImportService:
         else:
             _write()
 
+    @staticmethod
+    def _resolve_confirmable_item(
+        item: _EmployeePlanItem,
+        choice: EmployeeMatchResolutionChoice,
+    ) -> _EmployeePlanItem:
+        """Map a human resolution onto an applyable NEW/EXACT plan item.
+
+        ATTACH_EXISTING updates card fields only — does **not** rewrite
+        ``external_id`` (ADR-0013 Option 2).
+        """
+        if choice.action is EmployeeMatchResolution.CREATE_NEW:
+            return _EmployeePlanItem(
+                match=EmployeeMatchCandidate(
+                    package_row=item.package_row,
+                    status=EmployeeMatchStatus.NEW,
+                    matched_employee_id=None,
+                    candidate_employee_ids=(),
+                ),
+                package_row=item.package_row,
+            )
+
+        target_id = choice.attach_employee_id
+        if target_id is None:
+            target_id = item.match.matched_employee_id
+        if target_id is None:
+            raise EmployeeSyncApplyError(
+                "ATTACH_EXISTING requires attach_employee_id or matched_employee_id"
+            )
+        if item.match.status is EmployeeMatchStatus.AMBIGUOUS:
+            if target_id not in item.match.candidate_employee_ids:
+                raise EmployeeSyncApplyError(
+                    f"attach_employee_id {target_id} is not among "
+                    f"candidate_employee_ids {item.match.candidate_employee_ids}"
+                )
+        return _EmployeePlanItem(
+            match=EmployeeMatchCandidate(
+                package_row=item.package_row,
+                status=EmployeeMatchStatus.EXACT,
+                matched_employee_id=target_id,
+                candidate_employee_ids=(),
+            ),
+            package_row=item.package_row,
+        )
     def apply_employees(self, package: DirectorySyncPackage, *, commit: bool = True) -> None:
         """Thin wrapper: build plan then apply (preserves Part 4b callers)."""
         rows = package.tables.get("employees", [])
@@ -220,7 +299,9 @@ class EmployeeSyncImportService:
         if plan.conflicts:
             raise EmployeeSyncConflictError(list(plan.conflicts))
         if plan.validation_errors:
-            raise EmployeeSyncApplyError("; ".join(plan.validation_errors))
+            raise EmployeeSyncApplyError(
+                "; ".join(message for _code, message in plan.validation_errors)
+            )
         self.apply_employee_plan(plan, commit=commit)
 
     def _validate_row_projected(
@@ -234,9 +315,15 @@ class EmployeeSyncImportService:
         branch_id, branch_archived = self._lookup_branch(branch_ext, directory_plan)
         position_id, pos = self._lookup_position(pos_ext, directory_plan)
         if branch_archived:
-            raise ValueError(f"archived branch cannot be assigned ({branch_ext!r})")
+            raise CodedImportError(
+                ImportErrorCode.ARCHIVED_BRANCH,
+                f"archived branch cannot be assigned ({branch_ext!r})",
+            )
         if pos.is_archived:
-            raise ValueError(f"archived position cannot be assigned ({pos_ext!r})")
+            raise CodedImportError(
+                ImportErrorCode.ARCHIVED_POSITION,
+                f"archived position cannot be assigned ({pos_ext!r})",
+            )
         department_id, dept = self._lookup_optional_department(
             package_row.get("department_external_id"),
             branch_id=branch_id,
@@ -317,7 +404,10 @@ class EmployeeSyncImportService:
             return bid, rec.is_archived
         record = self._branches.get_by_external_id(external_id)
         if record is None:
-            raise ValueError(f"cannot resolve branch external_id {external_id!r}")
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_BRANCH,
+                f"cannot resolve branch external_id {external_id!r}",
+            )
         return record.id, record.is_archived
 
     def _lookup_position(
@@ -328,7 +418,10 @@ class EmployeeSyncImportService:
             return pid, directory_plan.projected_positions[pid]
         record = self._positions.get_by_external_id(external_id)
         if record is None:
-            raise ValueError(f"cannot resolve position external_id {external_id!r}")
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_POSITION,
+                f"cannot resolve position external_id {external_id!r}",
+            )
         return record.id, record
 
     def _lookup_optional_department(
@@ -345,15 +438,27 @@ class EmployeeSyncImportService:
             did = directory_plan.department_ids[ext]
             rec = directory_plan.projected_departments[did]
             if rec.branch_id != branch_id:
-                raise ValueError(f"department external_id {ext!r} belongs to another branch")
+                raise CodedImportError(
+                    ImportErrorCode.DEPARTMENT_WRONG_BRANCH,
+                    f"department external_id {ext!r} belongs to another branch",
+                )
             if rec.is_archived:
-                raise ValueError(f"archived department cannot be assigned ({ext!r})")
+                raise CodedImportError(
+                    ImportErrorCode.ARCHIVED_DEPARTMENT,
+                    f"archived department cannot be assigned ({ext!r})",
+                )
             return did, rec
         record = self._departments.get_by_external_id(ext)
         if record is None:
-            raise ValueError(f"cannot resolve department external_id {ext!r}")
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_DEPARTMENT,
+                f"cannot resolve department external_id {ext!r}",
+            )
         if record.branch_id != branch_id:
-            raise ValueError(f"department external_id {ext!r} belongs to another branch")
+            raise CodedImportError(
+                ImportErrorCode.DEPARTMENT_WRONG_BRANCH,
+                f"department external_id {ext!r} belongs to another branch",
+            )
         return record.id, record
 
     def _lookup_optional_division(
@@ -371,22 +476,36 @@ class EmployeeSyncImportService:
             vid = directory_plan.division_ids[ext]
             rec = directory_plan.projected_divisions[vid]
             if rec.branch_id != branch_id:
-                raise ValueError(f"division external_id {ext!r} belongs to another branch")
+                raise CodedImportError(
+                    ImportErrorCode.DIVISION_WRONG_BRANCH,
+                    f"division external_id {ext!r} belongs to another branch",
+                )
             if rec.department_id != department_id:
-                raise ValueError(
-                    f"division external_id {ext!r} is not under the resolved department"
+                raise CodedImportError(
+                    ImportErrorCode.DIVISION_WRONG_DEPARTMENT,
+                    f"division external_id {ext!r} is not under the resolved department",
                 )
             if rec.is_archived:
-                raise ValueError(f"archived division cannot be assigned ({ext!r})")
+                raise CodedImportError(
+                    ImportErrorCode.ARCHIVED_DIVISION,
+                    f"archived division cannot be assigned ({ext!r})",
+                )
             return vid, rec
         record = self._divisions.get_by_external_id(ext)
         if record is None:
-            raise ValueError(f"cannot resolve division external_id {ext!r}")
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_DIVISION,
+                f"cannot resolve division external_id {ext!r}",
+            )
         if record.branch_id != branch_id:
-            raise ValueError(f"division external_id {ext!r} belongs to another branch")
+            raise CodedImportError(
+                ImportErrorCode.DIVISION_WRONG_BRANCH,
+                f"division external_id {ext!r} belongs to another branch",
+            )
         if record.department_id != department_id:
-            raise ValueError(
-                f"division external_id {ext!r} is not under the resolved department"
+            raise CodedImportError(
+                ImportErrorCode.DIVISION_WRONG_DEPARTMENT,
+                f"division external_id {ext!r} is not under the resolved department",
             )
         return record.id, record
 
@@ -504,13 +623,15 @@ class EmployeeSyncImportService:
         external_id = str(package_row["external_id"])
         branch = self._branches.get_by_external_id(str(package_row["branch_external_id"]))
         if branch is None:
-            raise ValueError(
-                f"cannot resolve branch external_id {package_row['branch_external_id']!r}"
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_BRANCH,
+                f"cannot resolve branch external_id {package_row['branch_external_id']!r}",
             )
         position = self._positions.get_by_external_id(str(package_row["position_external_id"]))
         if position is None:
-            raise ValueError(
-                f"cannot resolve position external_id {package_row['position_external_id']!r}"
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_POSITION,
+                f"cannot resolve position external_id {package_row['position_external_id']!r}",
             )
         department_id = self._resolve_optional_department(
             package_row.get("department_external_id"), branch_id=branch.id
@@ -561,10 +682,14 @@ class EmployeeSyncImportService:
             return None
         record = self._departments.get_by_external_id(str(value))
         if record is None:
-            raise ValueError(f"cannot resolve department external_id {value!r}")
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_DEPARTMENT,
+                f"cannot resolve department external_id {value!r}",
+            )
         if record.branch_id != branch_id:
-            raise ValueError(
-                f"department external_id {value!r} belongs to another branch"
+            raise CodedImportError(
+                ImportErrorCode.DEPARTMENT_WRONG_BRANCH,
+                f"department external_id {value!r} belongs to another branch",
             )
         return record.id
 
@@ -579,12 +704,19 @@ class EmployeeSyncImportService:
             return None
         record = self._divisions.get_by_external_id(str(value))
         if record is None:
-            raise ValueError(f"cannot resolve division external_id {value!r}")
+            raise CodedImportError(
+                ImportErrorCode.UNRESOLVED_DIVISION,
+                f"cannot resolve division external_id {value!r}",
+            )
         if record.branch_id != branch_id:
-            raise ValueError(f"division external_id {value!r} belongs to another branch")
+            raise CodedImportError(
+                ImportErrorCode.DIVISION_WRONG_BRANCH,
+                f"division external_id {value!r} belongs to another branch",
+            )
         if record.department_id != department_id:
-            raise ValueError(
-                f"division external_id {value!r} is not under the resolved department"
+            raise CodedImportError(
+                ImportErrorCode.DIVISION_WRONG_DEPARTMENT,
+                f"division external_id {value!r} is not under the resolved department",
             )
         return record.id
 
@@ -594,18 +726,21 @@ class EmployeeSyncImportService:
         for row in rows:
             external_id = str(row["external_id"])
             if external_id in seen:
-                raise EmployeeSyncApplyError(
-                    f"duplicate external_id in package: {external_id}"
+                raise CodedImportError(
+                    ImportErrorCode.DUPLICATE_EXTERNAL_ID,
+                    f"duplicate external_id in package: {external_id}",
                 )
             seen.add(external_id)
 
     @staticmethod
-    def _collect_blocking_matches(
+    def _collect_hard_conflicts(
         matches: list[EmployeeMatchCandidate],
     ) -> list[EmployeeSyncConflictDetail]:
         blocked: list[EmployeeSyncConflictDetail] = []
         for match in matches:
-            if match.status in _BLOCKING or match.status not in _APPLYABLE:
+            if match.status in _HARD_BLOCKING or (
+                match.status not in _APPLYABLE and match.status not in _CONFIRMABLE
+            ):
                 blocked.append(
                     EmployeeSyncConflictDetail(
                         external_id=str(match.package_row["external_id"]),
@@ -616,10 +751,23 @@ class EmployeeSyncImportService:
                 )
         return blocked
 
+    @staticmethod
+    def _collect_confirmable(
+        matches: list[EmployeeMatchCandidate],
+    ) -> list[_EmployeePlanItem]:
+        return [
+            _EmployeePlanItem(match=match, package_row=match.package_row)
+            for match in matches
+            if match.status in _CONFIRMABLE
+        ]
+
     def _require_hr(self) -> None:
         self._session.require_unlocked()
         self._authz.require(self._session.role, Permission.IMPORT_EXPORT)
         self._authz.require(self._session.role, Permission.MANAGE_EMPLOYEES)
 
 
-__all__ = ["EmployeePlan", "EmployeeSyncImportService"]
+__all__ = [
+    "EmployeePlan",
+    "EmployeeSyncImportService",
+]
