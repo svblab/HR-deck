@@ -13,7 +13,6 @@ from pathlib import Path
 
 from data.db import Connection, table_columns
 from data.paths import ensure_user_data_dirs
-from domain.permissions import RoleCode
 from services.account_management import AccountManagementService
 from services.bootstrap import BootstrapService
 from services.session import SessionState
@@ -158,7 +157,6 @@ def _insert_employee(
 ) -> None:
     cols = table_columns(conn, "employees")
     has_ext = "external_id" in cols
-    # department_id may be nullable after ADR-0008 migrations
     if has_ext:
         conn.execute(
             "INSERT INTO employees ("
@@ -214,10 +212,8 @@ def seed_demo_org(conn: Connection) -> dict[str, int]:
     """
     Заполнить оргструктуру и ~18 сотрудников с разными статусами.
 
-    Возвращает ключевые id. Вызывать после миграций, до или после bootstrap
-    (bootstrap создаёт только admin).
+    Возвращает ключевые id. Вызывать после миграций.
     """
-    # --- справочники ---
     _insert_branch(conn, branch_id=1, name="Центральный офис")
     _insert_branch(conn, branch_id=2, name="Филиал Север")
 
@@ -244,11 +240,7 @@ def seed_demo_org(conn: Connection) -> dict[str, int]:
     _insert_position(conn, position_id=4, branch_id=2, name="Мастер смены")
     _insert_position(conn, position_id=5, branch_id=1, name="Руководитель отдела")
 
-    # status_id: 1 office, 2 remote, 3 trip, 4 sick, 5 vacation, 6 day_off
-    # employment_type: 1 staff, 2 temporary, 3 contractor
-
     people: list[tuple] = [
-        # id, name, pos, branch, dept, div, emp_type, hire, note
         (1, "Иванов Иван Иванович", 1, 1, 1, 1, 1, "2023-03-01", ""),
         (2, "Петрова Анна Сергеевна", 2, 1, 1, 1, 1, "2022-06-15", ""),
         (3, "Сидоров Алексей Петрович", 1, 1, 1, 2, 1, "2024-01-10", ""),
@@ -294,26 +286,24 @@ def seed_demo_org(conn: Connection) -> dict[str, int]:
 def _assign_demo_statuses(conn: Connection, session: SessionState) -> None:
     """Назначить текущие и плановые статусы через сервис (с аудитом)."""
     svc = StatusHistoryService(conn, session, clock=lambda: _NOW)
-    today = _TODAY.isoformat()
 
-    # (emp_id, status_id, start, end or None)
-    # 1 office, 2 remote, 3 trip, 4 sick, 5 vacation, 6 day_off
+    # status_id: 1 office, 2 remote, 3 trip, 4 sick, 5 vacation, 6 day_off
     assignments: list[tuple[int, int, str, str | None]] = [
-        (1, 1, "2026-09-01", None),  # office open
-        (2, 2, "2026-09-01", None),  # remote
-        (3, 5, "2026-09-20", "2026-10-05"),  # vacation
+        (1, 1, "2026-09-01", None),
+        (2, 2, "2026-09-01", None),
+        (3, 5, "2026-09-20", "2026-10-05"),
         (4, 1, "2026-08-15", None),
-        (5, 3, "2026-09-25", "2026-10-02"),  # trip
+        (5, 3, "2026-09-25", "2026-10-02"),
         (6, 1, "2026-09-01", None),
         (7, 1, "2026-09-01", None),
-        (8, 4, "2026-09-22", "2026-09-30"),  # sick
+        (8, 4, "2026-09-22", "2026-09-30"),
         (9, 2, "2026-09-10", None),
         (10, 1, "2026-09-01", None),
         (11, 1, "2026-09-01", None),
-        (12, 6, "2026-09-27", "2026-09-27"),  # day off today
+        (12, 6, "2026-09-27", "2026-09-27"),
         (13, 1, "2026-09-01", None),
-        (14, 5, "2026-09-15", "2026-09-26"),  # vacation ended → needs clarification?
-        (15, 1, "2026-07-01", "2026-09-20"),  # ended → clarification
+        (14, 5, "2026-09-15", "2026-09-26"),
+        (15, 1, "2026-07-01", "2026-09-20"),
         (16, 1, "2026-09-01", None),
         (17, 2, "2026-09-01", None),
         (18, 1, "2026-09-01", None),
@@ -331,7 +321,6 @@ def _assign_demo_statuses(conn: Connection, session: SessionState) -> None:
         except Exception as exc:  # noqa: BLE001
             logger.warning("demo status assign emp=%s failed: %s", emp_id, exc)
 
-    # Плановый будущий статус для наглядности
     try:
         svc.assign_status(
             1,
@@ -350,7 +339,6 @@ def prepare_demo_database(db_path: Path) -> tuple[Connection, SessionState]:
     Подготовить demo-БД: bootstrap (если нужно) + seed + статусы.
 
     Возвращает открытую (conn, session) уже залогиненную как demo-админ.
-    Каталог данных создаётся рядом с db_path.
     """
     path = Path(db_path)
     ensure_user_data_dirs(path.parent)
@@ -364,21 +352,24 @@ def prepare_demo_database(db_path: Path) -> tuple[Connection, SessionState]:
         )
         logger.info("demo bootstrap complete: login=%s", DEMO_LOGIN)
     else:
-        # Уже инициализирована — войти через AuthenticationService
         from services.authentication import AuthenticationService
 
-        auth = AuthenticationService()
-        conn, session = auth.login(path, DEMO_LOGIN, DEMO_PASSWORD)
+        auth = AuthenticationService(clock=lambda: _NOW)
+        conn, session = auth.login(
+            db_path=path,
+            login=DEMO_LOGIN,
+            password=DEMO_PASSWORD,
+        )
         logger.info("demo login to existing DB")
 
-    # Seed org only if empty
     count = conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
     if count == 0:
         seed_demo_org(conn)
         _assign_demo_statuses(conn, session)
-        # Company name
         try:
-            mgr = AccountManagementService(conn, session, db_path=path, clock=lambda: _NOW)
+            mgr = AccountManagementService(
+                conn, session, db_path=path, clock=lambda: _NOW
+            )
             mgr.update_company_profile(company_name=DEMO_COMPANY_NAME)
         except Exception as exc:  # noqa: BLE001
             logger.warning("demo company profile: %s", exc)
@@ -393,7 +384,6 @@ def demo_data_dir() -> Path:
     """Каталог данных для режима демо (не пересекается с рабочей установкой)."""
     import tempfile
 
-    # Стабильный путь в /tmp, чтобы повторные запуски --demo видели одну БД
     base = Path(tempfile.gettempdir()) / "personnel-availability-demo"
     base.mkdir(parents=True, exist_ok=True)
     return base
