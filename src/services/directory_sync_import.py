@@ -212,8 +212,9 @@ class DirectorySyncImportService:
         if emp_plan.conflicts:
             raise EmployeeSyncConflictError(list(emp_plan.conflicts))
         if emp_plan.validation_errors:
-            raise EmployeeSyncApplyError("; ".join(emp_plan.validation_errors))
-
+            raise EmployeeSyncApplyError(
+                "; ".join(message for _code, message in emp_plan.validation_errors)
+            )
         self._conn.execute(f"SAVEPOINT {_SAVEPOINT}")
         try:
             self.apply_directory_plan(dir_plan, commit=False)

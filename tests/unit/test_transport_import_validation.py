@@ -159,7 +159,8 @@ def test_classify_stale_sequence(tmp_path: Path) -> None:
     )
     assert result.freshness is FreshnessClass.STALE
     assert result.disposition is ValidationDisposition.REJECTED
-    assert "stale" in result.reject_reasons[0]
+    assert "stale" in result.reject_reasons[0][1]
+    assert result.reject_reasons[0][0].value == "IMP-001"
     assert _snapshot_transport(conn, direction_id) == before
     conn.close()
 
@@ -393,6 +394,10 @@ def test_employee_low_confidence_pending_confirmation(tmp_path: Path) -> None:
     )
     assert result.disposition is ValidationDisposition.PENDING_CONFIRMATION
     assert result.confirmation_reasons
+    assert result.confirmation_reasons[0][0].value == "IMP-018"
+    assert result.confirmation_reasons[0][1].startswith("low:")
+    assert result.employee_plan is not None
+    assert result.employee_plan.confirmable
     assert _count_dir_rows(conn) == before_rows
     conn.close()
 
