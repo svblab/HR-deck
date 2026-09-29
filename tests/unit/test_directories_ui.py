@@ -38,7 +38,7 @@ def _session_for_role(
     conn: object,
     admin: SessionState,
     db: Path,
-    clock,  # noqa: ANN001
+    clock,
     role: RoleCode,
 ) -> SessionState:
     if role is RoleCode.ADMINISTRATOR:

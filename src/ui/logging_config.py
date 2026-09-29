@@ -59,7 +59,7 @@ def configure_logging() -> Path:
 def install_excepthook() -> None:
     """Записать необработанное исключение в лог перед завершением процесса."""
 
-    def _hook(exc_type, exc_value, exc_tb) -> None:  # noqa: ANN001
+    def _hook(exc_type, exc_value, exc_tb) -> None:
         logging.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_tb))
         sys.__excepthook__(exc_type, exc_value, exc_tb)
 

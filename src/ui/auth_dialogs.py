@@ -243,7 +243,7 @@ class UnlockDialog(QDialog):
         layout.addWidget(buttons)
         self._password.setFocus()
 
-    def showEvent(self, event) -> None:  # noqa: ANN001, N802
+    def showEvent(self, event) -> None:
         super().showEvent(event)
         self._password.setFocus()
         self._password.selectAll()

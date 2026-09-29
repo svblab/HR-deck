@@ -111,7 +111,7 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
             logger.error("demo database corruption: %s", exc)
             QMessageBox.critical(None, "Повреждение базы данных (демо)", str(exc))
             return 1
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.exception("demo prepare failed")
             QMessageBox.critical(
                 None,

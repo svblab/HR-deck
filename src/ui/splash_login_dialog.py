@@ -68,7 +68,7 @@ class _SplashLoginRoot(QWidget):
         self._overlay_layout.addLayout(row)
         self._overlay_layout.addStretch(1)
 
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+    def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         rect = self.rect()
         self._background.setGeometry(rect)
@@ -271,7 +271,7 @@ class SplashLoginDialog(LoginDialog):
 
         return form_panel
 
-    def showEvent(self, event) -> None:  # noqa: ANN001, N802
+    def showEvent(self, event) -> None:
         super().showEvent(event)
         if not self._geometry_applied:
             self.prepare_startup_presentation()

@@ -96,7 +96,7 @@ def test_preview_warns_when_employee_required_but_not_selected(
     build_calls: list[object] = []
     original_build = reports.build
 
-    def tracking_build(kind, params):  # noqa: ANN001
+    def tracking_build(kind, params):
         build_calls.append((kind, params))
         return original_build(kind, params)
 
@@ -146,7 +146,7 @@ def test_export_xlsx_creates_file(qtbot, tmp_path: Path, monkeypatch: pytest.Mon
 
     target = tmp_path / "report.xlsx"
 
-    def _save(_parent, _title, _default, _filt):  # noqa: ANN001
+    def _save(_parent, _title, _default, _filt):
         return (str(target), "*.xlsx")
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", _save)
@@ -166,7 +166,7 @@ def test_export_pdf_creates_file(qtbot, tmp_path: Path, monkeypatch: pytest.Monk
 
     target = tmp_path / "report.pdf"
 
-    def _save(_parent, _title, _default, _filt):  # noqa: ANN001
+    def _save(_parent, _title, _default, _filt):
         return (str(target), "*.pdf")
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", _save)
@@ -188,7 +188,7 @@ def test_export_without_preview_triggers_build(
 
     target = tmp_path / "report.xlsx"
 
-    def _save(_parent, _title, _default, _filt):  # noqa: ANN001
+    def _save(_parent, _title, _default, _filt):
         return (str(target), "*.xlsx")
 
     monkeypatch.setattr(QFileDialog, "getSaveFileName", _save)

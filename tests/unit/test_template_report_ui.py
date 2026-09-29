@@ -51,7 +51,7 @@ def _session_for_role(
     conn: object,
     admin: SessionState,
     db: Path,
-    clock,  # noqa: ANN001
+    clock,
     role: RoleCode,
 ) -> SessionState:
     if role is RoleCode.ADMINISTRATOR:
@@ -80,7 +80,7 @@ def _upload_samples(
     tmp_path: Path,
     admin: SessionState,
     conn: object,
-    clock,  # noqa: ANN001
+    clock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     library = TemplateLibraryService(conn, admin, data_dir=tmp_path, clock=clock)

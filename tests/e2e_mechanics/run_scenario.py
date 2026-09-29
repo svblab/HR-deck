@@ -28,7 +28,7 @@ def _configure_logging(log_path: Path) -> None:
     if hasattr(sh.stream, "reconfigure"):
         try:
             sh.stream.reconfigure(errors="replace")
-        except Exception:
+        except OSError:
             pass
     root.handlers.clear()
     root.addHandler(fh)
