@@ -110,7 +110,7 @@ def unwrap_secret(entry: WrapEntry, secret: str) -> bytes:
     try:
         aad = _aad(entry.kind, entry.login)
         return aes.decrypt(entry.nonce, entry.ciphertext, associated_data=aad)
-    except Exception as exc:  # noqa: BLE001 — cryptography raises InvalidTag
+    except Exception as exc:  # cryptography raises InvalidTag
         raise KeywrapError("unwrap failed") from exc
 
 

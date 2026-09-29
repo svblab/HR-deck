@@ -246,7 +246,7 @@ class TransportExportAdminService:
         self._authz = authz or AuthorizationService()
         self._export = TransportExportService(conn, store=store)
         self._audit = UserActionLogRepository(conn)
-        self._clock = self._export._store._clock  # noqa: SLF001
+        self._clock = self._export._store._clock
 
     def _require_export_permission(self) -> None:
         self._session.require_unlocked()

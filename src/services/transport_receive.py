@@ -245,7 +245,7 @@ class TransportReceiveAdminService:
         self._authz = authz or AuthorizationService()
         self._receive = TransportReceiveService(conn, store=store)
         self._audit = UserActionLogRepository(conn)
-        self._clock = self._receive._store._clock  # noqa: SLF001
+        self._clock = self._receive._store._clock
 
     def _require_import_export(self) -> None:
         self._session.require_unlocked()

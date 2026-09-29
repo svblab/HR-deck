@@ -28,7 +28,7 @@ class TransportKeyAdminService:
         self._authz = authz or AuthorizationService()
         self._store = TransportKeyStore(conn, clock=clock)
         self._audit = UserActionLogRepository(conn)
-        self._clock = self._store._clock  # noqa: SLF001 — shared clock in tests
+        self._clock = self._store._clock  # shared clock in tests
 
     def _require_admin(self) -> None:
         self._session.require_unlocked()

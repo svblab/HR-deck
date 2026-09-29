@@ -25,7 +25,7 @@ class SessionActivityFilter(QObject):
         super().__init__()
         self._session = session
 
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if (
             event.type() in _ACTIVITY_EVENTS
             and not self._session.locked

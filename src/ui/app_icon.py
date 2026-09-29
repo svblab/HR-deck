@@ -43,7 +43,7 @@ class _AppWindowIconFilter(QObject):
         super().__init__()
         self._icon = icon
 
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.Show and isinstance(watched, QWidget):
             if watched.isWindow() and watched.windowIcon().isNull():
                 watched.setWindowIcon(self._icon)

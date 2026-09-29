@@ -499,7 +499,7 @@ class MainWindow(QMainWindow):
             return False
         try:
             self._session.require_unlocked()
-        except Exception:
+        except Exception:  # noqa: BLE001 — any failure means locked; fall back to idle check
             self._check_idle()
             return False
         return True
@@ -620,7 +620,7 @@ class MainWindow(QMainWindow):
             pass
         self._session_released = True
 
-    def resizeEvent(self, event) -> None:  # noqa: ANN001
+    def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         if self._lock_overlay is not None and self._lock_overlay.isVisible():
             self._lock_overlay.setGeometry(self.rect())
