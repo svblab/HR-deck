@@ -15,7 +15,9 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from data.backup_io import prepare_database_startup
 from data.db import Connection, table_columns
+from data.keywrap import keywrap_path_for
 from data.paths import ensure_user_data_dirs
 from services.account_management import AccountManagementService
 from services.bootstrap import BootstrapService
@@ -364,13 +366,42 @@ def _assign_demo_statuses(
 def reset_demo_database(db_path: Path) -> None:
     """Удалить demo-БД и keywrap, чтобы следующий prepare собрал seed заново."""
     path = Path(db_path)
-    from data.keywrap import keywrap_path_for
+    targets = (
+        path,
+        keywrap_path_for(path),
+        Path(str(path) + "-wal"),
+        Path(str(path) + "-shm"),
+    )
+    for item in targets:
+        if item.is_file():
+            item.unlink()
+            logger.info("demo reset removed %s", item)
 
-    wrap = keywrap_path_for(path)
-    for p in (path, wrap):
-        if p.is_file():
-            p.unlink()
-            logger.info("demo reset removed %s", p)
+
+def _disable_demo_idle_lock(
+    conn: Connection,
+    session: SessionState,
+    db_path: Path,
+    now: str,
+) -> None:
+    """Записать отключение автоблокировки в базу, не только в объект сессии."""
+    mgr = AccountManagementService(conn, session, db_path=db_path, clock=lambda: now)
+    mgr.update_security_settings(
+        inactivity_timeout_enabled=False,
+        inactivity_timeout_seconds=0,
+    )
+
+
+def launch_demo_database(db_path: Path) -> tuple[Connection, SessionState]:
+    """Сбросить файл, затем проверить его и собрать demo-БД.
+
+    Сброс идёт до prepare_database_startup: повреждённый файл не блокирует показ.
+    """
+    path = Path(db_path)
+    ensure_user_data_dirs(path.parent)
+    reset_demo_database(path)
+    prepare_database_startup(path)
+    return prepare_demo_database(path, force_reset=False)
 
 
 def prepare_demo_database(
@@ -412,19 +443,17 @@ def prepare_demo_database(
         )
         logger.info("demo login to existing DB")
 
-    session.inactivity_timeout_enabled = False
-    session.inactivity_timeout_seconds = 0
-
     count = conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+    mgr = AccountManagementService(conn, session, db_path=path, clock=lambda: now)
     if count == 0:
         seed_demo_org(conn, now=now)
         _assign_demo_statuses(conn, session, today=today, now=now)
-        mgr = AccountManagementService(conn, session, db_path=path, clock=lambda: now)
         mgr.update_company_profile(company_name=DEMO_COMPANY_NAME)
         logger.info("demo org seeded: %s employees as of %s", DEMO_EMPLOYEE_COUNT, today)
     else:
         logger.info("demo DB already has %s employees — skip seed", count)
 
+    _disable_demo_idle_lock(conn, session, path, now)
     return conn, session
 
 

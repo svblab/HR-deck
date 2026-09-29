@@ -77,8 +77,7 @@ def _inject_demo_banner(window: MainWindow) -> None:
     row = QHBoxLayout(bar)
     row.setContentsMargins(18, 0, 18, 0)
     label = QLabel(
-        "РЕЖИМ ДЕМО — синтетические данные · login: demo / password: demo · "
-        "рабочая БД не затронута",
+        "РЕЖИМ ДЕМО — синтетические данные, рабочая база не затронута",
         objectName="demoBannerLabel",
     )
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -101,20 +100,17 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
 
     is_demo = demo
     if is_demo:
-        from services.demo import demo_data_dir, demo_db_path, prepare_demo_database
+        from services.demo import demo_data_dir, demo_db_path, launch_demo_database
 
         if db_path is not None:
             logger.warning("--db ignored in --demo mode; using demo data dir")
         path = demo_db_path()
-        ensure_user_data_dirs(path.parent)
         try:
-            prepare_database_startup(path)
+            conn, session = launch_demo_database(path)
         except DatabaseCorruptionError as exc:
             logger.error("demo database corruption: %s", exc)
             QMessageBox.critical(None, "Повреждение базы данных (демо)", str(exc))
             return 1
-        try:
-            conn, session = prepare_demo_database(path, force_reset=True)
         except Exception as exc:  # noqa: BLE001
             logger.exception("demo prepare failed")
             QMessageBox.critical(
@@ -173,7 +169,7 @@ def run(db_path: Path | None = None, *, demo: bool = False) -> int:
     window = MainWindow(conn=conn, session=session, db_path=path)
     if is_demo:
         _inject_demo_banner(window)
-        logger.info("demo mode active: login=demo password=demo")
+        logger.info("demo mode active")
     window.showFullScreen()
     return app.exec()
 
