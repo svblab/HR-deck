@@ -2,20 +2,41 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from data.db import Connection
 from data.import_sessions import ImportSessionRepository
-from domain.employee import EmployeeCreateInput
+from domain.employee import EmployeeCreateInput, EmployeeValidationError
 from domain.permissions import Permission
 from services.authorization import AuthorizationError, AuthorizationService
 from services.backup import BackupError, BackupService
-from services.employees import EmployeeService
+from services.employees import EmployeeError, EmployeeService
 from services.session import SessionState
 
 
 class EmployeeConversionError(Exception):
     """Ошибка сохранения или пропуска строки конвертации."""
+
+
+@dataclass(frozen=True)
+class ConversionBulkSaveItemResult:
+    row_id: int
+    employee_id: int | None = None
+    error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class ConversionBulkSaveResult:
+    results: tuple[ConversionBulkSaveItemResult, ...]
+
+    @property
+    def applied_count(self) -> int:
+        return sum(1 for item in self.results if item.employee_id is not None)
+
+    @property
+    def error_count(self) -> int:
+        return sum(1 for item in self.results if item.error_message)
 
 
 class EmployeeConversionService:
@@ -70,21 +91,42 @@ class EmployeeConversionService:
         self,
         *,
         session_id: int,
-        rows: list[tuple[int, EmployeeCreateInput]],
+        resolved_rows: list[tuple[int, EmployeeCreateInput]],
         last_accessed_at: str,
-    ) -> list[int]:
-        """Apply multiple staged rows; one pre-conversion backup for the whole batch."""
-        employee_ids: list[int] = []
-        for row_id, data in rows:
-            employee_ids.append(
-                self.save_row(
+    ) -> ConversionBulkSaveResult:
+        """Apply multiple staged rows; each row uses existing save_row semantics."""
+        outcomes: list[ConversionBulkSaveItemResult] = []
+        for row_id, data in resolved_rows:
+            try:
+                employee_id = self.save_row(
                     session_id=session_id,
                     row_id=row_id,
                     data=data,
                     last_accessed_at=last_accessed_at,
                 )
-            )
-        return employee_ids
+            except (
+                EmployeeConversionError,
+                EmployeeError,
+                EmployeeValidationError,
+            ) as exc:
+                outcomes.append(
+                    ConversionBulkSaveItemResult(
+                        row_id=row_id, error_message=str(exc)
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001 — bulk must continue after any row failure
+                outcomes.append(
+                    ConversionBulkSaveItemResult(
+                        row_id=row_id, error_message=str(exc)
+                    )
+                )
+            else:
+                outcomes.append(
+                    ConversionBulkSaveItemResult(
+                        row_id=row_id, employee_id=employee_id
+                    )
+                )
+        return ConversionBulkSaveResult(results=tuple(outcomes))
 
     def skip_row(
         self,
@@ -136,4 +178,10 @@ class EmployeeConversionService:
         self._authz.require(self._session.role, Permission.MANAGE_EMPLOYEES)
 
 
-__all__ = ["AuthorizationError", "EmployeeConversionError", "EmployeeConversionService"]
+__all__ = [
+    "AuthorizationError",
+    "ConversionBulkSaveItemResult",
+    "ConversionBulkSaveResult",
+    "EmployeeConversionError",
+    "EmployeeConversionService",
+]

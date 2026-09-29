@@ -22,7 +22,7 @@ from services.employees import EmployeeService
 from services.session import SessionState
 from services.status_history import StatusHistoryService
 from ui.backup_dialog import BackupOperationsWidget
-from ui.conversion_wizard_dialog import run_conversion_wizard_flow
+from ui.conversion_wizard_flow import run_conversion_wizard_flow
 from ui.transport_import_dialog import TransportImportPanel
 
 OnRestored = Callable[[Connection], None]
