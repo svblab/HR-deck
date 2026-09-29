@@ -37,13 +37,13 @@ def _capture_warnings(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, ...
     return seen
 
 
-def test_splash_image_available_from_qt_resources(qapp) -> None:  # noqa: ANN001
+def test_splash_image_available_from_qt_resources(qapp) -> None:
     pixmap = load_splash_pixmap()
     assert not pixmap.isNull()
     assert SPLASH_IMAGE_RESOURCE == ":/ui/Splash/splash.png"
 
 
-def test_cover_splash_pixmap_fills_target_without_distortion(qapp) -> None:  # noqa: ANN001
+def test_cover_splash_pixmap_fills_target_without_distortion(qapp) -> None:
     source = load_splash_pixmap()
     assert not source.isNull()
     source_ratio = source.width() / source.height()
@@ -220,7 +220,7 @@ def test_splash_login_dialog_recovery_opens_existing_flow(
 ) -> None:
     opened: list[RecoverPasswordDialog] = []
 
-    def _track_exec(self: RecoverPasswordDialog) -> int:  # noqa: N805
+    def _track_exec(self: RecoverPasswordDialog) -> int:
         opened.append(self)
         return QDialog.DialogCode.Rejected
 
@@ -252,7 +252,7 @@ def test_app_startup_uses_splash_login_dialog(
     created: list[SplashLoginDialog] = []
 
     class StubSplash(SplashLoginDialog):
-        def __init__(self, db_path: Path, parent=None) -> None:  # noqa: ANN001
+        def __init__(self, db_path: Path, parent=None) -> None:
             super().__init__(db_path, parent)
             created.append(self)
             self._auto_accept = True

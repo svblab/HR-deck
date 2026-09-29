@@ -92,7 +92,7 @@ def test_sensitive_fields_hidden_for_hr(qtbot, tmp_path: Path) -> None:
     conn.close()
 
 
-def _select_combo(combo, entity_id: int | None) -> None:  # noqa: ANN001
+def _select_combo(combo, entity_id: int | None) -> None:
     idx = combo.findData(entity_id)
     assert idx >= 0, f"id {entity_id} not in combo"
     combo.setCurrentIndex(idx)

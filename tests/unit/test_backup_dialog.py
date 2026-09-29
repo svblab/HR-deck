@@ -28,7 +28,7 @@ def _open(tmp_path: Path):
     return db, conn, session, backup, clock
 
 
-def _hr_session(conn, admin: SessionState, db: Path, clock) -> SessionState:  # noqa: ANN001
+def _hr_session(conn, admin: SessionState, db: Path, clock) -> SessionState:
     mgr = AccountManagementService(conn, admin, db_path=db, clock=clock)
     hr_id = mgr.create_account(login="hr1", password="HrPass-1", role=RoleCode.HR_EMPLOYEE)
     return SessionState(
@@ -39,7 +39,7 @@ def _hr_session(conn, admin: SessionState, db: Path, clock) -> SessionState:  # 
     )
 
 
-def _observer_session(conn, admin: SessionState, db: Path, clock) -> SessionState:  # noqa: ANN001
+def _observer_session(conn, admin: SessionState, db: Path, clock) -> SessionState:
     mgr = AccountManagementService(conn, admin, db_path=db, clock=clock)
     obs_id = mgr.create_account(login="obs1", password="ObsPass-1", role=RoleCode.OBSERVER)
     return SessionState(

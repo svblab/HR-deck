@@ -184,7 +184,7 @@ def run_scenario(
         report.success = False
         report.failure_message = str(exc)
         _log.error("HARD FAIL: %s", exc)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — record any scenario failure in report
         report.success = False
         report.failure_message = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
         _log.exception("scenario failed")
@@ -196,7 +196,7 @@ def run_scenario(
         for p in (peer_a, peer_b):
             try:
                 p.conn.close()
-            except Exception:
+            except Exception:  # noqa: BLE001 — best-effort connection cleanup
                 pass
     return report
 
@@ -258,7 +258,7 @@ def _corrupt_once(sender, recipient, exchange_dir: Path, report: ScenarioReport)
         raise AssertionError("corrupted package was accepted — expected crypto failure")
     except AssertionError:
         raise
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — any ingest failure counts as rejection
         _log.info(
             "corrupted package rejected as expected: %s: %s",
             type(exc).__name__,

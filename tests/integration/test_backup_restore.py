@@ -58,7 +58,7 @@ def test_create_backup_verify_failure_removes_file(monkeypatch, tmp_path: Path) 
     db, conn, session, backup, _ids, _clock = _open(tmp_path)
     dest = tmp_path / "external"
 
-    def _fail(path, key):  # noqa: ANN001
+    def _fail(path, key):
         raise OSError("simulated verify failure")
 
     monkeypatch.setattr("services.backup.verify_database_file", _fail)
@@ -116,7 +116,7 @@ def test_atomic_swap_leaves_live_consistent_on_partial(monkeypatch, tmp_path: Pa
     snapshot = backup.create_backup(dest)
     conn.close()
 
-    def _boom(src, dst):  # noqa: ANN001
+    def _boom(src, dst):
         raise OSError("simulated copy failure")
 
     monkeypatch.setattr("data.backup_io.atomic_copy_file", _boom)

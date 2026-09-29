@@ -103,7 +103,7 @@ def test_main_window_standard_report_xlsx_and_pdf(
     pdf_path = tmp_path / "snapshot.pdf"
     save_queue = [(str(xlsx_path), "*.xlsx"), (str(pdf_path), "*.pdf")]
 
-    def _save(_parent, _title, _default, _filt):  # noqa: ANN001
+    def _save(_parent, _title, _default, _filt):
         assert save_queue, "unexpected extra save dialog"
         return save_queue.pop(0)
 

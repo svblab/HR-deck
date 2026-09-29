@@ -100,7 +100,7 @@ def test_run_import_flow_cancelled_when_file_not_chosen(
     preview_calls: list[Path] = []
     original_preview = EmployeeImportService.preview_path
 
-    def tracking_preview(self, path: Path):  # noqa: ANN001
+    def tracking_preview(self, path: Path):
         preview_calls.append(path)
         return original_preview(self, path)
 

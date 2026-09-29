@@ -142,7 +142,7 @@ def test_archive_restore_and_assign_uses_status_dialog(
     opened: list[int] = []
     original_init = StatusAssignDialog.__init__
 
-    def _track_init(self, *args, **kwargs) -> None:  # noqa: ANN002
+    def _track_init(self, *args, **kwargs) -> None:
         opened.append(1)
         return original_init(self, *args, **kwargs)
 
@@ -200,7 +200,7 @@ def test_archive_open_card_on_row_click_without_restore(
     opened: list[int] = []
 
     def _open_card(self: EmployeeCardDialog) -> QDialog.DialogCode:
-        opened.append(self._employee_id)  # noqa: SLF001
+        opened.append(self._employee_id)
         return QDialog.DialogCode.Rejected
 
     monkeypatch.setattr(EmployeeCardDialog, "exec", _open_card)
@@ -221,8 +221,8 @@ def test_archive_open_card_on_row_click_without_restore(
     assert open_btn is not None and restore_btn is not None
     assert open_btn.isEnabled()
     assert restore_btn.isEnabled()
-    assert dialog._selected is not None  # noqa: SLF001
-    assert dialog._selected.employee_id == emp_id  # noqa: SLF001
+    assert dialog._selected is not None
+    assert dialog._selected.employee_id == emp_id
 
     dialog.close()
     window.close()
@@ -252,7 +252,7 @@ def test_archive_open_card_without_restore(
     opened: list[int] = []
 
     def _open_card(self: EmployeeCardDialog) -> QDialog.DialogCode:
-        opened.append(self._employee_id)  # noqa: SLF001
+        opened.append(self._employee_id)
         return QDialog.DialogCode.Rejected
 
     monkeypatch.setattr(EmployeeCardDialog, "exec", _open_card)
@@ -276,8 +276,8 @@ def test_archive_open_card_without_restore(
     assert restore_btn is not None
     assert open_btn.isEnabled()
     assert restore_btn.isEnabled()
-    assert dialog._selected is not None  # noqa: SLF001
-    assert dialog._selected.employee_id == emp_id  # noqa: SLF001
+    assert dialog._selected is not None
+    assert dialog._selected.employee_id == emp_id
 
     dialog.close()
     window.close()
@@ -321,8 +321,8 @@ def test_archive_open_card_restore_notifies_parent(
     assert notified == 1
     assert table.rowCount() == 1
     assert open_btn.isEnabled()
-    assert dialog._selected is not None  # noqa: SLF001
-    assert dialog._selected.employee_id == emp_id  # noqa: SLF001
+    assert dialog._selected is not None
+    assert dialog._selected.employee_id == emp_id
 
     dialog.close()
     window.close()
@@ -343,7 +343,7 @@ def test_archive_open_card_clears_selection_after_restore_from_card(
     employees.archive_employee(emp_id)
 
     def _restore_from_card(self: EmployeeCardDialog) -> QDialog.DialogCode:
-        employees.restore_employee(self._employee_id)  # noqa: SLF001
+        employees.restore_employee(self._employee_id)
         return QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(EmployeeCardDialog, "exec", _restore_from_card)
@@ -359,7 +359,7 @@ def test_archive_open_card_clears_selection_after_restore_from_card(
     open_btn.click()
 
     assert table.rowCount() == 0
-    assert dialog._selected is None  # noqa: SLF001
+    assert dialog._selected is None
     assert not open_btn.isEnabled()
     assert not restore_btn.isEnabled()
 

@@ -45,7 +45,7 @@ def _session(key: bytes, account_id: int = 1) -> SessionState:
     )
 
 
-def _employee_rows(conn) -> list[tuple]:  # noqa: ANN001
+def _employee_rows(conn) -> list[tuple]:
     return conn.execute(
         "SELECT id, full_name FROM employees ORDER BY id"
     ).fetchall()
