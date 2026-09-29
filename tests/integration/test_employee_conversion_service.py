@@ -224,3 +224,108 @@ def test_save_one_row_keeps_session_with_remaining_pending(tmp_path: Path) -> No
     assert remaining[0].id == second_row
     assert sessions.get_by_file_content_hash(_HASH) is not None
     conn.close()
+
+
+@pytest.mark.acceptance
+def test_save_rows_bulk_multiple_success(tmp_path: Path) -> None:
+    conn, _session, employees, sessions, conversion, ids = _open(tmp_path)
+    session_id = sessions.create_session(file_content_hash=_HASH, last_accessed_at=_T0)
+    row_a = sessions.insert_row(
+        session_id=session_id, source_row_number=2, values_json=_JSON
+    )
+    row_b = sessions.insert_row(
+        session_id=session_id, source_row_number=3, values_json=_JSON
+    )
+    conn.commit()
+    before = conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+
+    result = conversion.save_rows_bulk(
+        session_id=session_id,
+        resolved_rows=[
+            (row_a, _employee_payload(ids, full_name="Первый")),
+            (row_b, _employee_payload(ids, full_name="Второй")),
+        ],
+        last_accessed_at=_T1,
+    )
+
+    assert result.applied_count == 2
+    assert result.error_count == 0
+    assert conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == before + 2
+    assert sessions.list_rows(session_id) == []
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_save_rows_bulk_uses_per_row_save_row_commits(tmp_path: Path) -> None:
+    conn, _session, employees, sessions, conversion, ids = _open(tmp_path)
+    session_id = sessions.create_session(file_content_hash=_HASH, last_accessed_at=_T0)
+    row_a = sessions.insert_row(
+        session_id=session_id, source_row_number=2, values_json=_JSON
+    )
+    row_b = sessions.insert_row(
+        session_id=session_id, source_row_number=3, values_json=_JSON
+    )
+    conn.commit()
+    calls: list[int] = []
+    original = conversion.save_row
+
+    def _spy(**kwargs):
+        employee_id = original(**kwargs)
+        calls.append(int(kwargs["row_id"]))
+        return employee_id
+
+    conversion.save_row = _spy  # type: ignore[method-assign]
+
+    conversion.save_rows_bulk(
+        session_id=session_id,
+        resolved_rows=[
+            (row_a, _employee_payload(ids, full_name="Первый")),
+            (row_b, _employee_payload(ids, full_name="Второй")),
+        ],
+        last_accessed_at=_T1,
+    )
+    assert calls == [row_a, row_b]
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_save_rows_bulk_collects_failure_and_continues(
+    tmp_path: Path, monkeypatch
+) -> None:
+    conn, _session, employees, sessions, conversion, ids = _open(tmp_path)
+    session_id = sessions.create_session(file_content_hash=_HASH, last_accessed_at=_T0)
+    row_a = sessions.insert_row(
+        session_id=session_id, source_row_number=2, values_json=_JSON
+    )
+    row_b = sessions.insert_row(
+        session_id=session_id, source_row_number=3, values_json=_JSON
+    )
+    conn.commit()
+    before = conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+    original = conversion.save_row
+
+    def _fail_first(**kwargs):
+        if kwargs["row_id"] == row_a:
+            raise RuntimeError("boom")
+        return original(**kwargs)
+
+    monkeypatch.setattr(conversion, "save_row", _fail_first)
+
+    result = conversion.save_rows_bulk(
+        session_id=session_id,
+        resolved_rows=[
+            (row_a, _employee_payload(ids, full_name="Первый")),
+            (row_b, _employee_payload(ids, full_name="Второй")),
+        ],
+        last_accessed_at=_T1,
+    )
+
+    assert result.applied_count == 1
+    assert result.error_count == 1
+    assert result.results[0].error_message == "boom"
+    assert result.results[1].employee_id is not None
+    assert conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0] == before + 1
+    remaining = sessions.list_rows(session_id)
+    assert len(remaining) == 1
+    assert remaining[0].id == row_a
+    conn.close()
