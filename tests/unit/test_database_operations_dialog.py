@@ -136,7 +136,7 @@ def test_dialog_tabs_by_role(qtbot, tmp_path: Path) -> None:
     assert tabs is not None
     assert _tab_titles(tabs) == [
         "Конвертация данных",
-        "Импорт данных",
+        "Обмен данными",
         "Резервное копирование",
     ]
 
@@ -152,8 +152,12 @@ def test_dialog_tabs_by_role(qtbot, tmp_path: Path) -> None:
     qtbot.addWidget(hr_dialog)
     hr_tabs = hr_dialog.findChild(QTabWidget, "databaseOperationsTabs")
     assert hr_tabs is not None
-    assert _tab_titles(hr_tabs) == ["Конвертация данных", "Импорт данных"]
+    assert _tab_titles(hr_tabs) == ["Конвертация данных", "Обмен данными"]
     assert hr_dialog.findChild(QWidget, "databaseOperationsBackupTab") is None
+    inner = hr_dialog.findChild(QTabWidget, "databaseOperationsTransportInnerTabs")
+    assert inner is not None
+    assert inner.tabText(0) == "Импорт"
+    assert inner.tabText(1) == "Экспорт"
     conn.close()
 
 

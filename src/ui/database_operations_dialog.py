@@ -23,6 +23,7 @@ from services.session import SessionState
 from services.status_history import StatusHistoryService
 from ui.backup_dialog import BackupOperationsWidget
 from ui.conversion_wizard_flow import run_conversion_wizard_flow
+from ui.transport_export_dialog import TransportExportPanel
 from ui.transport_import_dialog import TransportImportPanel
 
 OnRestored = Callable[[Connection], None]
@@ -48,7 +49,7 @@ def database_operations_tab_visibility(session: SessionState) -> dict[str, bool]
 
 
 class DatabaseOperationsDialog(QDialog):
-    """Shell: конвертация, transport-import (placeholder), резервное копирование."""
+    """Shell: конвертация, transport import/export, резервное копирование."""
 
     def __init__(
         self,
@@ -89,8 +90,8 @@ class DatabaseOperationsDialog(QDialog):
             )
         if self._tabs_visibility["import"]:
             self._tabs.addTab(
-                self._build_import_tab(),
-                "Импорт данных",
+                self._build_transport_exchange_tab(),
+                "Обмен данными",
             )
         if self._tabs_visibility["backup"]:
             backup_tab = QWidget(objectName="databaseOperationsBackupTab")
@@ -129,19 +130,30 @@ class DatabaseOperationsDialog(QDialog):
         tab_layout.addStretch(1)
         return tab
 
-    def _build_import_tab(self) -> QWidget:
-        tab = QWidget(objectName="databaseOperationsImportTab")
+    def _build_transport_exchange_tab(self) -> QWidget:
+        tab = QWidget(objectName="databaseOperationsTransportTab")
         tab_layout = QVBoxLayout(tab)
-        tab_layout.addWidget(
+        inner = QTabWidget(objectName="databaseOperationsTransportInnerTabs")
+        import_page = QWidget(objectName="databaseOperationsImportTab")
+        import_layout = QVBoxLayout(import_page)
+        import_layout.addWidget(
             TransportImportPanel(
                 self._conn,
                 self._session,
                 self._employees,
                 db_path=self._db_path,
                 on_data_changed=self._on_data_changed,
-                parent=tab,
+                parent=import_page,
             )
         )
+        inner.addTab(import_page, "Импорт")
+        export_page = QWidget(objectName="databaseOperationsExportTab")
+        export_layout = QVBoxLayout(export_page)
+        export_layout.addWidget(
+            TransportExportPanel(self._conn, self._session, parent=export_page)
+        )
+        inner.addTab(export_page, "Экспорт")
+        tab_layout.addWidget(inner)
         return tab
 
     def _start_conversion(self) -> None:

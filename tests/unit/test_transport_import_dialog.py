@@ -148,6 +148,26 @@ def test_rejected_path_renders_code_message_and_disables_apply(
     conn.close()
 
 
+def test_replay_disables_apply_and_shows_message(qtbot, tmp_path: Path) -> None:
+    conn, session, employees, _directories, db = _open(tmp_path)
+    panel = TransportImportPanel(conn, session, employees, db_path=db)
+    qtbot.addWidget(panel)
+    replay = ValidationResult(
+        freshness=FreshnessClass.NEW,
+        disposition=ValidationDisposition.REPLAY,
+        directory_plan=DirectoryPlan(),
+        employee_plan=EmployeePlan(),
+    )
+    panel.load_validation(_decrypted(), replay)
+    apply_btn = panel.findChild(QPushButton, "transportImportApplyBtn")
+    assert apply_btn is not None
+    assert not apply_btn.isEnabled()
+    reasons = panel.findChild(QLabel, "transportImportReasonsLabel")
+    assert reasons is not None
+    assert "уже был применён" in reasons.text()
+    conn.close()
+
+
 def test_ready_for_apply_happy_path(qtbot, tmp_path: Path) -> None:
     conn, session, employees, _directories, db = _open(tmp_path)
     changed: list[int] = []
