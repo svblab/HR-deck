@@ -46,7 +46,7 @@ class DirectorySyncService:
         self._employees = EmployeeRepository(conn)
 
     def build_export_package(self, direction_id: int) -> DirectorySyncPackage:
-        self._require_transport_admin()
+        self._require_import_export()
         watermarks = self._load_watermarks(direction_id)
         tables: dict[str, list[dict[str, object]]] = {}
 
@@ -178,7 +178,7 @@ class DirectorySyncService:
         exported_at: str,
     ) -> None:
         """Bump watermarks only for tables that were actually exported."""
-        self._require_transport_admin()
+        self._require_import_export()
         allowed = set(SYNCED_TABLES)
         try:
             for table_name in table_names:
@@ -203,6 +203,7 @@ class DirectorySyncService:
         ).fetchall()
         return {str(r[0]): str(r[1]) for r in rows}
 
-    def _require_transport_admin(self) -> None:
+    def _require_import_export(self) -> None:
+        """ADR-0007: transport directory sync export uses IMPORT_EXPORT."""
         self._session.require_unlocked()
-        self._authz.require(self._session.role, Permission.MANAGE_ENCRYPTION_KEYS)
+        self._authz.require(self._session.role, Permission.IMPORT_EXPORT)

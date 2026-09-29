@@ -20,6 +20,7 @@ from domain.permissions import Permission, RoleCode, has_permission, permissions
         (RoleCode.HR_EMPLOYEE, Permission.MANAGE_EMPLOYEES, True),
         (RoleCode.HR_EMPLOYEE, Permission.CREATE_BACKUP, True),
         (RoleCode.HR_EMPLOYEE, Permission.IMPORT_EXPORT, True),
+        (RoleCode.HR_EMPLOYEE, Permission.MANAGE_ENCRYPTION_KEYS, False),
         (RoleCode.HR_EMPLOYEE, Permission.MANAGE_ACCOUNTS, False),
         (RoleCode.HR_EMPLOYEE, Permission.VIEW_USER_ACTION_LOG, False),
         (RoleCode.HR_EMPLOYEE, Permission.RESTORE_BACKUP, False),

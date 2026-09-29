@@ -158,7 +158,7 @@ class DirectorySyncImportService:
 
     def build_directory_plan(self, package: DirectorySyncPackage) -> DirectoryPlan:
         """Pure: SELECTs only. No SAVEPOINT, no writes."""
-        self._require_transport_admin()
+        self._require_import_export()
         plan = DirectoryPlan()
         self._seed_projected_from_db(plan)
         next_prov = -1
@@ -177,7 +177,7 @@ class DirectorySyncImportService:
 
     def apply_directory_plan(self, plan: DirectoryPlan, *, commit: bool = True) -> None:
         """Write directory ops from an already-built plan."""
-        self._require_transport_admin()
+        self._require_import_export()
         if not plan.is_clean:
             raise DirectorySyncConflictError(list(plan.broken_employees))
         if commit:
@@ -195,7 +195,7 @@ class DirectorySyncImportService:
 
     def apply_package(self, package: DirectorySyncPackage) -> None:
         """File-based Part 4a/4b entry: build plans, then apply atomically."""
-        self._require_transport_admin()
+        self._require_import_export()
         dir_plan = self.build_directory_plan(package)
         if not dir_plan.is_clean:
             raise DirectorySyncConflictError(list(dir_plan.broken_employees))
@@ -232,9 +232,10 @@ class DirectorySyncImportService:
             self._conn.execute(f"RELEASE SAVEPOINT {_SAVEPOINT}")
             raise
 
-    def _require_transport_admin(self) -> None:
+    def _require_import_export(self) -> None:
+        """ADR-0007: transport directory sync uses IMPORT_EXPORT, not key admin."""
         self._session.require_unlocked()
-        self._authz.require(self._session.role, Permission.MANAGE_ENCRYPTION_KEYS)
+        self._authz.require(self._session.role, Permission.IMPORT_EXPORT)
 
     def _seed_projected_from_db(self, plan: DirectoryPlan) -> None:
         for b in self._branches.list(active_only=False):
