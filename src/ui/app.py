@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QWidget
 
 from data.backup_io import DatabaseCorruptionError, prepare_database_startup
 from data.paths import default_db_path, ensure_user_data_dirs
@@ -22,7 +25,69 @@ from ui.splash_login_dialog import SplashLoginDialog
 logger = logging.getLogger(__name__)
 
 
-def run(db_path: Path | None = None) -> int:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="personnel-availability",
+        description="Журнал доступности персонала",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help=(
+            "Режим демо для презентации: временная БД с синтетическими данными, "
+            "авто-вход (login=demo / password=demo). Не затрагивает рабочую БД. "
+            "Также: env PERSONNEL_AVAILABILITY_DEMO=1."
+        ),
+    )
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=None,
+        help="Путь к файлу БД (только для тестов; в --demo игнорируется)",
+    )
+    return parser.parse_args(argv)
+
+
+def _demo_requested(cli_demo: bool) -> bool:
+    if cli_demo:
+        return True
+    env = os.environ.get("PERSONNEL_AVAILABILITY_DEMO", "").strip().lower()
+    return env in ("1", "true", "yes", "on")
+
+
+def _inject_demo_banner(window: MainWindow) -> None:
+    """Вставить оранжевый баннер под title bar — виден в fullscreen."""
+    layout = getattr(window, "_root_layout", None)
+    if layout is None:
+        logger.warning("demo banner: _root_layout missing")
+        return
+    bar = QWidget(objectName="demoBanner")
+    bar.setFixedHeight(36)
+    bar.setStyleSheet(
+        "QWidget#demoBanner {"
+        "  background-color: #B45309;"
+        "  border-bottom: 1px solid #92400E;"
+        "}"
+        "QLabel#demoBannerLabel {"
+        "  color: #FFFBEB;"
+        "  font-weight: 600;"
+        "  font-size: 13px;"
+        "}"
+    )
+    row = QHBoxLayout(bar)
+    row.setContentsMargins(18, 0, 18, 0)
+    label = QLabel(
+        "РЕЖИМ ДЕМО — синтетические данные, рабочая база не затронута",
+        objectName="demoBannerLabel",
+    )
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    row.addWidget(label)
+    # index 0 = title bar; insert banner right after it
+    layout.insertWidget(1, bar)
+    window.setWindowTitle("Учёт доступности персонала — ДЕМО")
+
+
+def run(db_path: Path | None = None, *, demo: bool = False) -> int:
     """Создать QApplication, пройти auth-flow и показать главное окно."""
     install_excepthook()
     configure_logging()
@@ -33,33 +98,56 @@ def run(db_path: Path | None = None) -> int:
     if isinstance(app, QApplication):
         install_app_window_icon(app)
 
-    path = db_path or default_db_path()
-    ensure_user_data_dirs(path.parent)
+    is_demo = demo
+    if is_demo:
+        from services.demo import demo_data_dir, demo_db_path, launch_demo_database
 
-    try:
-        prepare_database_startup(path)
-    except DatabaseCorruptionError as exc:
-        logger.error("database corruption at startup: %s", exc)
-        QMessageBox.critical(
-            None,
-            "Повреждение базы данных",
-            str(exc),
-        )
-        return 1
-
-    conn = None
-    session = None
-    if BootstrapService().needs_setup(path):
-        setup = SetupDialog(path)
-        if setup.exec() != QDialog.DialogCode.Accepted:
+        if db_path is not None:
+            logger.warning("--db ignored in --demo mode; using demo data dir")
+        path = demo_db_path()
+        try:
+            conn, session = launch_demo_database(path)
+        except DatabaseCorruptionError as exc:
+            logger.error("demo database corruption: %s", exc)
+            QMessageBox.critical(None, "Повреждение базы данных (демо)", str(exc))
             return 1
-        conn, session = setup.conn, setup.session
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("demo prepare failed")
+            QMessageBox.critical(
+                None,
+                "Режим демо",
+                f"Не удалось подготовить демо-базу:\n{exc}",
+            )
+            return 1
+        logger.info("demo mode: data dir=%s", demo_data_dir())
     else:
-        login = SplashLoginDialog(path)
-        login.prepare_startup_presentation()
-        if login.exec() != QDialog.DialogCode.Accepted:
+        path = db_path or default_db_path()
+        ensure_user_data_dirs(path.parent)
+
+        try:
+            prepare_database_startup(path)
+        except DatabaseCorruptionError as exc:
+            logger.error("database corruption at startup: %s", exc)
+            QMessageBox.critical(
+                None,
+                "Повреждение базы данных",
+                str(exc),
+            )
             return 1
-        conn, session = login.conn, login.session
+
+        conn = None
+        session = None
+        if BootstrapService().needs_setup(path):
+            setup = SetupDialog(path)
+            if setup.exec() != QDialog.DialogCode.Accepted:
+                return 1
+            conn, session = setup.conn, setup.session
+        else:
+            login = SplashLoginDialog(path)
+            login.prepare_startup_presentation()
+            if login.exec() != QDialog.DialogCode.Accepted:
+                return 1
+            conn, session = login.conn, login.session
 
     assert conn is not None and session is not None
     if isinstance(app, QApplication):
@@ -79,12 +167,17 @@ def run(db_path: Path | None = None) -> int:
         return 1
 
     window = MainWindow(conn=conn, session=session, db_path=path)
+    if is_demo:
+        _inject_demo_banner(window)
+        logger.info("demo mode active")
     window.showFullScreen()
     return app.exec()
 
 
 def main() -> None:
-    raise SystemExit(run())
+    args = _parse_args()
+    demo = _demo_requested(args.demo)
+    raise SystemExit(run(db_path=args.db, demo=demo))
 
 
 if __name__ == "__main__":

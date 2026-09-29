@@ -29,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-personnel-availability = "ui.app:run"
+personnel-availability = "ui.app:main"
 
 [tool.setuptools.package-dir]
 "" = "src"
