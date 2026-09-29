@@ -50,6 +50,10 @@ class BackupService:
         self._clock: Clock = clock or _utc_now
         self._events = TechnicalEventRepository(conn)
 
+    @property
+    def db_path(self) -> Path:
+        return self._db_path
+
     def create_backup(self, destination_dir: Path | str) -> Path:
         """Скопировать зашифрованную БД + keywrap, проверить, залогировать."""
         self._require(Permission.CREATE_BACKUP)
@@ -60,7 +64,7 @@ class BackupService:
         self._log("backup.create", "started", now)
         self._conn.commit()
         try:
-            path = self._copy_live_to(backup_path)
+            path = self.copy_live_to(backup_path)
             verify_database_file(path, self._session.master_key)
             self._log("backup.create", f"success path={path.name}", now)
             self._conn.commit()
@@ -98,7 +102,7 @@ class BackupService:
         pre_dir = default_backups_dir(self._db_path.parent)
         try:
             pre_name = f"pre-restore-{backup_filename(now)}"
-            pre_path = self._copy_live_to(pre_dir / pre_name)
+            pre_path = self.copy_live_to(pre_dir / pre_name)
             verify_database_file(pre_path, self._session.master_key)
         except Exception as exc:
             self._log("backup.restore", f"pre-backup failed reason={exc}", now)
@@ -124,11 +128,34 @@ class BackupService:
             self._conn.commit()
             raise BackupError(str(exc)) from exc
 
-    def _copy_live_to(self, destination_db: Path) -> Path:
+    def copy_live_to(self, destination_db: Path) -> Path:
+        """Copy live database + keywrap sidecar to destination (checkpoint + commit first)."""
         checkpoint_wal(self._conn)
         self._conn.commit()
         copy_database_pair(self._db_path, destination_db)
         return destination_db
+
+    def create_pre_apply_backup(self, prefix: str, *, log_event: str) -> Path:
+        """
+        Verified automatic backup before import/conversion apply (ADR-0014).
+        No CREATE_BACKUP permission — same role as pre-restore inside restore_backup.
+        """
+        self._session.require_unlocked()
+        now = self._clock()
+        pre_dir = default_backups_dir(self._db_path.parent)
+        pre_dir.mkdir(parents=True, exist_ok=True)
+        destination = pre_dir / f"{prefix}-{backup_filename(now)}"
+        self._conn.commit()
+        try:
+            path = self.copy_live_to(destination)
+            verify_database_file(path, self._session.master_key)
+        except Exception as exc:
+            remove_paths(destination, keywrap_path_for(destination))
+            self._log(log_event, f"pre-backup failed reason={exc}", now)
+            self._conn.commit()
+            raise BackupError(f"pre-apply backup failed: {exc}") from exc
+        self._conn.commit()
+        return path
 
     def _require(self, permission: Permission) -> None:
         self._session.require_unlocked()

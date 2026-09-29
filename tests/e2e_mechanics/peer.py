@@ -84,14 +84,22 @@ class Peer:
             self.conn, self.session, store=self.store
         )
         self.inbound = TransportInboundImportService(
-            self.conn, self.session, store=self.store, clock=clock
+            self.conn,
+            self.session,
+            store=self.store,
+            clock=clock,
+            db_path=self.db_path,
         )
         self.sessions = ImportSessionRepository(self.conn)
         self.ingest = ImportConversionIngestService(
             self.conn, self.session, sessions=self.sessions, clock=clock
         )
         self.conversion = EmployeeConversionService(
-            self.conn, self.session, self.employees, sessions=self.sessions
+            self.conn,
+            self.session,
+            self.employees,
+            sessions=self.sessions,
+            db_path=self.db_path,
         )
 
     def ensure_org(self, *, branch_name: str) -> OrgIds:

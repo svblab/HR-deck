@@ -34,7 +34,7 @@ def _admin_open(tmp_path: Path, *, name: str = "app.db"):
         password="AdminPass-1",
     )
     store = TransportKeyStore(conn, clock=lambda: _T0)
-    return conn, session, store
+    return conn, session, store, db
 
 
 def _ensure_inbound_direction(store: TransportKeyStore, conn) -> int:
@@ -93,7 +93,7 @@ def _validate_ready(
 
 
 def test_apply_happy_path_advances_transport_and_audit(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     next_wk = str(uuid.uuid4())
     package_id = str(uuid.uuid4())
@@ -118,7 +118,7 @@ def test_apply_happy_path_advances_transport_and_audit(tmp_path: Path) -> None:
     )
     validation = _validate_ready(conn, session, store, decrypted)
 
-    apply_svc = TransportImportApplyService(conn, session, store=store)
+    apply_svc = TransportImportApplyService(conn, session, store=store, db_path=db)
     result = apply_svc.apply_validated_package(decrypted, validation)
 
     assert result.classification is PackageClassification.ACCEPTED
@@ -155,7 +155,7 @@ def test_apply_happy_path_advances_transport_and_audit(tmp_path: Path) -> None:
 
 
 def test_apply_not_ready_disposition_writes_nothing(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     before_branches = conn.execute("SELECT COUNT(*) FROM branches").fetchone()[0]
     validation = ValidationResult(
@@ -168,7 +168,7 @@ def test_apply_not_ready_disposition_writes_nothing(tmp_path: Path) -> None:
     decrypted = _decrypted(
         direction_id=direction_id, sequence=1, package_id=str(uuid.uuid4())
     )
-    apply_svc = TransportImportApplyService(conn, session, store=store)
+    apply_svc = TransportImportApplyService(conn, session, store=store, db_path=db)
     with pytest.raises(TransportApplyNotReadyError):
         apply_svc.apply_validated_package(decrypted, validation)
     after_branches = conn.execute("SELECT COUNT(*) FROM branches").fetchone()[0]
@@ -180,7 +180,7 @@ def test_apply_not_ready_disposition_writes_nothing(tmp_path: Path) -> None:
 
 
 def test_apply_replay_after_accepted_rejects(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     package_id = str(uuid.uuid4())
     decrypted = _decrypted(
@@ -190,7 +190,7 @@ def test_apply_replay_after_accepted_rejects(tmp_path: Path) -> None:
         tables={},
     )
     validation = _validate_ready(conn, session, store, decrypted)
-    apply_svc = TransportImportApplyService(conn, session, store=store)
+    apply_svc = TransportImportApplyService(conn, session, store=store, db_path=db)
     apply_svc.apply_validated_package(decrypted, validation)
 
     with pytest.raises(TransportApplyNotReadyError):
@@ -199,7 +199,7 @@ def test_apply_replay_after_accepted_rejects(tmp_path: Path) -> None:
 
 
 def test_apply_atomicity_rolls_back_directory_on_employee_fail(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     tables = {
         "branches": [
@@ -220,7 +220,7 @@ def test_apply_atomicity_rolls_back_directory_on_employee_fail(tmp_path: Path) -
         tables=tables,
     )
     validation = _validate_ready(conn, session, store, decrypted)
-    apply_svc = TransportImportApplyService(conn, session, store=store)
+    apply_svc = TransportImportApplyService(conn, session, store=store, db_path=db)
 
     def _boom(_plan, _resolutions=None, *, commit=True):
         raise RuntimeError("forced employee apply failure")
@@ -242,7 +242,7 @@ def test_apply_atomicity_rolls_back_directory_on_employee_fail(tmp_path: Path) -
 
 
 def test_apply_directory_plan_uses_commit_false(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     decrypted = _decrypted(
         direction_id=direction_id,
@@ -251,7 +251,7 @@ def test_apply_directory_plan_uses_commit_false(tmp_path: Path) -> None:
         tables={},
     )
     validation = _validate_ready(conn, session, store, decrypted)
-    apply_svc = TransportImportApplyService(conn, session, store=store)
+    apply_svc = TransportImportApplyService(conn, session, store=store, db_path=db)
 
     with (
         patch.object(

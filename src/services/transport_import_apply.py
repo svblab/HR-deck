@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 from data.db import Connection
 from data.repositories import UserActionLogRepository
@@ -25,6 +26,7 @@ from domain.transport import (
     WkRole,
 )
 from services.authorization import AuthorizationService
+from services.backup import BackupService
 from services.directory_sync_import import DirectoryPlan, DirectorySyncImportService
 from services.employee_sync_import import EmployeePlan, EmployeeSyncImportService
 from services.session import SessionState
@@ -94,9 +96,11 @@ class TransportImportApplyService:
         store: TransportKeyStore | None = None,
         authz: AuthorizationService | None = None,
         clock: Clock | None = None,
+        db_path: Path | str | None = None,
     ) -> None:
         self._conn = conn
         self._session = session
+        self._db_path = Path(db_path) if db_path is not None else None
         self._store = store or TransportKeyStore(conn, clock=clock)
         self._authz = authz or AuthorizationService()
         self._clock = self._store._clock
@@ -117,6 +121,7 @@ class TransportImportApplyService:
         """Apply business + transport state in one commit; rollback on any error."""
         self._require_import_export()
         self._guard_ready(decrypted, validation)
+        self._create_pre_import_backup()
         directory_plan = validation.directory_plan
         employee_plan = validation.employee_plan
         assert directory_plan is not None and employee_plan is not None
@@ -257,6 +262,18 @@ class TransportImportApplyService:
         if decrypted.sequence != expected:
             raise TransportApplyNotReadyError("stale or out-of-sequence package")
 
+    def _create_pre_import_backup(self) -> None:
+        if self._db_path is None:
+            raise TransportApplyNotReadyError("database path is required for pre-apply backup")
+        backup = BackupService(
+            self._conn,
+            self._session,
+            db_path=self._db_path,
+            authz=self._authz,
+            clock=self._clock,
+        )
+        backup.create_pre_apply_backup("pre-import", log_event="backup.pre_import")
+
     def _require_import_export(self) -> None:
         self._session.require_unlocked()
         self._authz.require(self._session.role, Permission.IMPORT_EXPORT)
@@ -273,6 +290,7 @@ class TransportImportApplyAdminService:
         store: TransportKeyStore | None = None,
         authz: AuthorizationService | None = None,
         clock: Clock | None = None,
+        db_path: Path | str | None = None,
     ) -> None:
         self._apply = TransportImportApplyService(
             conn,
@@ -280,6 +298,7 @@ class TransportImportApplyAdminService:
             store=store,
             authz=authz,
             clock=clock,
+            db_path=db_path,
         )
 
     def apply_validated_package(

@@ -56,6 +56,7 @@ class TransportInboundImportService:
         store: TransportKeyStore | None = None,
         authz: AuthorizationService | None = None,
         clock: Clock | None = None,
+        db_path: Path | str | None = None,
     ) -> None:
         self._conn = conn
         self._session = session
@@ -66,7 +67,12 @@ class TransportInboundImportService:
             conn, session, store=self._store, authz=self._authz
         )
         self._apply = TransportImportApplyService(
-            conn, session, store=self._store, authz=self._authz, clock=clock
+            conn,
+            session,
+            store=self._store,
+            authz=self._authz,
+            clock=clock,
+            db_path=db_path,
         )
         self._replay = TransportImportReplayService(
             conn, session, store=self._store, authz=self._authz, clock=clock

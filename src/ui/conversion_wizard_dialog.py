@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -56,6 +57,7 @@ def run_conversion_wizard_flow(
     *,
     status_history: StatusHistoryService | None = None,
     clock: Clock | None = None,
+    db_path: Path | str | None = None,
 ) -> bool:
     """Entry point for EPIC-021 «Конвертация данных» tab (ADR-0012)."""
     path, _filter = QFileDialog.getOpenFileName(
@@ -77,7 +79,9 @@ def run_conversion_wizard_flow(
     if result.resumed:
         sessions.touch_session(result.session_id, last_accessed_at=tick())
         conn.commit()
-    conversion = EmployeeConversionService(conn, session, employees, sessions=sessions)
+    conversion = EmployeeConversionService(
+        conn, session, employees, sessions=sessions, db_path=db_path
+    )
     dialog = ConversionWizardDialog(
         conn,
         session,
@@ -128,6 +132,14 @@ class ConversionWizardDialog(QDialog):
         root = QVBoxLayout(self)
         self._progress = QLabel(objectName="conversionWizardProgress")
         root.addWidget(self._progress)
+
+        self._backup_notice = QLabel(
+            "Перед первым сохранением будет создана автоматическая копия "
+            "текущего состояния базы.",
+            objectName="conversionWizardBackupNotice",
+        )
+        self._backup_notice.setWordWrap(True)
+        root.addWidget(self._backup_notice)
 
         self._duplicate_banner = QLabel(objectName="conversionDuplicateBanner")
         self._duplicate_banner.setWordWrap(True)
@@ -330,6 +342,8 @@ class ConversionWizardDialog(QDialog):
         except (EmployeeConversionError, EmployeeError, EmployeeValidationError) as exc:
             QMessageBox.warning(self, "Сохранение", str(exc))
             return
+        if self._conversion.session_backup_created:
+            self._backup_notice.setText("Резервная копия сессии создана.")
         self._load_current_row()
 
     def _on_skip(self) -> None:

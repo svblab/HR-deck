@@ -37,7 +37,7 @@ def _admin_open(tmp_path: Path):
         password="AdminPass-1",
     )
     store = TransportKeyStore(conn, clock=lambda: _T0)
-    return conn, session, store
+    return conn, session, store, db
 
 
 def _ensure_inbound_direction(store: TransportKeyStore, conn) -> int:
@@ -88,7 +88,7 @@ def _count_branches(conn) -> int:
 
 
 def test_replay_observe_is_noop_after_apply(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     package_id = str(uuid.uuid4())
     decrypted = _decrypted(direction_id=direction_id, sequence=1, package_id=package_id)
@@ -97,7 +97,7 @@ def test_replay_observe_is_noop_after_apply(tmp_path: Path) -> None:
     )
     assert validation.disposition is ValidationDisposition.READY_FOR_APPLY
 
-    apply_svc = TransportImportApplyService(conn, session, store=store)
+    apply_svc = TransportImportApplyService(conn, session, store=store, db_path=db)
     apply_svc.apply_validated_package(decrypted, validation)
     branches_after_apply = _count_branches(conn)
     wk_after = store.lookup_wk_by_key_id(decrypted.next_wk_key_id)
@@ -141,7 +141,7 @@ def test_replay_observe_is_noop_after_apply(tmp_path: Path) -> None:
 
 
 def test_apply_still_rejects_replay_disposition(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     decrypted = _decrypted(
         direction_id=direction_id, sequence=1, package_id=str(uuid.uuid4())
@@ -149,7 +149,7 @@ def test_apply_still_rejects_replay_disposition(tmp_path: Path) -> None:
     validation = TransportImportValidationService(conn, session, store=store).validate_package(
         decrypted
     )
-    TransportImportApplyService(conn, session, store=store).apply_validated_package(
+    TransportImportApplyService(conn, session, store=store, db_path=db).apply_validated_package(
         decrypted, validation
     )
     replay_validation = TransportImportValidationService(
@@ -157,14 +157,14 @@ def test_apply_still_rejects_replay_disposition(tmp_path: Path) -> None:
     ).validate_package(decrypted)
 
     with pytest.raises(TransportApplyNotReadyError):
-        TransportImportApplyService(conn, session, store=store).apply_validated_package(
+        TransportImportApplyService(conn, session, store=store, db_path=db).apply_validated_package(
             decrypted, replay_validation
         )
     conn.close()
 
 
 def test_inbound_deletes_source_after_successful_apply(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     package_id = str(uuid.uuid4())
     decrypted = _decrypted(direction_id=direction_id, sequence=1, package_id=package_id)
@@ -174,7 +174,7 @@ def test_inbound_deletes_source_after_successful_apply(tmp_path: Path) -> None:
     pkg_file = tmp_path / "inbound.pkg"
     pkg_file.write_bytes(b"wire-bytes")
 
-    inbound = TransportInboundImportService(conn, session, store=store)
+    inbound = TransportInboundImportService(conn, session, store=store, db_path=db)
     with (
         patch.object(inbound._receive, "receive_package", return_value=decrypted),
         patch.object(inbound._validate, "validate_package", return_value=validation),
@@ -189,7 +189,7 @@ def test_inbound_deletes_source_after_successful_apply(tmp_path: Path) -> None:
 
 
 def test_inbound_delete_failure_does_not_undo_apply(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     package_id = str(uuid.uuid4())
     decrypted = _decrypted(direction_id=direction_id, sequence=1, package_id=package_id)
@@ -199,7 +199,7 @@ def test_inbound_delete_failure_does_not_undo_apply(tmp_path: Path) -> None:
     pkg_file = tmp_path / "locked.pkg"
     pkg_file.write_bytes(b"wire-bytes")
 
-    inbound = TransportInboundImportService(conn, session, store=store)
+    inbound = TransportInboundImportService(conn, session, store=store, db_path=db)
     with (
         patch.object(inbound._receive, "receive_package", return_value=decrypted),
         patch.object(inbound._validate, "validate_package", return_value=validation),
@@ -222,14 +222,14 @@ def test_inbound_delete_failure_does_not_undo_apply(tmp_path: Path) -> None:
 
 
 def test_inbound_replay_does_not_delete_source(tmp_path: Path) -> None:
-    conn, session, store = _admin_open(tmp_path)
+    conn, session, store, db = _admin_open(tmp_path)
     direction_id = _ensure_inbound_direction(store, conn)
     package_id = str(uuid.uuid4())
     decrypted = _decrypted(direction_id=direction_id, sequence=1, package_id=package_id)
     ready = TransportImportValidationService(conn, session, store=store).validate_package(
         decrypted
     )
-    TransportImportApplyService(conn, session, store=store).apply_validated_package(
+    TransportImportApplyService(conn, session, store=store, db_path=db).apply_validated_package(
         decrypted, ready
     )
     replay_validation = ValidationResult(
@@ -241,7 +241,7 @@ def test_inbound_replay_does_not_delete_source(tmp_path: Path) -> None:
     pkg_file = tmp_path / "replay.pkg"
     pkg_file.write_bytes(b"wire-bytes")
 
-    inbound = TransportInboundImportService(conn, session, store=store)
+    inbound = TransportInboundImportService(conn, session, store=store, db_path=db)
     with (
         patch.object(inbound._receive, "receive_package", return_value=decrypted),
         patch.object(inbound._validate, "validate_package", return_value=replay_validation),
