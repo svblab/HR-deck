@@ -56,6 +56,9 @@ _ATTACH_NOTE = (
     "Выбор действует только для текущего импорта и не запоминается: "
     "при следующем пакете от того же отправителя вопрос может появиться снова."
 )
+_PRE_APPLY_BACKUP_NOTE = (
+    "Перед применением будет создана автоматическая копия текущего состояния базы."
+)
 
 
 def _format_reasons(reasons: tuple[ImportReason, ...]) -> str:
@@ -172,6 +175,7 @@ class TransportImportPanel(QWidget):
         session: SessionState,
         employees: EmployeeService,
         *,
+        db_path: Path | str,
         on_data_changed: OnDataChanged | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -180,6 +184,7 @@ class TransportImportPanel(QWidget):
         self._conn = conn
         self._session = session
         self._employees = employees
+        self._db_path = Path(db_path)
         self._on_data_changed = on_data_changed
         self._store = TransportKeyStore(conn)
         self._decrypted: DecryptedTransportPackage | None = None
@@ -354,7 +359,7 @@ class TransportImportPanel(QWidget):
             f"Sequence: {decrypted.sequence}\n"
             f"Справочники: создать {dir_c}, обновить {dir_u}\n"
             f"Сотрудники (авто): создать {emp_c}, обновить {emp_u}\n"
-            f"Требуют подтверждения: {confirmable}"
+            f"Требуют подтверждения: {confirmable}\n\n{_PRE_APPLY_BACKUP_NOTE}"
         )
 
         reasons_parts: list[str] = []
@@ -548,7 +553,10 @@ class TransportImportPanel(QWidget):
             return
         try:
             apply_svc = TransportImportApplyAdminService(
-                self._conn, self._session, store=self._store
+                self._conn,
+                self._session,
+                store=self._store,
+                db_path=self._db_path,
             )
             result = apply_svc.apply_validated_package(
                 self._decrypted,

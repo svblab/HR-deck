@@ -40,7 +40,9 @@ def _open(tmp_path: Path):
     employees = EmployeeService(conn, session, clock=clock)
     directories = DirectoryService(conn, session, clock=clock)
     sessions = ImportSessionRepository(conn)
-    conversion = EmployeeConversionService(conn, session, employees, sessions=sessions)
+    conversion = EmployeeConversionService(
+        conn, session, employees, sessions=sessions, db_path=db
+    )
     return conn, session, employees, directories, sessions, conversion, ids
 
 

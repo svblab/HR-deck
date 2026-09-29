@@ -66,6 +66,7 @@ class DatabaseOperationsDialog(QDialog):
         super().__init__(parent)
         self._conn = conn
         self._session = session
+        self._db_path = backup.db_path
         self._employees = employees
         self._directories = directories
         self._status_history = status_history
@@ -136,6 +137,7 @@ class DatabaseOperationsDialog(QDialog):
                 self._conn,
                 self._session,
                 self._employees,
+                db_path=self._db_path,
                 on_data_changed=self._on_data_changed,
                 parent=tab,
             )
@@ -149,6 +151,7 @@ class DatabaseOperationsDialog(QDialog):
             self._session,
             self._employees,
             self._directories,
+            db_path=self._db_path,
             status_history=self._status_history,
         ):
             if self._on_data_changed is not None:

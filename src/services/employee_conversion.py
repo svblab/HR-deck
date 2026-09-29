@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from data.db import Connection
 from data.import_sessions import ImportSessionRepository
 from domain.employee import EmployeeCreateInput
 from domain.permissions import Permission
 from services.authorization import AuthorizationError, AuthorizationService
+from services.backup import BackupError, BackupService
 from services.employees import EmployeeService
 from services.session import SessionState
 
@@ -26,12 +29,19 @@ class EmployeeConversionService:
         *,
         sessions: ImportSessionRepository | None = None,
         authz: AuthorizationService | None = None,
+        db_path: Path | str | None = None,
     ) -> None:
         self._conn = conn
         self._session = session
         self._employees = employees
         self._sessions = sessions or ImportSessionRepository(conn)
         self._authz = authz or AuthorizationService()
+        self._db_path = Path(db_path) if db_path is not None else None
+        self._pre_conversion_backup_done = False
+
+    @property
+    def session_backup_created(self) -> bool:
+        return self._pre_conversion_backup_done
 
     def save_row(
         self,
@@ -43,6 +53,7 @@ class EmployeeConversionService:
     ) -> int:
         """Create employee and remove staged row in one transaction."""
         self._require()
+        self._ensure_pre_conversion_backup()
         self._require_row(session_id, row_id)
         try:
             employee_id = self._employees.create_employee(data, commit=False)
@@ -54,6 +65,26 @@ class EmployeeConversionService:
         except Exception:
             self._conn.rollback()
             raise
+
+    def save_rows_bulk(
+        self,
+        *,
+        session_id: int,
+        rows: list[tuple[int, EmployeeCreateInput]],
+        last_accessed_at: str,
+    ) -> list[int]:
+        """Apply multiple staged rows; one pre-conversion backup for the whole batch."""
+        employee_ids: list[int] = []
+        for row_id, data in rows:
+            employee_ids.append(
+                self.save_row(
+                    session_id=session_id,
+                    row_id=row_id,
+                    data=data,
+                    last_accessed_at=last_accessed_at,
+                )
+            )
+        return employee_ids
 
     def skip_row(
         self,
@@ -73,6 +104,25 @@ class EmployeeConversionService:
         except Exception:
             self._conn.rollback()
             raise
+
+    def _ensure_pre_conversion_backup(self) -> None:
+        if self._pre_conversion_backup_done:
+            return
+        if self._db_path is None:
+            raise EmployeeConversionError("database path is required for pre-conversion backup")
+        backup = BackupService(
+            self._conn,
+            self._session,
+            db_path=self._db_path,
+            authz=self._authz,
+        )
+        try:
+            backup.create_pre_apply_backup(
+                "pre-conversion", log_event="backup.pre_conversion"
+            )
+        except BackupError as exc:
+            raise EmployeeConversionError(str(exc)) from exc
+        self._pre_conversion_backup_done = True
 
     def _require_row(self, session_id: int, row_id: int) -> None:
         for row in self._sessions.list_rows(session_id):

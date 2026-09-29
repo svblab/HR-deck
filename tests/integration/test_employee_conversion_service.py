@@ -22,13 +22,16 @@ _JSON = '{"full_name":"Новый Сотрудник"}'
 
 def _open(tmp_path: Path):
     clock = lambda: _T0  # noqa: E731
+    db = tmp_path / "app.db"
     conn, session, _code = BootstrapService(clock=clock).initial_administrator_setup(
-        db_path=tmp_path / "app.db", login="admin", password="AdminPass-1"
+        db_path=db, login="admin", password="AdminPass-1"
     )
     ids = seed_synthetic_org(conn)
     employees = EmployeeService(conn, session, clock=clock)
     sessions = ImportSessionRepository(conn)
-    conversion = EmployeeConversionService(conn, session, employees, sessions=sessions)
+    conversion = EmployeeConversionService(
+        conn, session, employees, sessions=sessions, db_path=db
+    )
     return conn, session, employees, sessions, conversion, ids
 
 

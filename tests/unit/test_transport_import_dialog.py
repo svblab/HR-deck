@@ -43,7 +43,7 @@ def _open(tmp_path: Path):
     )
     employees = EmployeeService(conn, session, clock=lambda: _T0)
     directories = DirectoryService(conn, session, clock=lambda: _T0)
-    return conn, session, employees, directories
+    return conn, session, employees, directories, db
 
 
 def _decrypted(*, direction_id: int = 1, sequence: int = 1) -> DecryptedTransportPackage:
@@ -132,8 +132,8 @@ def _pending_low_ambiguous(
 def test_rejected_path_renders_code_message_and_disables_apply(
     qtbot, tmp_path: Path
 ) -> None:
-    conn, session, employees, _directories = _open(tmp_path)
-    panel = TransportImportPanel(conn, session, employees)
+    conn, session, employees, _directories, db = _open(tmp_path)
+    panel = TransportImportPanel(conn, session, employees, db_path=db)
     qtbot.addWidget(panel)
     panel.load_validation(_decrypted(), _rejected_validation())
 
@@ -149,10 +149,14 @@ def test_rejected_path_renders_code_message_and_disables_apply(
 
 
 def test_ready_for_apply_happy_path(qtbot, tmp_path: Path) -> None:
-    conn, session, employees, _directories = _open(tmp_path)
+    conn, session, employees, _directories, db = _open(tmp_path)
     changed: list[int] = []
     panel = TransportImportPanel(
-        conn, session, employees, on_data_changed=lambda: changed.append(1)
+        conn,
+        session,
+        employees,
+        db_path=db,
+        on_data_changed=lambda: changed.append(1),
     )
     qtbot.addWidget(panel)
     decrypted = _decrypted()
@@ -182,7 +186,7 @@ def test_ready_for_apply_happy_path(qtbot, tmp_path: Path) -> None:
 
 
 def test_pending_confirmation_low_and_ambiguous(qtbot, tmp_path: Path) -> None:
-    conn, session, employees, directories = _open(tmp_path)
+    conn, session, employees, directories, db = _open(tmp_path)
     branch_id = directories.create_branch("Филиал")
     dept_id = directories.create_department(branch_id, "Деп")
     div_id = directories.create_division(branch_id, dept_id, "Отдел")
@@ -234,7 +238,7 @@ def test_pending_confirmation_low_and_ambiguous(qtbot, tmp_path: Path) -> None:
         amb_candidates=(amb_a, amb_b),
     )
 
-    panel = TransportImportPanel(conn, session, employees)
+    panel = TransportImportPanel(conn, session, employees, db_path=db)
     qtbot.addWidget(panel)
     panel.load_validation(_decrypted(), validation)
 
@@ -279,8 +283,7 @@ def test_import_tab_hosts_transport_panel(qtbot, tmp_path: Path) -> None:
     from services.backup import BackupService
     from services.status_history import StatusHistoryService
 
-    conn, session, employees, directories = _open(tmp_path)
-    db = tmp_path / "app.db"
+    conn, session, employees, directories, db = _open(tmp_path)
     dialog = DatabaseOperationsDialog(
         conn,
         session,
