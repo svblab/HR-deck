@@ -1,5 +1,41 @@
 # Production-readiness technical debt audit
 
+## Актуализация на 2026-09-30 (`origin/master` `26d0423`)
+
+Ниже — снимок аудита на базе `f8095bf`; статусы перепроверены по текущему `origin/master` (2026-09-30).
+
+| ID | Sev | Статус | Доказательство (PR, commit, file) | Где отслеживается |
+|----|-----|--------|-----------------------------------|-------------------|
+| PR-AUD-001 | P0 | Решено | [#129](https://github.com/svblab/HR-deck/pull/129) `434f634` — `directory_sync_import.py` `_require_import_export`; repro HR `build_directory_plan` на debian:12 + Python 3.11 — успех | #129, [#130](https://github.com/svblab/HR-deck/issues/130) |
+| PR-AUD-002 | P1 | Частично | [#132](https://github.com/svblab/HR-deck/pull/132) merged — `src/ui/transport_export_dialog.py`; UI key/trust admin по-прежнему нет | [#130](https://github.com/svblab/HR-deck/issues/130), [#137](https://github.com/svblab/HR-deck/issues/137) |
+| PR-AUD-003 | P1 | Открыто | `packaging/debian/personnel-availability-launcher`, `ui/app.py` — demo без gating | [#141](https://github.com/svblab/HR-deck/issues/141) |
+| PR-AUD-004 | P1 | Частично | `docs/manual/user-guide.md` §5.1 (post-#132); `docs/ROADMAP.md` L36 — EPIC-021 «в процессе» | [#130](https://github.com/svblab/HR-deck/issues/130), [#137](https://github.com/svblab/HR-deck/issues/137) |
+| PR-AUD-005 | P1 | Открыто | `domain/permissions.py` — observer + `MANAGE_STATUSES` (ADR-0015) | [#142](https://github.com/svblab/HR-deck/issues/142) |
+| PR-AUD-006 | P2 | Открыто | `bootstrap.py` L101–109 commit до `save_keywrap` | [#143](https://github.com/svblab/HR-deck/issues/143) |
+| PR-AUD-007 | P2 | Открыто | `backup.py` L123–129 — путь ошибки restore | [#144](https://github.com/svblab/HR-deck/issues/144) |
+| PR-AUD-008 | P2 | Открыто | `upgrade.py` L99–107 — migration + rollback failed | [#144](https://github.com/svblab/HR-deck/issues/144) |
+| PR-AUD-009 | P2 | Открыто | `employee_conversion.py` — per-row commit в bulk | [#145](https://github.com/svblab/HR-deck/issues/145) |
+| PR-AUD-010 | P2 | Открыто | нет single-instance lock (`data/db.py`) | [#146](https://github.com/svblab/HR-deck/issues/146); interim docs — [#142](https://github.com/svblab/HR-deck/issues/142) |
+| PR-AUD-011 | P2 | Открыто | `transport_import_apply.py` L171–174 — no-op status history | [#142](https://github.com/svblab/HR-deck/issues/142) |
+| PR-AUD-012 | P2 | Открыто | ограничение шаблонных отчётов (user-guide §7) | [#142](https://github.com/svblab/HR-deck/issues/142) |
+| PR-AUD-013 | P3 | Решено | [#36](https://github.com/svblab/HR-deck/issues/36) — `find_malformed_marker_fragments` в `excel_template.py` | #36 |
+| PR-AUD-014 | P3 | Решено | `database_operations_dialog.py` L51–52 — актуальный docstring | — |
+| PR-AUD-015 | P3 | Открыто | `conversion_wizard_dialog.py` — alternate flow без bulk gate | [#147](https://github.com/svblab/HR-deck/issues/147) |
+| PR-AUD-016 | P3 | Открыто | `conversion_wizard_flow.py` — `conn.commit()` в UI | [#147](https://github.com/svblab/HR-deck/issues/147) |
+| PR-AUD-017 | P3 | Открыто | `main_window.py` — action log, проверка в сервисе | [#147](https://github.com/svblab/HR-deck/issues/147) |
+| PR-AUD-018 | P3 | Открыто | `app.py` — `--db` на production CLI | [#147](https://github.com/svblab/HR-deck/issues/147) |
+
+**Сводка по ещё открытым находкам (включая «Частично»):** P0 — 0; P1 — 4; P2 — 7; P3 — 4 (всего 15; снято с учёта: PR-AUD-001, 013, 014).
+
+### Вне рамок исходного аудита (выявлено позже)
+
+- **Долговечность исходящего экспорта:** [ADR-0007 addendum outbound export durability](docs/adr/ADR-0007-addendum-outbound-export-durability.md) — статус **Принято** ([#140](https://github.com/svblab/HR-deck/pull/140)); реализация — [#136](https://github.com/svblab/HR-deck/issues/136).
+- **Force-full экспорт и сброс watermarks:** [#138](https://github.com/svblab/HR-deck/issues/138).
+- **UI администрирования транспорта (доверие/направления):** [#137](https://github.com/svblab/HR-deck/issues/137).
+- **CI: полный прогон на debian:12 + Python 3.11:** [#139](https://github.com/svblab/HR-deck/issues/139).
+
+---
+
 **Status:** discovery complete (no remediation in this change)  
 **Branch:** `cursor/production-readiness-audit-2274`  
 **Base:** `origin/master` @ `f8095bf` (2026-09-29)  
