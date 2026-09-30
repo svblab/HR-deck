@@ -1,6 +1,6 @@
 # ADR-0007 Addendum — Долговечность исходящего экспорта (outbound export durability)
 
-Статус: Предложено  
+Статус: Принято  
 Дата: 2026-09-30  
 Автор: Johan (утверждает); черновик подготовлен с помощью Cursor  
 Затронутый EPIC: EPIC-021 (операторский UI обмена); затрагивает контракт EPIC-020 export  
@@ -75,14 +75,17 @@ BEGIN IMMEDIATE
   TransportExport…(commit=False)         # package_id уже известен
   DirectorySyncService.record_export…(commit=False)
   write(final.<package_id>.tmp) + fsync   # недоверенный temp, не «выдан»
-  # POSIX: также fsync родительского каталога после создания tmp
+  fsync родительского каталога            # обязательно (Linux); OSError — игнорировать
 COMMIT
 os.replace(final.<package_id>.tmp → final)  # один шаг; без промежуточного .partial
-# POSIX: также fsync родительского каталога после os.replace; на Windows не требуется
+fsync родительского каталога            # обязательно (Linux); OSError — игнорировать
 ```
 
-На POSIX после создания tmp и после `os.replace` дополнительно
-`fsync` родительского каталога; на Windows это не требуется.
+После записи и fsync данных `*.tmp`, а также после `os.replace`,
+**обязательно** выполняется `fsync` родительского каталога (целевая
+платформа — Debian/Linux). `OSError` от fsync каталога (файловая система
+без поддержки) **игнорируется**. Без fsync каталога данные файла могут
+быть durable, а запись в каталоге — потеряна при сбое питания.
 
 | | |
 |---|---|
@@ -164,9 +167,11 @@ os.replace(final.<package_id>.tmp → final)  # один шаг; без пром
    - Retry на **том же** `target_path`: `os.replace(old.tmp → final)`.
    - **Relocate** (оператор выбрал другой final path): **запрещено**
      переносить старый `*.tmp` через `os.replace` на другой том/путь
-     (на Windows `os.replace` между томами падает). Нужно: записать
-     байты заново в свежий `<new_final>.<package_id>.tmp` рядом с новым
-     target → fsync (+ POSIX: fsync каталога) → `os.replace` в
+     (`os.replace` между разными файловыми системами падает с EXDEV
+     (errno 18), проверено на debian:12). Нужно: записать байты заново в
+     свежий `<new_final>.<package_id>.tmp` рядом с новым target → fsync
+     данных + fsync каталога (обязательно на Linux; OSError — игнорировать)
+     → `os.replace` в
      `new_final`; **старый** `*.tmp` удалять **только** после
      подтверждённого успеха; при abandon — оставить старый `*.tmp` и
      показать оператору его полный путь.
@@ -219,8 +224,10 @@ generation addendum).
   пишется в audit `details` как JSON-quoted значение (см. формат выше).
 - Критическая секция короткая: assert чистого соединения →
   `BEGIN IMMEDIATE` → мутации БД → запись
-  `<final>.<package_id>.tmp` + fsync (+ POSIX: fsync каталога) → `COMMIT` →
-  `os.replace` (+ POSIX: fsync каталога). Без модальных диалогов и без сети.
+  `<final>.<package_id>.tmp` + fsync данных + fsync каталога (обязательно
+  на Linux; OSError — игнорировать) → `COMMIT` → `os.replace` + fsync
+  каталога (обязательно на Linux; OSError — игнорировать). Без модальных
+  диалогов и без сети.
 - При ошибке COMMIT (или любом откате до COMMIT): удалить соответствующий
   `*.tmp`, если он создан; state не продвинут; in-memory
   `TransportExportResult` / `wire_bytes` оркестратор **обязан отбросить**.
@@ -287,8 +294,13 @@ substring-assert’ы в тестах и отображение/`export_cells` �
   контракт совпадает с «пакет выдан durably» (не «доставлен»).
 - Сложнее: рефакторинг admin/record_export под `commit: bool = True`;
   тесты crash/replace/orphan-check; короткий write-lock на время fsync;
+  обязательный fsync родительского каталога на Linux после tmp и после
+  `os.replace` (с игнорированием `OSError` на неподдерживающих ФС);
   UI/runbook для `os.replace` failure и процедуры «проверить файл по БД»
   через audit `target_path`.
+- На debian:12 (Python 3.11) `os.replace` поверх destination, открытого
+  другим процессом, **успешен** (конфликта file-lock нет) — отдельный
+  failure mode «заблокированный destination» обрабатывать не нужно.
 - Миграция схемы БД **не** требуется для A′ (поле `details TEXT` уже есть;
   BLOB/`wire_bytes` — только если позже выбрать B).
 - Контракты: обновить ссылки в EPIC-021 / runbook при реализации; при
@@ -427,6 +439,6 @@ substring-assert’ы в тестах и отображение/`export_cells` �
 
 ## Статус принятия
 
-**Предложено** 2026-09-30. Реализация протокольного изменения (caller-owned
-txn + порядок A′) **не** мержится в `master`, пока addendum не утверждён
-человеком.
+**Принято** 2026-09-30 (человек).  
+Вариант A′ и инварианты этого addendum считаются финальными; реализация —
+#136. Уточнения формулировок под Debian/Linux — в этом PR.
