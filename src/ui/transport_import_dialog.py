@@ -60,6 +60,13 @@ _PRE_APPLY_BACKUP_NOTE = (
     "Перед применением будет создана автоматическая копия текущего состояния базы."
 )
 
+_DISPOSITION_LABELS = {
+    ValidationDisposition.READY_FOR_APPLY: "Готов к применению",
+    ValidationDisposition.PENDING_CONFIRMATION: "Требуется подтверждение совпадений",
+    ValidationDisposition.REJECTED: "Отклонён",
+    ValidationDisposition.REPLAY: "Повтор (уже применён ранее)",
+}
+
 
 def _format_reasons(reasons: tuple[ImportReason, ...]) -> str:
     if not reasons:
@@ -351,11 +358,14 @@ class TransportImportPanel(QWidget):
         validation = self._validation
         dir_c, dir_u = _directory_counts(validation)
         emp_c, emp_u, confirmable = _employee_counts(validation)
+        disposition_label = _DISPOSITION_LABELS.get(
+            validation.disposition, validation.disposition.value
+        )
         self._summary_label.setText(
-            f"Disposition: {validation.disposition.value}\n"
-            f"Package: {decrypted.package_id}\n"
-            f"Direction id: {decrypted.direction_id}\n"
-            f"Generation: {decrypted.generation}\n"
+            f"Статус: {disposition_label}\n"
+            f"Пакет: {decrypted.package_id}\n"
+            f"Направление: {decrypted.direction_id}\n"
+            f"Поколение: {decrypted.generation}\n"
             f"Sequence: {decrypted.sequence}\n"
             f"Справочники: создать {dir_c}, обновить {dir_u}\n"
             f"Сотрудники (авто): создать {emp_c}, обновить {emp_u}\n"
@@ -369,6 +379,11 @@ class TransportImportPanel(QWidget):
             reasons_parts.append(
                 "Подтверждение:\n" + _format_reasons(validation.confirmation_reasons)
             )
+        replay = validation.disposition is ValidationDisposition.REPLAY
+        if replay:
+            reasons_parts.append(
+                "Этот пакет уже был применён ранее. Повторное применение не требуется."
+            )
         self._reasons_label.setText("\n\n".join(reasons_parts) if reasons_parts else "")
 
         pending = validation.disposition is ValidationDisposition.PENDING_CONFIRMATION
@@ -378,7 +393,7 @@ class TransportImportPanel(QWidget):
         can_apply = ready or (
             pending and self._all_confirmable_resolved(validation)
         )
-        self._apply_btn.setEnabled(can_apply)
+        self._apply_btn.setEnabled(can_apply and not replay)
 
     def _all_confirmable_resolved(self, validation: ValidationResult) -> bool:
         plan = validation.employee_plan
