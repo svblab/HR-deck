@@ -66,6 +66,11 @@ Debian 12 **не** поставляет `python3-pyside6*` и `sqlcipher3` в ap
 
 ## CI
 
+- Job `lint-and-test`: Ubuntu runner, Python 3.12 — ruff, mypy, pip-audit, полный
+  `pytest` и acceptance-подмножество.
+- Job `test-debian12-py311`: Docker `debian:12` на `ubuntu-24.04` (как `deb-build`) —
+  полный `pytest -q` в venv на дистрибутивном Python 3.11 и тех же Qt/apt-зависимостях,
+  что и baseline деплоя.
 - Job `deb-build`: Docker `debian:12` on the Ubuntu runner — builds the `.deb`
   with bookworm’s Python 3.11 so the vendored venv matches the deploy target
   (building on the runner’s Ubuntu Python 3.12 breaks install on Debian 12).
@@ -73,7 +78,9 @@ Debian 12 **не** поставляет `python3-pyside6*` и `sqlcipher3` в ap
   `apt-get install` артефакта, `verify-deb-smoke.sh`, затем тот же smoke в
   образе с `--network none` (офлайн-старт без сети).
 
-Локально: предпочтительно собирать на Debian 12 (или
+Локально: полный прогон как в `test-debian12-py311` — `./scripts/test-in-debian12.sh`
+(опционально `GIT_REF`; кэш pip через `PIP_CACHE_DIR_HOST`). Сборка `.deb`:
+предпочтительно на Debian 12 (или
 `docker run … debian:12 ./scripts/build-deb.sh`), затем
 `./scripts/verify-deb-install.sh` (docker/podman + smoke + `--network none`).
 
