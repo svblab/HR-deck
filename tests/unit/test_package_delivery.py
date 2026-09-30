@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import errno
 import os
 from pathlib import Path
 from unittest.mock import patch
 
 from ui.package_delivery import (
     TrackedTemp,
+    _fsync_parent_dir,
     cleanup_tracked_temps,
     deliver_package,
     normalize_hrpkg_path,
@@ -81,6 +83,79 @@ def test_deliver_does_not_replace_old_temp_into_new_path(tmp_path: Path) -> None
     assert old_temp.read_bytes() == b"OLD"
     assert old_temp not in replace_srcs
     assert all(src.parent == dir_b for src in replace_srcs)
+
+
+def test_fsync_parent_dir_on_real_directory(tmp_path: Path) -> None:
+    target = tmp_path / "pkg.hrpkg"
+    target.write_bytes(b"x")
+    _fsync_parent_dir(target)
+
+
+def test_deliver_package_fsync_parent_dir_order_before_and_after_replace(tmp_path: Path) -> None:
+    save_path = tmp_path / "out.hrpkg"
+    events: list[tuple[str, object]] = []
+    real_fsync = os.fsync
+    real_replace = os.replace
+
+    def track_fsync(fd: int) -> None:
+        events.append(("file_fsync", fd))
+        real_fsync(fd)
+
+    def track_fsync_parent(path: Path) -> None:
+        events.append(("parent_fsync", path))
+
+    def track_replace(src, dst):
+        events.append(("replace", Path(src), Path(dst)))
+        return real_replace(src, dst)
+
+    with (
+        patch("ui.package_delivery.os.fsync", side_effect=track_fsync),
+        patch("ui.package_delivery._fsync_parent_dir", side_effect=track_fsync_parent),
+        patch("ui.package_delivery.os.replace", side_effect=track_replace),
+    ):
+        outcome = deliver_package(b"payload", save_path)
+    assert outcome.final_path == save_path
+    assert len(events) == 4
+    assert events[0][0] == "file_fsync"
+    assert events[1][0] == "parent_fsync"
+    assert events[1][1].name.endswith(".partial")
+    assert events[2][0] == "replace"
+    assert events[3][0] == "parent_fsync"
+    assert events[3][1] == save_path
+
+
+def test_deliver_package_fsync_parent_dir_after_retry_replace_only(tmp_path: Path) -> None:
+    save_path = tmp_path / "out.hrpkg"
+    complete = tmp_path / "out.hrpkg.deadbeef.partial"
+    complete.write_bytes(b"payload")
+    parent_calls: list[Path] = []
+
+    with patch(
+        "ui.package_delivery._fsync_parent_dir",
+        side_effect=lambda p: parent_calls.append(p),
+    ):
+        outcome = deliver_package(
+            b"ignored",
+            save_path,
+            reuse_complete_temp=complete,
+        )
+    assert outcome.final_path == save_path
+    assert parent_calls == [save_path]
+
+
+def test_deliver_package_succeeds_when_parent_dir_fsync_open_fails(tmp_path: Path) -> None:
+    save_path = tmp_path / "out.hrpkg"
+    real_open = os.open
+
+    def open_wrapper(path, flags, *args, **kwargs):
+        if flags == os.O_RDONLY and os.path.isdir(path):
+            raise OSError(errno.EIO, "dir open failed")
+        return real_open(path, flags, *args, **kwargs)
+
+    with patch("ui.package_delivery.os.open", side_effect=open_wrapper):
+        outcome = deliver_package(b"payload", save_path)
+    assert outcome.final_path == save_path
+    assert save_path.read_bytes() == b"payload"
 
 
 def test_cleanup_tracked_temps_deletes_only_tracked_after_success(tmp_path: Path) -> None:

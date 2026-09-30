@@ -50,6 +50,18 @@ def unlink_quiet(path: Path) -> None:
         pass
 
 
+def _fsync_parent_dir(path: Path) -> None:
+    """Best-effort directory fsync after creating or renaming a file (POSIX durability)."""
+    try:
+        fd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+    except OSError:
+        pass
+
+
 def preflight_writable(save_path: Path) -> Path:
     """
     Prove the target directory is writable via an exclusive empty temp file.
@@ -98,6 +110,7 @@ def deliver_package(
     if reuse_complete_temp is not None and reuse_complete_temp.is_file():
         try:
             os.replace(reuse_complete_temp, save_path)
+            _fsync_parent_dir(save_path)
             return DeliveryResult(final_path=save_path)
         except Exception as exc:  # noqa: BLE001
             return DeliveryResult(complete_temp=reuse_complete_temp, error=exc)
@@ -122,7 +135,9 @@ def deliver_package(
                 handle.flush()
                 os.fsync(handle.fileno())
             write_complete = True
+            _fsync_parent_dir(partial)
             os.replace(partial, save_path)
+            _fsync_parent_dir(save_path)
             return DeliveryResult(final_path=save_path)
         except Exception:
             if not write_complete:

@@ -48,7 +48,8 @@ def _format_preview_counts(tables: dict[str, list]) -> str:
     return "\n".join(lines)
 
 
-# Windows-forbidden filename characters and C0 controls (must not appear in suggestions).
+# Forbidden on FAT/exFAT removable media and invalid in paths:
+# \ / : * ? " < > | and C0 controls (must not appear in suggestions).
 _WIN_FILENAME_FORBIDDEN = re.compile(r'[\x00-\x1f\\/:*?"<>|]+')
 
 
@@ -394,7 +395,8 @@ class TransportExportPanel(QWidget):
                         if not self._confirm_replace_normalized_path(candidate):
                             continue
                     current_path = candidate
-                    # Never os.replace an old-volume temp into a new path.
+                    # Never os.replace a temp from another filesystem into a new path
+                    # (EXDEV); rewrite the bytes instead.
                     reuse_for_current = None
                     done = run_attempt()
                     if done is not None:

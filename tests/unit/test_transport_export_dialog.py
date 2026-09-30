@@ -599,7 +599,7 @@ def test_first_delivery_runtime_error_shows_dialog_no_slot_raise(qtbot, tmp_path
     conn.close()
 
 
-def test_default_export_filename_strips_windows_forbidden_chars() -> None:
+def test_default_export_filename_strips_forbidden_chars() -> None:
     target = OutboundExportTarget(
         direction_id=9,
         peer_label='Peer\\A/B:C*D?E"F<G>H|I\x07',
