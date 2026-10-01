@@ -26,6 +26,7 @@
   разделе 2.
 - Правило «когда нужна ADR»: `ANCHOR_PROTOCOL.md`, п.4.
 - Правило diff-first для крупных изменений: `ANCHOR_PROTOCOL.md`, п.5.
+- Верификация статуса эпика в ROADMAP: [`ROADMAP_STATUS_VERIFICATION.md`](ROADMAP_STATUS_VERIFICATION.md).
 
 ## EPIC-017 — быстрые ссылки
 
