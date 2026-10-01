@@ -33,7 +33,7 @@
 | EPIC-018 | Конвертация неструктурированных данных (Механизм 1) | ✅ Завершён | [#112](https://github.com/svblab/HR-deck/pull/112) |
 | EPIC-019 | TransportKeyStore и transport-state | ✅ Завершён | [#65](https://github.com/svblab/HR-deck/pull/65), [#100](https://github.com/svblab/HR-deck/pull/100) |
 | EPIC-020 | Transport exchange между установками (Механизм 2) | ✅ Завершён (020-A…020-F) | [#98](https://github.com/svblab/HR-deck/pull/98), [#103](https://github.com/svblab/HR-deck/pull/103), [#104](https://github.com/svblab/HR-deck/pull/104), [#105](https://github.com/svblab/HR-deck/pull/105), [#109](https://github.com/svblab/HR-deck/pull/109), [#110](https://github.com/svblab/HR-deck/pull/110) |
-| EPIC-021 | Единый диалог «Работа с базой данных» | 🚧 В процессе (каркас + резервное копирование + конвертация + вкладка «Импорт данных» (ADR-0013) готовы) | [#113](https://github.com/svblab/HR-deck/pull/113) |
+| EPIC-021 | Единый диалог «Работа с базой данных» | 🚧 В процессе (каркас + резервное копирование + конвертация + вкладка «Обмен данными» (ADR-0013) + операторский импорт/экспорт transport HR (ADR-0016, [#130](https://github.com/svblab/HR-deck/issues/130)); осталось: администрирование транспорта [#137](https://github.com/svblab/HR-deck/issues/137), закрытие эпика) | [#113](https://github.com/svblab/HR-deck/pull/113), [#119](https://github.com/svblab/HR-deck/pull/119), [#129](https://github.com/svblab/HR-deck/pull/129), [#132](https://github.com/svblab/HR-deck/pull/132) |
 | EPIC-024 | Опциональные уровни оргструктуры | ✅ Завершён (2026-09-14) | — |
 | EPIC-025 | Обязательность департамента/отдела по должности | ✅ Завершён (2026-09-15) | — |
 | EPIC-026 | Стабильная идентичность и синхронизация справочников | ✅ Завершён (ADR-0010) | [#69](https://github.com/svblab/HR-deck/pull/69), [#72](https://github.com/svblab/HR-deck/pull/72), [#99](https://github.com/svblab/HR-deck/pull/99) |
@@ -637,6 +637,27 @@ audit на каждый export/import/replay; локальный гейт зел
 
 ## EPIC-021 — Единый диалог «Работа с базой данных»
 
+**Статус: В процессе.** Каркас диалога, бэкап, конвертация, вкладка
+«Обмен данными» (приём пакетов ADR-0013 и операторский импорт/экспорт HR по
+ADR-0016, Issue [#130](https://github.com/svblab/HR-deck/issues/130) / PR
+[#132](https://github.com/svblab/HR-deck/pull/132)) — в master.
+Остаётся администрирование transport ([#137](https://github.com/svblab/HR-deck/issues/137)) и закрытие эпика.
+
+**Реализовано**
+- Каркас `DatabaseOperationsDialog` с вкладками по ролям (PR #113).
+- Вкладка «Резервное копирование»: перенос «Создать копию…»/«Восстановить…»
+  из шапки без изменения логики бэкапа.
+- Вкладка «Конвертация данных» (EPIC-018 / ADR-0012).
+- Вкладка «Обмен данными» (вложенные «Импорт» / «Экспорт»): приём `.hrpkg` с
+  подтверждением совпадений (ADR-0013, PR #119); операторский UI transport для
+  HR (ADR-0016, PR #129, Issue #130 / PR #132).
+- `docs/manual/user-guide.md` §5.1 — обмен transport-пакетами для HR.
+
+**Осталось**
+- Администрирование transport: настройка доверия, направлений и ключей;
+  раздел в `administrator-guide.md` ([#137](https://github.com/svblab/HR-deck/issues/137)).
+- Закрытие эпика после выполнения DoD ниже.
+
 **Цель.** Свести три функции (EPIC-018, EPIC-020, уже существующий
 бэкап/восстановление) в один диалог с вкладками, по аналогии с уже принятым
 паттерном `DirectoriesDialog` (EPIC-004 UI).
@@ -658,10 +679,28 @@ audit на каждый export/import/replay; локальный гейт зел
 а не ждать полного завершения обоих перед началом работы над самим
 диалогом.
 
-**DoD / трассировка:** тест на видимость вкладок по каждой из трёх ролей,
-тест на то, что перенесённый бэкап/восстановление продолжает работать
-идентично прежнему расположению, обновление `docs/manual/*` (кнопка
-переехала), локальный гейт зелёный.
+**DoD / трассировка:**
+- [ ] тест на видимость вкладок по каждой из трёх ролей: в
+  `tests/unit/test_database_operations_dialog.py` вкладки диалога проверяют
+  только Администратор и HR (`test_dialog_tabs_by_role`,
+  `test_tab_visibility_helpers_match_roadmap`); для Наблюдателя есть лишь
+  `test_main_window_entry_hidden_for_observer` (скрыта кнопка 💾 на главном
+  экране, не вкладки `DatabaseOperationsDialog`)
+- [x] тест на то, что перенесённый бэкап/восстановление продолжает работать
+  во вкладке «Резервное копирование»
+  (`test_backup_create_in_embedded_tab`,
+  `test_backup_restore_in_tab_calls_callback_without_closing_shell`,
+  `test_backup_tab_preserves_role_button_permissions`)
+- [x] `user-guide.md` §5.1 — ручная для HR по обмену transport-пакетами
+- [x] `docs/manual/*`: путь к бэкапу через **💾** «Работа с базой данных» →
+  «Резервное копирование» — `administrator-guide.md` §5,
+  `maintenance-runbook.md` §1–§2, `install-update-quick.md`; transport HR —
+  `user-guide.md` §5.1 (**💾** → «Обмен данными»)
+- [ ] прочие упоминания бэкапа в `docs/manual/*` без навигации по UI:
+  `quick-reference.md`, `deployment-guide.md`
+- [ ] `administrator-guide.md`: раздел про транспорт
+  ([#137](https://github.com/svblab/HR-deck/issues/137))
+- [ ] локальный гейт зелёный — на момент закрытия эпика
 
 ---
 
