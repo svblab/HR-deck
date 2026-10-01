@@ -48,6 +48,25 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: pytest -m acceptance -q
 
+  test-debian12-py311:
+    name: test-debian12-py311
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache pip (Debian 12)
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/pip-cache-debian12
+          key: test-debian12-py311-pip-${{ hashFiles('pyproject.toml') }}
+
+      - name: Full test suite on Debian 12 (Python 3.11)
+        env:
+          PIP_CACHE_DIR_HOST: ${{ runner.temp }}/pip-cache-debian12
+        run: |
+          chmod +x scripts/test-in-debian12.sh
+          ./scripts/test-in-debian12.sh HEAD
+
   deb-build:
     runs-on: ubuntu-24.04
     steps:
