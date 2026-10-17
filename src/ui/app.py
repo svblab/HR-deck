@@ -15,6 +15,7 @@ from services.upgrade import UpgradeError, UpgradeService
 from ui.auth_dialogs import LoginDialog, SetupDialog
 from ui.logging_config import configure_logging, install_excepthook
 from ui.main_window import MainWindow
+from ui.session_activity import install_session_activity_filter
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,8 @@ def run(db_path: Path | None = None) -> int:
         conn, session = login.conn, login.session
 
     assert conn is not None and session is not None
+    if isinstance(app, QApplication):
+        install_session_activity_filter(app, session)
     try:
         UpgradeService(conn, session, db_path=path).apply_pending()
     except UpgradeError as exc:

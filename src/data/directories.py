@@ -29,7 +29,7 @@ class DepartmentRecord:
 @dataclass(frozen=True)
 class DivisionRecord:
     id: int
-    department_id: int
+    department_id: int | None
     name: str
     is_archived: bool
     created_at: str
@@ -311,7 +311,7 @@ def _department_row(row: tuple[object, ...]) -> DepartmentRecord:
 def _division_row(row: tuple[object, ...]) -> DivisionRecord:
     return DivisionRecord(
         id=int(row[0]),
-        department_id=int(row[1]),
+        department_id=int(row[1]) if row[1] is not None else None,
         name=str(row[2]),
         is_archived=bool(int(row[3])),
         created_at=str(row[4]),

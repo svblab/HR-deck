@@ -219,6 +219,7 @@ class UnlockDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Сессия заблокирована")
         self.setModal(True)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
         self._session = session
         self._db_path = db_path
         self._conn = conn
@@ -232,6 +233,12 @@ class UnlockDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         buttons.accepted.connect(self._submit)
         layout.addWidget(buttons)
+        self._password.setFocus()
+
+    def showEvent(self, event) -> None:  # noqa: ANN001, N802
+        super().showEvent(event)
+        self._password.setFocus()
+        self._password.selectAll()
 
     def _submit(self) -> None:
         try:

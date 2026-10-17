@@ -6,8 +6,9 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QKeyEvent, QMouseEvent
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -38,6 +39,8 @@ from ui.action_log_dialog import ActionLogDialog
 from ui.auth_dialogs import AccountsDialog, UnlockDialog
 from ui.backup_dialog import BackupDialog
 from ui.roster_panel import RosterPanel
+from ui.session_activity import install_session_activity_filter
+from ui.session_lock import dismiss_open_modal_dialogs
 from ui.theme import APP_STYLESHEET
 
 _MONTHS_RU = (
@@ -142,6 +145,9 @@ class MainWindow(QMainWindow):
         self._idle_timer.timeout.connect(self._check_idle)
         if self._session is not None:
             self._idle_timer.start()
+            app = QApplication.instance()
+            if isinstance(app, QApplication):
+                install_session_activity_filter(app, self._session)
 
     def _build_title_bar(self) -> QWidget:
         bar = QWidget(objectName="titleBar")
@@ -292,6 +298,7 @@ class MainWindow(QMainWindow):
                 except Exception:  # noqa: BLE001
                     pass
                 self._conn = None
+            dismiss_open_modal_dialogs(self, exclude=UnlockDialog)
             self._show_lock_overlay()
             dlg = UnlockDialog(self._session, self._db_path, self, conn=self._conn)
             dlg.raise_()
@@ -301,7 +308,8 @@ class MainWindow(QMainWindow):
             if not accepted:
                 self.close()
                 return
-            self._conn = dlg.conn
+            if dlg.conn is not None:
+                self._replace_connection(dlg.conn)
 
     def _require_unlocked(self) -> bool:
         if self._session is None or self._conn is None:
@@ -384,13 +392,3 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if self._lock_overlay is not None and self._lock_overlay.isVisible():
             self._lock_overlay.setGeometry(self.rect())
-
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        if self._session is not None and not self._session.locked:
-            self._session.touch()
-        super().mousePressEvent(event)
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        if self._session is not None and not self._session.locked:
-            self._session.touch()
-        super().keyPressEvent(event)
