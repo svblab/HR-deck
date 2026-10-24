@@ -11,6 +11,18 @@ Repository: `https://github.com/svblab/HR-deck`
 
 Human-readable reference: `docs/CURSOR_GIT_COORDINATION.md`.
 
+## Agent scope boundary (`docs/ANCHOR_PROTOCOL.md` §0)
+
+§0 applies to every agent and every session (Cursor, background/autonomous agents, any other AI model) and prevails over the rest of the protocol when they differ. Before any commit or push:
+
+- stop at human-approval checkpoints on `epic/*` and `docs/*` branches (0.1);
+- a bug or gap found while testing is a finding to report, not authority to fix it in the same branch or session (0.2);
+- a new user-facing capability that is not in the approved task needs its own EPIC and ADR first (0.3);
+- never weaken or work around an existing invariant to push a change through (0.4);
+- every commit summary and PR description names the EPIC/branch scope it was written for and confirms that no files outside that scope were touched; scope drift is stated, not omitted (0.5).
+
+If in doubt: STOP, describe the finding (symptom, suspected cause, suspected scope) and hand it back to the human.
+
 ## Source of truth
 
 - **`origin/master` is authoritative.** Never assume local `master` reflects GitHub.
