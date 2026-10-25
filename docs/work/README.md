@@ -68,4 +68,4 @@
 
 ## 11. Память проекта
 
-[`CONTEXT.md`](CONTEXT.md) — среда, ограничения инструментов, порядок работы человека. [`DECISIONS.md`](DECISIONS.md) — журнал решений Maintainer с датами. [`prompts/`](prompts/) — стандартные короткие промты ролей. Решение Maintainer, принятое в чате, записывается в `DECISIONS.md` тем, кто его получил (планировщик), отдельным docs-PR.
+[`CONTEXT.md`](CONTEXT.md) — среда, ограничения инструментов, порядок работы человека. [`DECISIONS.md`](DECISIONS.md) — журнал решений Maintainer с датами. [`_templates/prompts/`](_templates/prompts/) — стандартные короткие промты ролей (PLANNER, IMPLEMENTER, VERIFIER). Решение Maintainer, принятое в чате, записывается в `DECISIONS.md` тем, кто его получил (планировщик), отдельным docs-PR.

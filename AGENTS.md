@@ -9,7 +9,7 @@
 3. `docs/ANCHOR_CORE.md` — инварианты проекта.
 4. `docs/work/README.md` — карточки, отчёты, роли, проверка, передача между агентами.
 5. `docs/work/CONTEXT.md` (среда и ограничения) и `docs/work/DECISIONS.md` (решения Maintainer): то, чего нет в коде.
-6. Ваша роль: `docs/work/prompts/<РОЛЬ>.md`. Ваша карточка: `docs/work/<EPIC>/<ID>.md`. Нет карточки — нет работы.
+6. Ваша роль: `docs/work/_templates/prompts/<РОЛЬ>.md`. Ваша карточка: `docs/work/<EPIC>/<ID>.md`. Нет карточки — нет работы.
 
 ## Правила (краткая форма; авторитетны источники выше)
 
