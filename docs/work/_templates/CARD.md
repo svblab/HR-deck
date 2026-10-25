@@ -6,8 +6,8 @@ status: draft            # draft | ready | blocked | done
 depends_on: []           # ID карточек, например [E1-01, E1-02]
 requires_adr: none       # или номер принятого ADR / аддендума
 spec: docs/TZ-v2.md §x.y (строки a-b)
-branch: epic/E0-00-slug
-size_budget: 300         # изменённых строк, без карточки и отчёта
+branch: epic/E0-00-slug  # создавать: git switch -c <ветка> --no-track origin/master
+size_budget: код=300 тесты=600   # изменённые строки; документы, карточка и отчёт не считаются
 allowed_paths: [path/one, path/two]
 forbidden_paths: [docs/TZ-v2.md, docs/ANCHOR_CORE.md, docs/ANCHOR_PROTOCOL.md]
 report:                  # заполняет исполнитель в PR: путь к отчёту
@@ -23,6 +23,7 @@ report:                  # заполняет исполнитель в PR: пу
 Команда -> ожидаемый вывод (принятый ADR, состояние `origin/master`, наличие файлов).
 
 ## Критерии приёмки
+Каждый критерий можно повторить после слияния; если он зависит от статуса карточки, напишите «до смены статуса на done».
 1. Команда -> ожидаемый результат.
 2. Команда -> ожидаемый результат.
 
