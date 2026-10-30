@@ -1,16 +1,16 @@
-# CONTEXT — среда и ограничения (на 2026-10-25)
+# CONTEXT — среда и ограничения (на 2026-10-30)
 
 Файл описывает то, чего нет в коде: где работают агенты, что им разрешено и как участвует человек. Решения Maintainer — в [`DECISIONS.md`](DECISIONS.md).
 
 ## Среды
 
 - **Cursor Cloud Agent (Linux, `/workspace`)** — основная среда для кода и документов: чистый клон репозитория, Linux, как в CI. Создаёт ветки и коммиты, пушит только по явной команде Maintainer. `gh` в облаке не авторизован (HTTP 401): issue и PR оттуда создать нельзя. Каждый промт начинается с проверки среды (`pwd`, `uname -a`, `git rev-parse --show-toplevel`, `git status --short`); при несовпадении агент останавливается.
-- **Локальный Cursor (Windows)** — оператор GitHub: `gh` авторизован (аккаунт svblab), создаёт issue, закрывает их по команде, может проверять `gh pr create`. Код и документы здесь не пишутся. Рабочий каталог оператора `E:\Лаборатория\Cursor\HR-docs-tz-v2`. Каталог `E:\Лаборатория\Cursor\HR` не трогать: это старый репозиторий, его копия лежит в `E:\Лаборатория\Cursor\archive\HR-old-2026-10-25\`. На Windows: `core.autocrlf=false`, файлы копировать байтами, запрещены `git add -A`, `commit -a`, `stash`, `reset`, `clean`.
+- **Локальный Cursor (Windows)** — оператор GitHub: `gh` авторизован (аккаунт svblab), создаёт issue, закрывает их по команде, открывает PR (`gh pr create`) по команде Maintainer. Код и документы здесь не пишутся. Рабочий каталог оператора `E:\Лаборатория\Cursor\HR-docs-tz-v2`. Каталог `E:\Лаборатория\Cursor\HR` не трогать: это старый репозиторий, его копия лежит в `E:\Лаборатория\Cursor\archive\HR-old-2026-10-25\`. На Windows: `core.autocrlf=false`, файлы копировать байтами, запрещены `git add -A`, `commit -a`, `stash`, `reset`, `clean`.
 - **Веб-модели (GPT, Grok, Claude в браузере)** — проверяющие и рецензенты планов. Репозиторий публичный: файлы читаются по ссылкам вида `https://raw.githubusercontent.com/svblab/HR-deck/master/<путь>`, diff PR — `https://github.com/svblab/HR-deck/pull/<номер>.diff`. Код они не запускают.
 
 ## Что делает человек
 
-Maintainer вручную делает только три вещи: открывает PR по ссылке `https://github.com/svblab/HR-deck/compare/master...<ветка>?expand=1` (заголовок и тело берёт из отчёта исполнителя или у планировщика), сливает PR (squash), принимает ADR слиянием docs-PR. Всё остальное идёт через промты агентам. Push выполняет Cloud Agent только по явной команде Maintainer: `git push -u origin <ветка>:<ветка>`.
+Maintainer вручную делает только две вещи: сливает PR (squash) и принимает ADR слиянием docs-PR. Всё остальное идёт через промты агентам; PR открывает локальный Cursor через `gh` (заголовок и тело дают планировщик или отчёт исполнителя). Push выполняет Cloud Agent только по явной команде Maintainer: `git push -u origin <ветка>:<ветка>`.
 
 ## Передача текста через чат
 
@@ -18,7 +18,7 @@ Maintainer вручную делает только три вещи: откры�
 
 ## CI
 
-GitHub Actions: `ruff check src tests`, `mypy` и `pytest -q` на Debian 12 с Python 3.11. Каталог `scripts/` ruff не проверяет (см. карточку E0-02). Перед слиянием проверки PR должны быть зелёными.
+GitHub Actions (`.github/workflows/ci.yml`): `lint-and-test` (Ubuntu, Python 3.12: ruff, mypy, pip-audit, pytest, acceptance), `test-debian12-py311` (pytest на Debian 12 и Python 3.11), `deb-build` и `deb-verify` (сборка и проверка .deb; `deb-build` до 20 минут). Каталог `scripts/` ruff не проверяет (см. карточку E0-02). Перед слиянием проверки PR должны быть зелёными.
 
 ## Модели Cursor
 
