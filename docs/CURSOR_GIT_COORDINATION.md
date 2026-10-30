@@ -1,5 +1,7 @@
 # Cursor Git Coordination Protocol
 
+> **Частично устарел с ТЗ v2.1.** Действуют `AGENTS.md` и `docs/work/CONTEXT.md`: push — только по явной команде Maintainer; PR открывает локальный Cursor через `gh`; облачный агент PR не создаёт. Где ниже сказано иначе, действуют `ANCHOR_PROTOCOL.md` §1 и §8.
+
 Дополнение к [`ANCHOR_PROTOCOL.md`](ANCHOR_PROTOCOL.md). Тот документ остаётся
 **авторитетным** для именования веток, diff-first, ADR-триггеров, тестов и
 Definition of Done. Этот протокол закрывает повторяющийся класс ошибок:

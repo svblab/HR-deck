@@ -1,7 +1,7 @@
 # Журнал доступности персонала
 
 Локальное офлайн-приложение для учёта доступности персонала (Linux / Debian·Ubuntu).
-Источник требований — [`docs/TZ-v2.md`](docs/TZ-v2.md) (версия 2.0, принято 2026-10-24; `TZ_HR_uchet_dostupnosti.docx` и `Техническое_задание.md` устарели). Для ИИ-агентов точка входа — [`AGENTS.md`](AGENTS.md). Правила работы — в `docs/`.
+Источник требований — [`docs/TZ-v2.md`](docs/TZ-v2.md) (версия 2.1, принято 2026-10-28; `TZ_HR_uchet_dostupnosti.docx` и `Техническое_задание.md` устарели). Для ИИ-агентов точка входа — [`AGENTS.md`](AGENTS.md). Правила работы — в `docs/`.
 
 ## Быстрый старт (разработка)
 
@@ -30,4 +30,4 @@ docker compose -f tests/e2e_mechanics/docker-compose.yml run --rm e2e-runner
 
 ## Документация
 
-Порядок чтения — `docs/README.md`. Текущий эпик — `docs/ROADMAP.md` (EPIC-001).
+Порядок чтения — `docs/README.md`. Дорожная карта эпиков E0–E17 — Приложение D [`docs/TZ-v2.md`](docs/TZ-v2.md); текущее состояние — [`docs/work/STATE.md`](docs/work/STATE.md).

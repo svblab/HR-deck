@@ -4,7 +4,7 @@ Living audit of domain-model gaps, identity contracts, and cross-cutting inconsi
 between specification, schema, and implementation. Each section is self-contained and cites
 evidence in the repository at the time of writing.
 
-**Status:** WORKING (§1 resolved by ADR-0011 implementation)  
+**Status:** SUPERSEDED by docs/TZ-v2.md (v2.1); historical audit of 2026-09-20, several findings are stale (for example the `inactive` status was removed)  
 **Last updated:** 2026-09-20
 
 **Resolution (§1):** [`ADR-0011-employee-archive-semantics.md`](adr/ADR-0011-employee-archive-semantics.md) — **Принято**, implemented in migration 0017.
