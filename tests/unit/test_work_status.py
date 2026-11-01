@@ -115,3 +115,32 @@ def test_consistency_errors(tmp_path: Path, capsys: pytest.CaptureFixture[str]) 
     (tmp_path / "docs" / "work").mkdir(parents=True)
     code, out, err = _run(tmp_path, [], capsys)
     assert code == 0 and err == "" and out.strip() == "карточек нет"
+
+
+def test_empty_id(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    empty = tmp_path / "empty"
+    _write(empty, "E0", "E0-01.md", _card("E0", "E0-01.md", id=""))
+    code, _out, err = _run(empty, [], capsys)
+    assert code == 1 and "идентификатор id пуст" in err
+
+
+def test_epic_dir_mismatch(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    wrong = tmp_path / "wrong"
+    _write(wrong, "E2", "E1-01.md", _card("E1", "E1-01.md"))
+    code, _out, err = _run(wrong, [], capsys)
+    assert code == 1 and "epic E1 не совпадает с каталогом E2" in err
+
+
+def test_missing_required_key(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "missing_key"
+    text = _card("E0", "E0-01.md").replace("title: t\n", "")
+    _write(root, "E0", "E0-01.md", text)
+    code, _out, err = _run(root, [], capsys)
+    assert code == 1 and "нет обязательного ключа title" in err
+
+
+def test_id_filename_mismatch(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    root = tmp_path / "bad_id"
+    _write(root, "E0", "E0-01.md", _card("E0", "E0-01.md", id="E0-99"))
+    code, _out, err = _run(root, [], capsys)
+    assert code == 1 and "id E0-99 не совпадает с именем файла E0-01" in err
