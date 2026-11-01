@@ -80,8 +80,9 @@ def validate(cards: list[Card], root: Path) -> list[str]:
             errors.append(f"{label}: id {card_id} не совпадает с именем файла {path.stem}")
         epic = meta.get("epic")
         epic_dir = path.parent.name
-        if isinstance(epic, str) and epic and epic != epic_dir:
-            errors.append(f"{label}: epic {epic} не совпадает с каталогом {epic_dir}")
+        if "epic" in meta and epic != epic_dir:
+            shown = epic or "(пусто)"
+            errors.append(f"{label}: epic {shown} не совпадает с каталогом {epic_dir}")
         report = meta.get("report")
         if status == "done" and not (isinstance(report, str) and report.strip()):
             errors.append(f"{label}: status done без заполненного report")

@@ -144,3 +144,12 @@ def test_id_filename_mismatch(tmp_path: Path, capsys: pytest.CaptureFixture[str]
     _write(root, "E0", "E0-01.md", _card("E0", "E0-01.md", id="E0-99"))
     code, _out, err = _run(root, [], capsys)
     assert code == 1 and "id E0-99 не совпадает с именем файла E0-01" in err
+
+
+
+@pytest.mark.parametrize("value", ["", "[]"])
+def test_epic_empty(tmp_path: Path, capsys: pytest.CaptureFixture[str], value: str) -> None:
+    root = tmp_path / "empty_epic"
+    _write(root, "E0", "E0-01.md", _card(value, "E0-01.md"))
+    code, _out, err = _run(root, [], capsys)
+    assert code == 1 and "epic (пусто) не совпадает с каталогом E0" in err
