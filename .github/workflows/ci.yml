@@ -28,7 +28,7 @@ jobs:
           python -c "from sqlcipher3 import dbapi2 as s; print('sqlcipher3 OK', s.sqlite_version)"
 
       - name: Ruff lint
-        run: ruff check src tests
+        run: ruff check src tests scripts
 
       - name: Mypy type check
         run: mypy src
