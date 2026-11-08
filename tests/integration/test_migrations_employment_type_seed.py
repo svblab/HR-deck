@@ -65,7 +65,7 @@ def test_transferred_and_erroneous_seeded_with_contract_flags(tmp_path: Path) ->
     conn = create_database(tmp_path / "app.db", key)
     applied = apply_pending_migrations(conn)
     assert applied == expected_migration_versions()
-    assert current_version(conn) == 20
+    assert current_version(conn) == applied[-1]
     for code, expected in _CONTRACT.items():
         assert _row(conn, code) == expected
     conn.close()
@@ -97,7 +97,8 @@ def test_matching_existing_rows_are_skipped(tmp_path: Path) -> None:
     conn.close()
 
     conn2 = connect(path, key)
-    applied = apply_pending_migrations(conn2)
+    mig_v20 = _migrations_through(20, tmp_path / "through20")
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_v20)
     assert applied == [20]
     assert current_version(conn2) == 20
     for code, row in before.items():
@@ -162,4 +163,76 @@ def test_flag_mismatch_rolls_back_whole_file(tmp_path: Path) -> None:
     assert current_version(conn2) == 19
     assert _row(conn2, "erroneous") == ("Ошибочная запись", 0, 0)
     assert _row(conn2, "transferred") is None
+    conn2.close()
+
+
+@pytest.mark.acceptance
+def test_is_archived_mismatch_rolls_back_whole_file(tmp_path: Path) -> None:
+    key = generate_master_key()
+    path = tmp_path / "app.db"
+    mig_v19 = _migrations_through(19, tmp_path)
+    conn = create_database(path, key)
+    assert apply_pending_migrations(conn, migrations_dir=mig_v19) == list(range(1, 20))
+    _insert_employment_type(
+        conn,
+        code="transferred",
+        name="Переведён",
+        archives_record=1,
+        is_archived=1,
+    )
+    conn.close()
+
+    conn2 = connect(path, key)
+    with pytest.raises(sqlcipher.IntegrityError, match="employment type seed contract mismatch"):
+        apply_pending_migrations(conn2)
+    assert current_version(conn2) == 19
+    versions = [
+        int(row[0])
+        for row in conn2.execute("SELECT version FROM schema_migrations ORDER BY version")
+    ]
+    assert 20 not in versions
+    assert _row(conn2, "transferred") == ("Переведён", 1, 1)
+    assert _row(conn2, "erroneous") is None
+    conn2.close()
+
+
+@pytest.mark.acceptance
+def test_one_matching_one_mismatching_code_aborts_whole_file(tmp_path: Path) -> None:
+    key = generate_master_key()
+    path = tmp_path / "app.db"
+    mig_v19 = _migrations_through(19, tmp_path)
+    conn = create_database(path, key)
+    assert apply_pending_migrations(conn, migrations_dir=mig_v19) == list(range(1, 20))
+    _insert_employment_type(
+        conn,
+        code="transferred",
+        name="Переведён",
+        archives_record=1,
+        is_archived=0,
+    )
+    _insert_employment_type(
+        conn,
+        code="erroneous",
+        name="Ошибочная запись",
+        archives_record=0,
+        is_archived=0,
+    )
+    conn.close()
+
+    conn2 = connect(path, key)
+    with pytest.raises(sqlcipher.IntegrityError, match="employment type seed contract mismatch"):
+        apply_pending_migrations(conn2)
+    assert current_version(conn2) == 19
+    versions = [
+        int(row[0])
+        for row in conn2.execute("SELECT version FROM schema_migrations ORDER BY version")
+    ]
+    assert 20 not in versions
+    assert _row(conn2, "transferred") == ("Переведён", 1, 0)
+    transferred_count = conn2.execute(
+        "SELECT COUNT(*) FROM employment_types WHERE code = ?",
+        ("transferred",),
+    ).fetchone()
+    assert transferred_count is not None and int(transferred_count[0]) == 1
+    assert _row(conn2, "erroneous") == ("Ошибочная запись", 0, 0)
     conn2.close()
