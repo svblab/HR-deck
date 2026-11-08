@@ -119,8 +119,10 @@ def test_initial_migration_creates_schema_and_seeds(tmp_path: Path) -> None:
     assert dict(employment_types) == {
         "contractor": 0,
         "dismissed": 1,
+        "erroneous": 1,
         "staff": 0,
         "temporary": 0,
+        "transferred": 1,
     }
     conn.close()
 

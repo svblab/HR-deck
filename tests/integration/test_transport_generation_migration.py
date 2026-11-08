@@ -35,7 +35,8 @@ def test_migration_0019_on_nonempty_db(tmp_path: Path) -> None:
     conn.close()
 
     conn2 = connect(path, key)
-    applied = apply_pending_migrations(conn2)
+    mig_v19 = _migrations_through(19, tmp_path / "v19apply")
+    applied = apply_pending_migrations(conn2, migrations_dir=mig_v19)
     assert applied == [19]
     assert current_version(conn2) == 19
     assert "generation" in table_columns(conn2, "transport_direction_state")
