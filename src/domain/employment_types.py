@@ -5,8 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-# Зарезервированные system codes из migration 0001 + ADR-0011 seed.
-SYSTEM_EMPLOYMENT_TYPE_CODES = frozenset({"staff", "temporary", "contractor", "dismissed"})
+# Зарезервированные system codes: ADR-0011 addendum §2 (базовый набор из шести).
+SYSTEM_EMPLOYMENT_TYPE_CODES = frozenset(
+    {"staff", "temporary", "contractor", "dismissed", "transferred", "erroneous"}
+)
 
 # Предпочтительный тип метаданных при архивировании (не display name).
 DEFAULT_ARCHIVING_EMPLOYMENT_CODE = "dismissed"
