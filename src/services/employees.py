@@ -115,6 +115,16 @@ class EmployeeService:
     def update_employee(self, employee_id: int, data: EmployeeUpdateInput) -> None:
         self._require(Permission.MANAGE_EMPLOYEES)
         record = self._require_active_employee(employee_id)
+        # Неизменяемость ФИО/филиала (ADR-0011 addendum §4.1) — до записи и до
+        # прочих org-проверок, чтобы отказ был именно по смене identity-полей.
+        try:
+            cleaned_name = clean_full_name(data.full_name)
+        except EmployeeValidationError as exc:
+            raise EmployeeError(str(exc)) from exc
+        if cleaned_name != clean_full_name(record.full_name):
+            raise EmployeeError("full_name cannot be changed after creation")
+        if data.branch_id != record.branch_id:
+            raise EmployeeError("branch_id cannot be changed after creation")
         payload = self._validate_input(data)
         now = self._clock()
 
