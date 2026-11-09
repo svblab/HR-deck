@@ -392,6 +392,8 @@ class DirectoryService:
         self._require(Permission.MANAGE_DIRECTORIES)
         clean_code = _clean_code(code)
         clean_name = _clean_name(name)
+        if is_system_employment_type_code(clean_code):
+            raise DirectoryError(f"system employment type '{clean_code}' cannot be created")
         if self._employment_types.get_by_code(clean_code) is not None:
             raise DirectoryError("employment type code already exists")
         now = self._clock()
@@ -406,7 +408,9 @@ class DirectoryService:
 
     def rename_employment_type(self, employment_type_id: int, name: str) -> None:
         self._require(Permission.MANAGE_DIRECTORIES)
-        self._require_employment_type(employment_type_id)
+        row = self._require_employment_type(employment_type_id)
+        if is_system_employment_type_code(row.code):
+            raise DirectoryError(f"system employment type '{row.code}' cannot be renamed")
         clean = _clean_name(name)
         now = self._clock()
         self._mutate(
