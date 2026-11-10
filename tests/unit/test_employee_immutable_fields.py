@@ -133,4 +133,11 @@ def test_same_values_update_succeeds(tmp_path: Path) -> None:
     assert card.full_name == "Васильев"
     assert card.branch_id == refs["branch_a"]
     assert card.note == "обновление без смены ФИО/филиала"
+    rows = conn.execute(
+        "SELECT action_type FROM user_action_log WHERE entity_id=?",
+        (emp_id,),
+    ).fetchall()
+    actions = {r[0] for r in rows}
+    assert "employee.create" in actions
+    assert "employee.update" in actions
     conn.close()
