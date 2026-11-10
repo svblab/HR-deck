@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from data.directories import DepartmentRepository, DivisionRepository
+from data.directories import BranchRepository, DepartmentRepository, DivisionRepository
 from data.employees import EmployeeRepository
 from domain.directory_sync import DirectorySyncPackage
 from domain.employee import EmployeeCreateInput
@@ -81,13 +81,16 @@ def _package_employee_row(
     full_name: str,
     department_external_id: str | None,
     division_external_id: str | None,
+    branch_external_id: str | None = None,
 ) -> dict[str, object]:
     return {
         "id": 9001,
         "external_id": external_id,
         "full_name": full_name,
         "position_external_id": str(uuid.uuid4()),
-        "branch_external_id": str(uuid.uuid4()),
+        "branch_external_id": (
+            branch_external_id if branch_external_id is not None else str(uuid.uuid4())
+        ),
         "department_external_id": department_external_id,
         "division_external_id": division_external_id,
         "employment_type_id": 1,
@@ -129,6 +132,8 @@ def test_adr0010_reconciliation_exact_match_when_external_id_and_name_agree(
     record = EmployeeRepository(conn).get(emp_id)
     assert record is not None
     dept_ext, div_ext = _org_external_ids(conn, org)
+    branch = BranchRepository(conn).get(org["branch_id"])
+    assert branch is not None
     package = DirectorySyncPackage(
         tables={
             "employees": [
@@ -137,6 +142,7 @@ def test_adr0010_reconciliation_exact_match_when_external_id_and_name_agree(
                     full_name="Иванов Иван Иванович",
                     department_external_id=dept_ext,
                     division_external_id=div_ext,
+                    branch_external_id=branch.external_id,
                 )
             ]
         }
@@ -160,6 +166,8 @@ def test_adr0010_reconciliation_conflict_when_external_id_matches_but_name_diffe
     record = EmployeeRepository(conn).get(emp_id)
     assert record is not None
     dept_ext, div_ext = _org_external_ids(conn, org)
+    branch = BranchRepository(conn).get(org["branch_id"])
+    assert branch is not None
     package = DirectorySyncPackage(
         tables={
             "employees": [
@@ -168,6 +176,41 @@ def test_adr0010_reconciliation_conflict_when_external_id_matches_but_name_diffe
                     full_name="Петров Пётр Петрович",
                     department_external_id=dept_ext,
                     division_external_id=div_ext,
+                    branch_external_id=branch.external_id,
+                )
+            ]
+        }
+    )
+    result = recon.build_reconciliation(package)
+    assert len(result) == 1
+    assert result[0].status == EmployeeMatchStatus.CONFLICT
+    assert result[0].matched_employee_id == emp_id
+    conn.close()
+
+
+@pytest.mark.acceptance
+def test_adr0010_reconciliation_conflict_on_branch_id_mismatch(
+    tmp_path: Path,
+) -> None:
+    conn, session = _open(tmp_path)
+    directories, employees, recon = _services(conn, session)
+    org = _seed_org(directories)
+    emp_id = _create_employee(employees, org, full_name="Иванов Иван Иванович")
+    record = EmployeeRepository(conn).get(emp_id)
+    assert record is not None
+    dept_ext, div_ext = _org_external_ids(conn, org)
+    other_branch_id = directories.create_branch("Филиал Другой")
+    other_branch = BranchRepository(conn).get(other_branch_id)
+    assert other_branch is not None
+    package = DirectorySyncPackage(
+        tables={
+            "employees": [
+                _package_employee_row(
+                    external_id=record.external_id,
+                    full_name="Иванов Иван Иванович",
+                    department_external_id=dept_ext,
+                    division_external_id=div_ext,
+                    branch_external_id=other_branch.external_id,
                 )
             ]
         }
