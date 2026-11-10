@@ -230,7 +230,7 @@ def test_archived_directory_rejected_for_new_employee(tmp_path: Path) -> None:
 
 
 @pytest.mark.acceptance
-def test_update_employee_and_audit(tmp_path: Path) -> None:
+def test_update_employee_rejects_full_name_change(tmp_path: Path) -> None:
     conn, session, _db = _open_db(tmp_path)
     refs = _seed_directories(conn, session)
     svc = EmployeeService(conn, session, clock=lambda: "2026-08-26T14:50:00Z")
@@ -243,24 +243,25 @@ def test_update_employee_and_audit(tmp_path: Path) -> None:
             employment_type_id=refs["employment_type_id"],
         )
     )
-    svc.update_employee(
-        emp_id,
-        EmployeeUpdateInput(
-            full_name="After",
-            position_id=refs["position_id"],
-            branch_id=refs["branch_id"],
-            department_id=refs["department_id"],
-            employment_type_id=refs["employment_type_id"],
-        ),
-    )
-    assert svc.get_employee(emp_id).full_name == "After"
+    with pytest.raises(EmployeeError, match="full_name cannot be changed"):
+        svc.update_employee(
+            emp_id,
+            EmployeeUpdateInput(
+                full_name="After",
+                position_id=refs["position_id"],
+                branch_id=refs["branch_id"],
+                department_id=refs["department_id"],
+                employment_type_id=refs["employment_type_id"],
+            ),
+        )
+    assert svc.get_employee(emp_id).full_name == "Before"
     rows = conn.execute(
         "SELECT action_type FROM user_action_log WHERE entity_id=?",
         (emp_id,),
     ).fetchall()
     actions = {r[0] for r in rows}
     assert "employee.create" in actions
-    assert "employee.update" in actions
+    assert "employee.update" not in actions
     conn.close()
 
 

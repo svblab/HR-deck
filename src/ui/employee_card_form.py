@@ -38,6 +38,9 @@ _REQUIRED = (
     ("employment_type_id", "тип занятости"),
 )
 
+# ТЗ §9.7.1: «ФИО и филиал недоступны для правки после создания»
+_IMMUTABLE_HINT = "ФИО и филиал недоступны для правки после создания"
+
 
 class EmployeeCardDialog(QDialog):
     def __init__(
@@ -109,6 +112,11 @@ class EmployeeCardDialog(QDialog):
             self._home.hide()
             self._insurance.hide()
         layout.addLayout(form)
+        self._immutable_hint = QLabel(_IMMUTABLE_HINT, objectName="immutableNameBranchHint")
+        self._immutable_hint.setWordWrap(True)
+        self._immutable_hint.setStyleSheet(f"color: {TEXT_MUTED}; font-size: 12px;")
+        self._immutable_hint.setVisible(employee_id is not None)
+        layout.addWidget(self._immutable_hint)
         self._org_review = QLabel(objectName="orgReviewHint")
         self._org_review.setWordWrap(True)
         self._org_review.setStyleSheet("color: #B8860B; font-size: 12px; font-weight: 600;")
@@ -165,21 +173,31 @@ class EmployeeCardDialog(QDialog):
             ):
                 widget.setEnabled(False)
         elif employee_id is not None:
+            self._apply_immutable_identity_fields()
             self._apply_archived_state()
+
+    def _apply_immutable_identity_fields(self) -> None:
+        """ФИО read-only и филиал disabled после создания (ТЗ §9.7.1)."""
+        self._name.setReadOnly(True)
+        self._branch.setEnabled(False)
+        self._immutable_hint.setVisible(True)
 
     def _apply_archived_state(self) -> None:
         archived = self._is_archived
         self._archived_label.setVisible(archived)
+        # ФИО и филиал исключены: setEnabled(not archived) иначе вернёт
+        # редактируемость после восстановления из архива (ловушка §9.7.1).
         for widget in (
-            self._name,
             self._position,
-            self._branch,
             self._department,
             self._division,
             self._employment,
             self._note,
         ):
             widget.setEnabled(not archived)
+        self._apply_immutable_identity_fields()
+        # Read-only ФИО остаётся доступным для просмотра/копирования, пока не архив.
+        self._name.setEnabled(not archived)
         if self._can_edit_sensitive:
             self._home.setEnabled(not archived)
             self._insurance.setEnabled(not archived)
