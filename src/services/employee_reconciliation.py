@@ -9,6 +9,7 @@ from collections.abc import Callable
 
 from data.db import Connection
 from data.directories import (
+    BranchRepository,
     DepartmentRecord,
     DepartmentRepository,
     DivisionRecord,
@@ -39,6 +40,7 @@ class EmployeeReconciliationService:
         self._session = session
         self._authz = authz or AuthorizationService()
         self._employees = EmployeeRepository(conn)
+        self._branches = BranchRepository(conn)
         self._departments = DepartmentRepository(conn)
         self._divisions = DivisionRepository(conn)
 
@@ -53,9 +55,21 @@ class EmployeeReconciliationService:
         external_id = str(row["external_id"])
         local = self._employees.get_by_external_id(external_id)
         if local is not None:
-            if normalize_name_for_match(local.full_name) == normalize_name_for_match(
+            name_matches = normalize_name_for_match(local.full_name) == normalize_name_for_match(
                 str(row["full_name"])
-            ):
+            )
+            # Compare package branch_external_id to the local employee's branch
+            # external_id (via branch_id). Do not resolve the package value
+            # through get_by_external_id: an unknown package branch id differs.
+            local_branch = self._branches.get(local.branch_id)
+            local_branch_ext = (
+                local_branch.external_id if local_branch is not None else None
+            )
+            package_branch_ext = str(row["branch_external_id"])
+            branch_matches = (
+                local_branch_ext is not None and local_branch_ext == package_branch_ext
+            )
+            if name_matches and branch_matches:
                 return EmployeeMatchCandidate(row, EmployeeMatchStatus.EXACT, local.id)
             return EmployeeMatchCandidate(row, EmployeeMatchStatus.CONFLICT, local.id)
         candidates = self._find_name_candidates(row)
