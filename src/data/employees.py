@@ -27,6 +27,7 @@ class EmployeeRecord:
     is_archived: bool
     created_at: str
     updated_at: str
+    transfer_target_branch_id: int | None
 
 
 class EmployeeRepository:
@@ -36,7 +37,8 @@ class EmployeeRepository:
     _SELECT = (
         "SELECT id, external_id, full_name, position_id, branch_id, department_id, division_id,"
         " employment_type_id, note, hire_date, contacts, home_address,"
-        " social_insurance_number, needs_org_review, is_archived, created_at, updated_at"
+        " social_insurance_number, needs_org_review, is_archived, created_at, updated_at,"
+        " transfer_target_branch_id"
         " FROM employees"
     )
 
@@ -246,6 +248,19 @@ class EmployeeRepository:
             (1 if archived else 0, updated_at, employee_id),
         )
 
+    def set_transfer_target_branch_id(
+        self,
+        employee_id: int,
+        *,
+        updated_at: str,
+        transfer_target_branch_id: int | None = None,
+    ) -> None:
+        self._conn.execute(
+            "UPDATE employees SET transfer_target_branch_id = ?, updated_at = ?"
+            " WHERE id = ?",
+            (transfer_target_branch_id, updated_at, employee_id),
+        )
+
     def clear_org_assignment_for_review(
         self,
         employee_id: int,
@@ -300,4 +315,5 @@ def _row(row: tuple[object, ...]) -> EmployeeRecord:
         is_archived=bool(int(row[14])),
         created_at=str(row[15]),
         updated_at=str(row[16]),
+        transfer_target_branch_id=int(row[17]) if row[17] is not None else None,
     )

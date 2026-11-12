@@ -62,6 +62,7 @@ class EmployeeCard:
     sensitive_fields_masked: bool
     is_archived: bool
     needs_org_review: bool = False
+    transfer_target_branch_id: int | None = None
 
 
 @dataclass(frozen=True)
