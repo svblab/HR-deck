@@ -253,7 +253,7 @@ class EmployeeRepository:
         employee_id: int,
         *,
         updated_at: str,
-        transfer_target_branch_id: int | None = None,
+        transfer_target_branch_id: int | None,
     ) -> None:
         self._conn.execute(
             "UPDATE employees SET transfer_target_branch_id = ?, updated_at = ?"

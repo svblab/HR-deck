@@ -152,3 +152,42 @@ def test_existing_update_does_not_clear_transfer_target(migrated_conn) -> None:
     assert after is not None
     assert after.transfer_target_branch_id == 1
     assert after.updated_at == "2026-08-02T10:00:00Z"
+
+
+def test_setter_none_clears_previous_value(migrated_conn) -> None:
+    repo = EmployeeRepository(migrated_conn)
+    repo.set_transfer_target_branch_id(1, updated_at=_NOW, transfer_target_branch_id=1)
+    cleared_at = "2026-08-03T10:00:00Z"
+    repo.set_transfer_target_branch_id(
+        1, updated_at=cleared_at, transfer_target_branch_id=None
+    )
+    after = repo.get(1)
+    assert after is not None
+    assert after.transfer_target_branch_id is None
+    assert after.updated_at == cleared_at
+
+
+def test_fk_valid_insert_succeeds_invalid_raises(migrated_conn) -> None:
+    conn = migrated_conn
+    conn.execute(
+        "INSERT INTO employees ("
+        " external_id, full_name, position_id, branch_id, department_id,"
+        " employment_type_id, is_archived, created_at, updated_at,"
+        " transfer_target_branch_id"
+        ") VALUES (?, 'Y', 1, 1, 1, 1, 0, ?, ?, 1)",
+        ("ext-fk-ok-ins", _NOW, _NOW),
+    )
+    with pytest.raises(sqlcipher.IntegrityError):
+        conn.execute(
+            "INSERT INTO employees ("
+            " external_id, full_name, position_id, branch_id, department_id,"
+            " employment_type_id, is_archived, created_at, updated_at,"
+            " transfer_target_branch_id"
+            ") VALUES (?, 'Z', 1, 1, 1, 1, 0, ?, ?, 99999)",
+            ("ext-fk-bad-ins-2", _NOW, _NOW),
+        )
+
+
+def test_foreign_key_check_clean_after_migration(migrated_conn) -> None:
+    rows = migrated_conn.execute("PRAGMA foreign_key_check").fetchall()
+    assert rows == []
