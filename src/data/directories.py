@@ -66,6 +66,8 @@ class EmploymentTypeRecord:
     is_archived: bool
     created_at: str
     updated_at: str
+    owner_branch_id: int | None = None
+    sort_order: int = 0
 
 
 class BranchRepository:
@@ -383,7 +385,8 @@ class EmploymentTypeRepository:
 
     def list(self, *, active_only: bool = False) -> list[EmploymentTypeRecord]:
         sql = (
-            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at"
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at,"
+            " owner_branch_id, sort_order"
             " FROM employment_types"
         )
         if active_only:
@@ -395,7 +398,8 @@ class EmploymentTypeRepository:
         self, *, active_only: bool = False
     ) -> builtins.list[EmploymentTypeRecord]:
         sql = (
-            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at"
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at,"
+            " owner_branch_id, sort_order"
             " FROM employment_types WHERE archives_record = 1"
         )
         if active_only:
@@ -418,7 +422,8 @@ class EmploymentTypeRepository:
 
     def get(self, employment_type_id: int) -> EmploymentTypeRecord | None:
         row = self._conn.execute(
-            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at "
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at,"
+            " owner_branch_id, sort_order "
             "FROM employment_types WHERE id = ?",
             (employment_type_id,),
         ).fetchone()
@@ -426,10 +431,30 @@ class EmploymentTypeRepository:
 
     def get_by_code(self, code: str) -> EmploymentTypeRecord | None:
         row = self._conn.execute(
-            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at "
+            "SELECT id, code, name, archives_record, is_archived, created_at, updated_at,"
+            " owner_branch_id, sort_order "
             "FROM employment_types WHERE code = ?",
             (code,),
         ).fetchone()
+        return _employment_type_row(row) if row else None
+
+    def get_by_owner_and_code(
+        self, owner_branch_id: int | None, code: str
+    ) -> EmploymentTypeRecord | None:
+        if owner_branch_id is None:
+            row = self._conn.execute(
+                "SELECT id, code, name, archives_record, is_archived, created_at, updated_at,"
+                " owner_branch_id, sort_order "
+                "FROM employment_types WHERE owner_branch_id IS NULL AND code = ?",
+                (code,),
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT id, code, name, archives_record, is_archived, created_at, updated_at,"
+                " owner_branch_id, sort_order "
+                "FROM employment_types WHERE owner_branch_id = ? AND code = ?",
+                (owner_branch_id, code),
+            ).fetchone()
         return _employment_type_row(row) if row else None
 
     def create(self, *, code: str, name: str, created_at: str) -> int:
@@ -512,4 +537,6 @@ def _employment_type_row(row: tuple[object, ...]) -> EmploymentTypeRecord:
         is_archived=bool(int(row[4])),
         created_at=str(row[5]),
         updated_at=str(row[6]),
+        owner_branch_id=int(row[7]) if row[7] is not None else None,
+        sort_order=int(row[8]),
     )
