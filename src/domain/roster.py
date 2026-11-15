@@ -34,6 +34,7 @@ class RosterRow:
     needs_clarification: bool
     needs_org_review: bool
     is_archived: bool
+    employment_type_code: str = ""
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class RosterFilters:
     division_id: int | None = None
     only_needing_clarification: bool = False
     only_needing_org_review: bool = False
+    include_erroneous: bool = False
 
 
 @dataclass(frozen=True)
@@ -95,6 +97,8 @@ def apply_filters(rows: list[RosterRow], filters: RosterFilters) -> list[RosterR
         if filters.only_needing_clarification and not row.needs_clarification:
             continue
         if filters.only_needing_org_review and not row.needs_org_review:
+            continue
+        if not filters.include_erroneous and row.employment_type_code == "erroneous":
             continue
         out.append(row)
     return out
