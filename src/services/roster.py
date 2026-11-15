@@ -11,6 +11,7 @@ from data.directories import (
     BranchRepository,
     DepartmentRepository,
     DivisionRepository,
+    EmploymentTypeRepository,
     PositionRepository,
 )
 from data.employees import EmployeeRecord, EmployeeRepository
@@ -59,6 +60,7 @@ class RosterService:
         self._departments = DepartmentRepository(conn)
         self._divisions = DivisionRepository(conn)
         self._positions = PositionRepository(conn)
+        self._employment_types = EmploymentTypeRepository(conn)
 
     def list_rows(
         self,
@@ -141,6 +143,8 @@ class RosterService:
             self._departments.get(emp.department_id) if emp.department_id is not None else None
         )
         division = self._divisions.get(emp.division_id) if emp.division_id is not None else None
+        employment_type = self._employment_types.get(emp.employment_type_id)
+        employment_type_code = employment_type.code if employment_type else ""
         return RosterRow(
             employee_id=emp.id,
             full_name=emp.full_name,
@@ -159,6 +163,7 @@ class RosterService:
             needs_clarification=needs,
             needs_org_review=emp.needs_org_review,
             is_archived=emp.is_archived,
+            employment_type_code=employment_type_code,
         )
 
     def _timeline(
